@@ -1,0 +1,1 @@
+contract VestingV1 {}
