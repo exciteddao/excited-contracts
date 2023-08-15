@@ -31,10 +31,7 @@ contract UninsuredVestingV1 is Ownable {
     function claim(address target, uint256 period) public {
         if (period < 1 || period > periodCount) revert("invalid period");
         if (period > vestingPeriodsPassed()) revert("period not reached");
-
-        if (vestingStatuses[target].claimed[period]) {
-            revert("already claimed");
-        }
+        if (vestingStatuses[target].claimed[period]) revert("already claimed");
 
         uint256 amount = vestingStatuses[target].amount / periodCount;
 
