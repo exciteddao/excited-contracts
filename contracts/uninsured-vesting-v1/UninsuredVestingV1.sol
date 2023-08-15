@@ -58,9 +58,9 @@ contract UninsuredVestingV1 is Ownable {
         startTime = timestamp;
     }
 
-    function setAmount(address target, uint256 amount) public onlyOwner {
+    function addAmount(address target, uint256 amount) public onlyOwner {
         if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
-        vestingStatuses[target].amount = amount;
+        vestingStatuses[target].amount += amount;
         amountAssigned += amount;
     }
 
