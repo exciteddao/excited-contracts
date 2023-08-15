@@ -77,9 +77,10 @@ describe("VestingV1", () => {
     );
   });
 
+  // it("user cannot claim if not funded")
+
   // TODOs
   /*
-    claim for all periods
     change decision
     try to claim for user who hasn't funded
     try to claim for user funded less than requested amount claimed?

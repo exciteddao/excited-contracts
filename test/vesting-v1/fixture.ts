@@ -69,6 +69,6 @@ export function advanceMonths(months: number): Promise<BlockInfo> {
   return mineBlock(months * MONTH);
 }
 
-async function getCurrentTimestamp(): Promise<string | number | BN> {
+export async function getCurrentTimestamp(): Promise<string | number | BN> {
   return (await web3().eth.getBlock("latest")).timestamp;
 }
