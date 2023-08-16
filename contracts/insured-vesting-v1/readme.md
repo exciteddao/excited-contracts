@@ -8,8 +8,3 @@
 7. On each tranche (1 month), anyone can claim on behalf of each investor according to the decision set.
    1. If claiming XCTD, project gets USDC in the process
    2. If claiming USDC, project gets back XCTD proportional to that vesting period
-
-
-## TODOs
-1. More events
-2. Checks on start time
