@@ -43,7 +43,7 @@ contract UninsuredVestingV1 is Ownable {
         vestingStatuses[target].totalClaimed += amount;
         vestingStatuses[target].claimed[period] = true;
 
-        xctd.transfer(target, amount);
+        xctd.safeTransfer(target, amount);
         emit Claimed(period, target, amount);
     }
 

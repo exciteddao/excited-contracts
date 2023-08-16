@@ -3,6 +3,7 @@ pragma solidity 0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "hardhat/console.sol";
 
 /**
  Expected interface:
@@ -30,6 +31,9 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
  // END: throw if already started
  */
 
+// TODO add more events (both contracts)
+// TODO remainder of USDC + XCTD
+
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
@@ -41,16 +45,18 @@ contract InsuredVestingV1 is Ownable {
     uint256 startTime = 0;
     uint256 totalXctdAllocated = 0;
 
-    enum Decision {
+    enum ClaimDecision {
         TOKENS,
         USDC
     }
 
     struct VestingStatus {
-        mapping(uint256 => bool) claimed;
+        mapping(uint256 => bool) claimedForPeriod;
         uint256 usdcFunded;
-        uint256 allocation;
-        Decision decision;
+        uint256 usdcAllocation;
+        ClaimDecision claimDecision;
+        uint256 usdcClaimed;
+        uint256 xctdClaimed;
     }
 
     mapping(address => VestingStatus) public vestingStatuses;
@@ -60,38 +66,52 @@ contract InsuredVestingV1 is Ownable {
         xctd = IERC20(_xctd);
         periodCount = _periods;
         usdcToXctdRate = _usdcToXctdRate;
+        require(usdcToXctdRate > 1e12, "minimum rate is 1 USDC:XCTD");
+        require(usdcToXctdRate < 100 * 1e12, "maximum rate is 100 USDC:XCTD");
         project = _project;
     }
 
-    function addAllocation(address target, uint256 allocation) public onlyOwner {
+    // TODO should we change this to a "set" functionality instead
+    // if we do, naively totalXctdAllocated would be wrong and we should add a test for that
+    function addAllocation(address target, uint256 _usdcAllocation) public onlyOwner {
         if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
-        vestingStatuses[target].allocation += allocation;
-        totalXctdAllocated += allocation * usdcToXctdRate;
+        vestingStatuses[target].usdcAllocation += _usdcAllocation;
+        totalXctdAllocated += _usdcAllocation * usdcToXctdRate;
     }
 
     function addFunds(uint256 amount) public {
         if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
-        if ((vestingStatuses[msg.sender].allocation - vestingStatuses[msg.sender].usdcFunded) < amount) revert("amount exceeds allocation");
-        usdc.transferFrom(msg.sender, address(this), amount);
+        if ((vestingStatuses[msg.sender].usdcAllocation - vestingStatuses[msg.sender].usdcFunded) < amount) revert("amount exceeds allocation");
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
         vestingStatuses[msg.sender].usdcFunded += amount;
     }
 
     function claim(address target, uint256 period) public {
-        if (period < 1 || period > periodCount) revert("invalid period");
-        if (period > vestingPeriodsPassed()) revert("period not reached");
-        if (vestingStatuses[target].claimed[period]) revert("already claimed");
+        VestingStatus storage userStatus = vestingStatuses[target];
 
-        vestingStatuses[target].claimed[period] = true;
+        require(period >= 1 && period <= periodCount, "invalid period");
+        require(period <= vestingPeriodsPassed(), "period not reached");
+        require(!userStatus.claimedForPeriod[period], "already claimed");
 
-        uint256 usdcToTransfer = (vestingStatuses[target].usdcFunded) / periodCount;
-        uint256 xctdToTransfer = usdcToTransfer * usdcToXctdRate;
+        userStatus.claimedForPeriod[period] = true;
 
-        if (vestingStatuses[target].decision == Decision.TOKENS) {
-            xctd.transfer(target, xctdToTransfer);
-            usdc.transfer(project, usdcToTransfer);
+        uint256 usdcToTransfer = (userStatus.usdcFunded) / periodCount;
+        uint256 xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate) / periodCount;
+
+        if (period == periodCount) {
+            usdcToTransfer = (userStatus.usdcFunded - userStatus.usdcClaimed);
+            xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate - userStatus.xctdClaimed);
+        }
+
+        userStatus.usdcClaimed += usdcToTransfer;
+        userStatus.xctdClaimed += xctdToTransfer;
+
+        if (userStatus.claimDecision == ClaimDecision.TOKENS) {
+            xctd.safeTransfer(target, xctdToTransfer);
+            usdc.safeTransfer(project, usdcToTransfer);
         } else {
-            xctd.transfer(project, xctdToTransfer);
-            usdc.transfer(target, usdcToTransfer);
+            xctd.safeTransfer(project, xctdToTransfer);
+            usdc.safeTransfer(target, usdcToTransfer);
         }
     }
 
@@ -101,13 +121,16 @@ contract InsuredVestingV1 is Ownable {
         return uint256((block.timestamp - startTime) / 30 days);
     }
 
-    function setStartTime(uint256 timestamp) public onlyOwner {
+    function setStartTime(uint256 _startTime) public onlyOwner {
+        // todo start time cannot be in the past
         if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
-        startTime = timestamp;
+        startTime = _startTime;
     }
 
     function toggleDecision() public {
-        vestingStatuses[msg.sender].decision = vestingStatuses[msg.sender].decision == Decision.TOKENS ? Decision.USDC : Decision.TOKENS;
+        vestingStatuses[msg.sender].claimDecision = vestingStatuses[msg.sender].claimDecision == ClaimDecision.TOKENS
+            ? ClaimDecision.USDC
+            : ClaimDecision.TOKENS;
     }
 
     function recover(address tokenAddress) external onlyOwner {

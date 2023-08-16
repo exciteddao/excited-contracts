@@ -1,8 +1,9 @@
-import { Token, account, bn18, erc20, BlockInfo, Receipt, web3 } from "@defi.org/web3-candies";
+import { Token, account, bn18, erc20, BlockInfo, Receipt, web3, bn6 } from "@defi.org/web3-candies";
 import { deployArtifact, mineBlock, tag, useChaiBigNumber } from "@defi.org/web3-candies/dist/hardhat";
 import BN from "bignumber.js";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
+import { MockUSDC } from "../../typechain-hardhat/contracts/test/MockUSDC";
 
 useChaiBigNumber();
 
@@ -39,14 +40,14 @@ export async function withFixture() {
   tag(anyUser, "anyUser");
 
   someOtherToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "SomeOtherToken"])).options.address);
-  mockUsdc = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "MockUSDC"])).options.address);
+  mockUsdc = erc20("MockERC20", (await deployArtifact<MockUSDC>("MockUSDC", { from: deployer }, [bn6(1e9), "MockUSDC"])).options.address);
   xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "XCTD"])).options.address);
   insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
     mockUsdc.options.address,
     xctd.options.address,
     project,
     VESTING_PERIODS,
-    USDC_TO_XCTD_RATIO,
+    bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)),
   ]);
 
   for (const target of [user1, user2]) {
