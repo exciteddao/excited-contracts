@@ -175,6 +175,13 @@ describe("InsuredVestingV1", () => {
     await expectRevert(async () => insuredVesting.methods.setStartTime(await getCurrentTimestamp()).send({ from: deployer }), "vesting already started");
   });
 
+  it("cannot set start time after period started", async () => {
+    await expectRevert(
+      async () => insuredVesting.methods.setStartTime(BN(await getCurrentTimestamp()).minus(100)).send({ from: deployer }),
+      "cannot set start time in the past"
+    );
+  });
+
   it("cannot add funds after period started", async () => {
     await advanceMonths(LOCKUP_MONTHS);
     await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), "vesting already started");

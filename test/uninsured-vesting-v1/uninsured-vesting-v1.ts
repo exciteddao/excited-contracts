@@ -77,6 +77,13 @@ describe("UninsuredVestingV1", () => {
     await expectRevert(async () => uninsuredVesting.methods.setStartTime(await getCurrentTimestamp()).send({ from: deployer }), "vesting already started");
   });
 
+  it("cannot set start time after period started", async () => {
+    await expectRevert(
+      async () => uninsuredVesting.methods.setStartTime(BN(await getCurrentTimestamp()).minus(100)).send({ from: deployer }),
+      "cannot set start time in the past"
+    );
+  });
+
   it("cannot claim for vesting period out of range", async () => {
     await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
     await advanceMonths(LOCKUP_MONTHS + 1);

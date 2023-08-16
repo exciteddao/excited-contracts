@@ -61,6 +61,14 @@ contract InsuredVestingV1 is Ownable {
 
     mapping(address => VestingStatus) public vestingStatuses;
 
+    event UserClaimed(address indexed target, uint256 indexed period, uint256 usdcAmount, uint256 xctdAmount);
+    event ProjectClaimed(address indexed target, uint256 indexed period, uint256 usdcAmount, uint256 xctdAmount);
+    event AllocationAdded(address indexed target, uint256 amount);
+    event FundsAdded(address indexed target, uint256 amount);
+    event StartTimeSet(uint256 timestamp);
+    event DecisionChanged(address indexed target, ClaimDecision decision);
+    event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
+
     constructor(address _usdc, address _xctd, address _project, uint _periods, uint256 _usdcToXctdRate) {
         usdc = IERC20(_usdc);
         xctd = IERC20(_xctd);
@@ -77,6 +85,8 @@ contract InsuredVestingV1 is Ownable {
         if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
         vestingStatuses[target].usdcAllocation += _usdcAllocation;
         totalXctdAllocated += _usdcAllocation * usdcToXctdRate;
+
+        emit AllocationAdded(target, _usdcAllocation);
     }
 
     function addFunds(uint256 amount) public {
@@ -84,6 +94,8 @@ contract InsuredVestingV1 is Ownable {
         if ((vestingStatuses[msg.sender].usdcAllocation - vestingStatuses[msg.sender].usdcFunded) < amount) revert("amount exceeds allocation");
         usdc.safeTransferFrom(msg.sender, address(this), amount);
         vestingStatuses[msg.sender].usdcFunded += amount;
+
+        emit FundsAdded(msg.sender, amount);
     }
 
     function claim(address target, uint256 period) public {
@@ -109,9 +121,15 @@ contract InsuredVestingV1 is Ownable {
         if (userStatus.claimDecision == ClaimDecision.TOKENS) {
             xctd.safeTransfer(target, xctdToTransfer);
             usdc.safeTransfer(project, usdcToTransfer);
+
+            emit UserClaimed(target, period, 0, xctdToTransfer);
+            emit ProjectClaimed(target, period, usdcToTransfer, 0);
         } else {
             xctd.safeTransfer(project, xctdToTransfer);
             usdc.safeTransfer(target, usdcToTransfer);
+
+            emit UserClaimed(target, period, usdcToTransfer, 0);
+            emit ProjectClaimed(target, period, 0, xctdToTransfer);
         }
     }
 
@@ -122,15 +140,19 @@ contract InsuredVestingV1 is Ownable {
     }
 
     function setStartTime(uint256 _startTime) public onlyOwner {
-        // todo start time cannot be in the past
         if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
+        if (_startTime < block.timestamp) revert("cannot set start time in the past");
         startTime = _startTime;
+
+        emit StartTimeSet(_startTime);
     }
 
     function toggleDecision() public {
         vestingStatuses[msg.sender].claimDecision = vestingStatuses[msg.sender].claimDecision == ClaimDecision.TOKENS
             ? ClaimDecision.USDC
             : ClaimDecision.TOKENS;
+
+        emit DecisionChanged(msg.sender, vestingStatuses[msg.sender].claimDecision);
     }
 
     function recover(address tokenAddress) external onlyOwner {
@@ -145,5 +167,10 @@ contract InsuredVestingV1 is Ownable {
 
         // in case of ETH, transfer the balance as well
         Address.sendValue(payable(owner()), address(this).balance);
+
+        uint256 etherToRecover = address(this).balance;
+        Address.sendValue(payable(owner()), etherToRecover);
+
+        emit AmountRecovered(tokenAddress, tokenBalanceToRecover, etherToRecover);
     }
 }

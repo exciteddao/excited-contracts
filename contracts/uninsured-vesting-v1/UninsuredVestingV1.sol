@@ -3,6 +3,7 @@ pragma solidity 0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "hardhat/console.sol";
 
 contract UninsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
@@ -22,6 +23,9 @@ contract UninsuredVestingV1 is Ownable {
     uint256 amountAssigned = 0;
 
     event Claimed(uint256 indexed period, address indexed target, uint256 amount);
+    event AmountAdded(address indexed target, uint256 amount);
+    event StartTimeSet(uint256 timestamp);
+    event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
     constructor(address _xctd, uint _periods) {
         xctd = IERC20(_xctd);
@@ -29,9 +33,9 @@ contract UninsuredVestingV1 is Ownable {
     }
 
     function claim(address target, uint256 period) public {
-        if (period < 1 || period > periodCount) revert("invalid period");
-        if (period > vestingPeriodsPassed()) revert("period not reached");
-        if (vestingStatuses[target].claimed[period]) revert("already claimed");
+        require(period >= 1 && period <= periodCount, "invalid period");
+        require(period <= vestingPeriodsPassed(), "period not reached");
+        require(!vestingStatuses[target].claimed[period], "already claimed");
 
         uint256 amount = vestingStatuses[target].amount / periodCount;
 
@@ -53,15 +57,18 @@ contract UninsuredVestingV1 is Ownable {
         return uint256((block.timestamp - startTime) / 30 days);
     }
 
-    function setStartTime(uint256 timestamp) public onlyOwner {
+    function setStartTime(uint256 _startTime) public onlyOwner {
         if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
-        startTime = timestamp;
+        if (_startTime < block.timestamp) revert("cannot set start time in the past");
+        startTime = _startTime;
+        emit StartTimeSet(_startTime);
     }
 
     function addAmount(address target, uint256 amount) public onlyOwner {
         if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
         vestingStatuses[target].amount += amount;
         amountAssigned += amount;
+        emit AmountAdded(target, amount);
     }
 
     function recover(address tokenAddress) external onlyOwner {
@@ -75,6 +82,9 @@ contract UninsuredVestingV1 is Ownable {
         IERC20(tokenAddress).safeTransfer(owner(), tokenBalanceToRecover);
 
         // in case of ETH, transfer the balance as well
-        Address.sendValue(payable(owner()), address(this).balance);
+        uint256 etherToRecover = address(this).balance;
+        Address.sendValue(payable(owner()), etherToRecover);
+
+        emit AmountRecovered(tokenAddress, tokenBalanceToRecover, etherToRecover);
     }
 }
