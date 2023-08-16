@@ -62,6 +62,11 @@ describe("InsuredVestingV1", () => {
     await expectRevert(() => insuredVesting.methods.claim(user1, 2).send({ from: anyUser }), "period not reached");
   });
 
+  it("cannot claim if not funded", async () => {
+    await advanceMonths(LOCKUP_MONTHS + 1);
+    await expectRevert(async () => insuredVesting.methods.claim(user1, 1).send({ from: anyUser }), "no funds added");
+  });
+
   it("can claim tokens for entire vesting period", async () => {
     await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
     await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });

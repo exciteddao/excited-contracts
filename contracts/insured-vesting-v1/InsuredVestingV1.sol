@@ -104,6 +104,7 @@ contract InsuredVestingV1 is Ownable {
         require(period >= 1 && period <= periodCount, "invalid period");
         require(period <= vestingPeriodsPassed(), "period not reached");
         require(!userStatus.claimedForPeriod[period], "already claimed");
+        require(userStatus.usdcFunded > 0, "no funds added");
 
         userStatus.claimedForPeriod[period] = true;
 
