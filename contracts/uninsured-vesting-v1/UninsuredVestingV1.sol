@@ -9,7 +9,7 @@ contract UninsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
     struct VestingStatus {
-        mapping(uint256 => bool) claimed;
+        uint256 lastPeriodClaimed;
         uint256 amount;
         uint256 totalClaimed;
     }
@@ -32,23 +32,28 @@ contract UninsuredVestingV1 is Ownable {
         periodCount = _periods;
     }
 
-    function claim(address target, uint256 period) public {
-        require(period >= 1 && period <= periodCount, "invalid period");
-        require(period <= vestingPeriodsPassed(), "period not reached");
-        require(!vestingStatuses[target].claimed[period], "already claimed");
+    function claim(address target) public {
+        VestingStatus storage targetStatus = vestingStatuses[target];
+        uint256 _vestingPeriodsPassed = vestingPeriodsPassed();
+        uint256 periodsToClaim = _vestingPeriodsPassed - targetStatus.lastPeriodClaimed;
 
-        uint256 amount = vestingStatuses[target].amount / periodCount;
+        require(_vestingPeriodsPassed > 0, "vesting has not started");
+        require(periodsToClaim > 0, "already claimed until vesting period");
+
+        uint256 amount;
 
         // last period, ensure remainder gets sent
-        if (period == periodCount) {
-            amount = vestingStatuses[target].amount - vestingStatuses[target].totalClaimed;
+        if (_vestingPeriodsPassed == periodCount) {
+            amount = targetStatus.amount - targetStatus.totalClaimed;
+        } else {
+            amount = targetStatus.amount / periodCount;
         }
 
-        vestingStatuses[target].totalClaimed += amount;
-        vestingStatuses[target].claimed[period] = true;
+        targetStatus.totalClaimed += amount;
+        targetStatus.lastPeriodClaimed = _vestingPeriodsPassed;
 
         xctd.safeTransfer(target, amount);
-        emit Claimed(period, target, amount);
+        emit Claimed(_vestingPeriodsPassed, target, amount);
     }
 
     function vestingPeriodsPassed() public view returns (uint256) {
