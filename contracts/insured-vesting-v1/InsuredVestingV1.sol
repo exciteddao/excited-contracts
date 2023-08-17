@@ -37,13 +37,21 @@ import "hardhat/console.sol";
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
-    IERC20 immutable usdc;
-    IERC20 immutable xctd;
-    address project;
-    uint256 periodCount;
-    uint256 usdcToXctdRate;
-    uint256 startTime = 0;
-    uint256 totalXctdAllocated = 0;
+    IERC20 public immutable usdc;
+    IERC20 public immutable xctd;
+    uint256 public immutable usdcToXctdRate;
+    uint256 public immutable periodCount;
+
+    // Changeable by owner
+    address public project;
+    bool public emergencyRelease = false;
+
+    // Changeable by owner until start time has arrived
+    uint256 public startTime = 0;
+
+    uint256 public totalXctdAllocated = 0;
+
+    mapping(address => VestingStatus) public vestingStatus;
 
     enum ClaimDecision {
         TOKENS,
@@ -51,21 +59,26 @@ contract InsuredVestingV1 is Ownable {
     }
 
     struct VestingStatus {
+        // A flag to 1. prevent double claim per period; 2. allow claim for previous periods if user hasn't claimed for more than one period
         mapping(uint256 => bool) claimedForPeriod;
+        // Actual USDC amount funded by user
         uint256 usdcFunded;
+        // Investment allocation, set by owner
         uint256 usdcAllocation;
+        // Whether the user wants to claim XCTD or claim back USDC
         ClaimDecision claimDecision;
+        // Amount of USDC and XCTD claimed by user
         uint256 usdcClaimed;
         uint256 xctdClaimed;
     }
 
-    mapping(address => VestingStatus) public vestingStatuses;
-
-    event UserClaimed(address indexed target, uint256 indexed period, uint256 usdcAmount, uint256 xctdAmount);
-    event ProjectClaimed(address indexed target, uint256 indexed period, uint256 usdcAmount, uint256 xctdAmount);
+    // Events
+    event UserClaimed(address indexed target, uint256 indexed period, uint256 usdcAmount, uint256 xctdAmount, bool isEmergency);
+    event ProjectClaimed(address indexed target, uint256 indexed period, uint256 usdcAmount, uint256 xctdAmount, bool isEmergency);
     event AllocationAdded(address indexed target, uint256 amount);
     event FundsAdded(address indexed target, uint256 amount);
     event StartTimeSet(uint256 timestamp);
+    event EmergencyRelease();
     event DecisionChanged(address indexed target, ClaimDecision decision);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
@@ -83,7 +96,7 @@ contract InsuredVestingV1 is Ownable {
     // if we do, naively totalXctdAllocated would be wrong and we should add a test for that
     function addAllocation(address target, uint256 _usdcAllocation) public onlyOwner {
         if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
-        vestingStatuses[target].usdcAllocation += _usdcAllocation;
+        vestingStatus[target].usdcAllocation += _usdcAllocation;
         totalXctdAllocated += _usdcAllocation * usdcToXctdRate;
 
         emit AllocationAdded(target, _usdcAllocation);
@@ -91,16 +104,17 @@ contract InsuredVestingV1 is Ownable {
 
     function addFunds(uint256 amount) public {
         if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
-        if ((vestingStatuses[msg.sender].usdcAllocation - vestingStatuses[msg.sender].usdcFunded) < amount) revert("amount exceeds allocation");
+        if ((vestingStatus[msg.sender].usdcAllocation - vestingStatus[msg.sender].usdcFunded) < amount) revert("amount exceeds allocation");
         usdc.safeTransferFrom(msg.sender, address(this), amount);
-        vestingStatuses[msg.sender].usdcFunded += amount;
+        vestingStatus[msg.sender].usdcFunded += amount;
 
         emit FundsAdded(msg.sender, amount);
     }
 
     function claim(address target, uint256 period) public {
-        VestingStatus storage userStatus = vestingStatuses[target];
+        VestingStatus storage userStatus = vestingStatus[target];
 
+        require(!emergencyRelease, "emergency released");
         require(period >= 1 && period <= periodCount, "invalid period");
         require(period <= vestingPeriodsPassed(), "period not reached");
         require(!userStatus.claimedForPeriod[period], "already claimed");
@@ -111,6 +125,7 @@ contract InsuredVestingV1 is Ownable {
         uint256 usdcToTransfer = (userStatus.usdcFunded) / periodCount;
         uint256 xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate) / periodCount;
 
+        // I think I have an interesting attack here -> you don't claim until last period, then you claim last period, and then all the rest muhahahaha
         if (period == periodCount) {
             usdcToTransfer = (userStatus.usdcFunded - userStatus.usdcClaimed);
             xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate - userStatus.xctdClaimed);
@@ -123,14 +138,14 @@ contract InsuredVestingV1 is Ownable {
             xctd.safeTransfer(target, xctdToTransfer);
             usdc.safeTransfer(project, usdcToTransfer);
 
-            emit UserClaimed(target, period, 0, xctdToTransfer);
-            emit ProjectClaimed(target, period, usdcToTransfer, 0);
+            emit UserClaimed(target, period, 0, xctdToTransfer, false);
+            emit ProjectClaimed(target, period, usdcToTransfer, 0, false);
         } else {
             xctd.safeTransfer(project, xctdToTransfer);
             usdc.safeTransfer(target, usdcToTransfer);
 
-            emit UserClaimed(target, period, usdcToTransfer, 0);
-            emit ProjectClaimed(target, period, 0, xctdToTransfer);
+            emit UserClaimed(target, period, usdcToTransfer, 0, false);
+            emit ProjectClaimed(target, period, 0, xctdToTransfer, false);
         }
     }
 
@@ -148,12 +163,43 @@ contract InsuredVestingV1 is Ownable {
         emit StartTimeSet(_startTime);
     }
 
-    function toggleDecision() public {
-        vestingStatuses[msg.sender].claimDecision = vestingStatuses[msg.sender].claimDecision == ClaimDecision.TOKENS
-            ? ClaimDecision.USDC
-            : ClaimDecision.TOKENS;
+    function setProjectAddress(address _project) public onlyOwner {
+        project = _project;
+    }
 
-        emit DecisionChanged(msg.sender, vestingStatuses[msg.sender].claimDecision);
+    function toggleDecision() public {
+        vestingStatus[msg.sender].claimDecision = vestingStatus[msg.sender].claimDecision == ClaimDecision.TOKENS ? ClaimDecision.USDC : ClaimDecision.TOKENS;
+
+        emit DecisionChanged(msg.sender, vestingStatus[msg.sender].claimDecision);
+    }
+
+    // Used to allow users to claim back USDC if anything goes wrong
+    function emergencyReleaseVesting() public onlyOwner {
+        emergencyRelease = true;
+        emit EmergencyRelease();
+    }
+
+    function emergencyClaim(address target) public {
+        VestingStatus storage userStatus = vestingStatus[target];
+
+        require(emergencyRelease, "emergency not released");
+        require(userStatus.usdcFunded > 0, "no funds added");
+
+        for (uint256 i = 1; i <= periodCount; i++) {
+            userStatus.claimedForPeriod[i] = true;
+        }
+
+        uint256 usdcToTransfer = (userStatus.usdcFunded - userStatus.usdcClaimed);
+        uint256 xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate - userStatus.xctdClaimed);
+
+        userStatus.usdcClaimed += usdcToTransfer;
+        userStatus.xctdClaimed += xctdToTransfer;
+
+        xctd.safeTransfer(project, xctdToTransfer);
+        usdc.safeTransfer(target, usdcToTransfer);
+
+        emit UserClaimed(target, periodCount, usdcToTransfer, 0, true);
+        emit ProjectClaimed(target, periodCount, 0, xctdToTransfer, true);
     }
 
     function recover(address tokenAddress) external onlyOwner {

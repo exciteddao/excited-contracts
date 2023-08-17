@@ -20,6 +20,7 @@ import {
   getCurrentTimestamp,
 } from "./fixture";
 import { web3 } from "@defi.org/web3-candies";
+import { insuredVesting } from "./fixture";
 
 describe("InsuredVestingV1", () => {
   beforeEach(async () => withFixture());
@@ -180,6 +181,12 @@ describe("InsuredVestingV1", () => {
     await expectRevert(async () => insuredVesting.methods.setStartTime(await getCurrentTimestamp()).send({ from: deployer }), "vesting already started");
   });
 
+  it("owner can set project address", async () => {
+    expect(await insuredVesting.methods.project().call()).to.be.not.eq(anyUser);
+    await insuredVesting.methods.setProjectAddress(anyUser).send({ from: deployer });
+    expect(await insuredVesting.methods.project().call()).to.be.eq(anyUser);
+  });
+
   it("cannot set start time after period started", async () => {
     await expectRevert(
       async () => insuredVesting.methods.setStartTime(BN(await getCurrentTimestamp()).minus(100)).send({ from: deployer }),
@@ -199,6 +206,80 @@ describe("InsuredVestingV1", () => {
 
     await expectRevert(async () => insuredVesting.methods.claim(user1, VESTING_PERIODS + 1).send({ from: anyUser }), "invalid period");
     await expectRevert(async () => insuredVesting.methods.claim(user1, 0).send({ from: anyUser }), "invalid period");
+  });
+
+  describe("emergency release", () => {
+    it("owner can emergency release vesting period, user hasn't claimed XCTD yet", async () => {
+      await insuredVesting.methods.addAllocation(user1, await xctd.amount(FUNDING_PER_USER)).send({ from: deployer });
+      await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+      await insuredVesting.methods.emergencyReleaseVesting().send({ from: deployer });
+      await insuredVesting.methods.emergencyClaim(user1).send({ from: anyUser });
+      expect(await mockUsdc.methods.balanceOf(user1).call()).to.be.bignumber.eq(await mockUsdc.amount(FUNDING_PER_USER));
+    });
+
+    it("owner can emergency release vesting period, user claimed some XCTD", async () => {
+      await insuredVesting.methods.addAllocation(user1, await xctd.amount(FUNDING_PER_USER)).send({ from: deployer });
+      await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+      await advanceMonths(LOCKUP_MONTHS + 3);
+      await insuredVesting.methods.claim(user1, 1).send({ from: deployer }); // TODO same scenario but don't claim for months 1+2
+      await insuredVesting.methods.claim(user1, 2).send({ from: deployer });
+      await insuredVesting.methods.claim(user1, 3).send({ from: deployer });
+      await insuredVesting.methods.emergencyReleaseVesting().send({ from: deployer });
+
+      await insuredVesting.methods.emergencyClaim(user1).send({ from: anyUser });
+      expect(await mockUsdc.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
+        BN(await mockUsdc.amount(FUNDING_PER_USER)).minus(
+          BN(await mockUsdc.amount(FUNDING_PER_USER))
+            .div(VESTING_PERIODS)
+            .multipliedBy(3)
+        ),
+        30
+      );
+    });
+
+    it("owner can emergency release vesting period, user claimed some XCTD, claimed in the middle", async () => {
+      await insuredVesting.methods.addAllocation(user1, await xctd.amount(FUNDING_PER_USER)).send({ from: deployer });
+      await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+      await advanceMonths(LOCKUP_MONTHS + 3);
+      await insuredVesting.methods.claim(user1, 3).send({ from: deployer });
+      await insuredVesting.methods.emergencyReleaseVesting().send({ from: deployer });
+
+      await insuredVesting.methods.emergencyClaim(user1).send({ from: anyUser });
+      expect(await mockUsdc.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
+        BN(await mockUsdc.amount(FUNDING_PER_USER)).minus(
+          BN(await mockUsdc.amount(FUNDING_PER_USER))
+            .div(VESTING_PERIODS)
+            .multipliedBy(1)
+        ),
+        30
+      );
+    });
+
+    it("cannot claim once emergency released", async () => {
+      await insuredVesting.methods.addAllocation(user1, await xctd.amount(FUNDING_PER_USER)).send({ from: deployer });
+      await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+      await insuredVesting.methods.emergencyReleaseVesting().send({ from: deployer });
+      await advanceMonths(LOCKUP_MONTHS + 1);
+      await expectRevert(async () => insuredVesting.methods.claim(user1, 1).send({ from: anyUser }), "emergency released");
+    });
+
+    it("cannot emergency claim if owner hasn't released", async () => {
+      await insuredVesting.methods.addAllocation(user1, await xctd.amount(FUNDING_PER_USER)).send({ from: deployer });
+      await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+      await expectRevert(() => insuredVesting.methods.emergencyClaim(user1).send({ from: anyUser }), "emergency not released");
+    });
+  });
+
+  it.only("attacks", async () => {
+    await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+    await insuredVesting.methods.addAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+    await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+    await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user2 });
+    await insuredVesting.methods.toggleDecision().send({ from: user1 });
+    await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS);
+    await insuredVesting.methods.claim(user1, VESTING_PERIODS).send({ from: anyUser });
+    await insuredVesting.methods.claim(user1, 1).send({ from: anyUser });
+    expect(await mockUsdc.methods.balanceOf(user1).call()).to.be.bignumber.eq(await mockUsdc.amount(BN(FUNDING_PER_USER)));
   });
 
   describe("recovery", () => {
@@ -243,6 +324,14 @@ describe("InsuredVestingV1", () => {
 
     it("cannot recover if not owner", async () => {
       await expectRevert(async () => insuredVesting.methods.recover(xctd.options.address).send({ from: anyUser }), "Ownable: caller is not the owner");
+    });
+
+    it("cannot change project address if not owner", async () => {
+      await expectRevert(async () => insuredVesting.methods.setProjectAddress(anyUser).send({ from: anyUser }), "Ownable: caller is not the owner");
+    });
+
+    it("cannot change project address if not owner", async () => {
+      await expectRevert(async () => insuredVesting.methods.emergencyReleaseVesting().send({ from: anyUser }), "Ownable: caller is not the owner");
     });
   });
 });
