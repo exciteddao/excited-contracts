@@ -20,6 +20,15 @@ import {
 } from "./fixture";
 import { web3 } from "@defi.org/web3-candies";
 
+/*
+  TODOs:
+  - Check extreme cases / complex:
+    - large amount of funding
+    - many months passing
+    - large of amount users, different fundings
+    - toggling
+ */
+
 describe("InsuredVestingV1", () => {
   beforeEach(async () => withFixture());
 
