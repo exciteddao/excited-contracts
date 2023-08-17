@@ -23,7 +23,7 @@ describe("UninsuredVestingV1", () => {
 
   it("can claim tokens for vesting period 1", async () => {
     await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-    await advanceMonths(LOCKUP_MONTHS + 1);
+    await advanceMonths(LOCKUP_MONTHS);
     await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
     expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
       (await xctd.amount(TOKENS_PER_USER)).dividedBy(VESTING_PERIODS),
@@ -33,7 +33,7 @@ describe("UninsuredVestingV1", () => {
 
   it("cannot claim tokens for vesting period 1 twice", async () => {
     await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-    await advanceMonths(LOCKUP_MONTHS + 1);
+    await advanceMonths(LOCKUP_MONTHS);
     await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
     await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: anyUser }), "already claimed until vesting period");
   });
@@ -43,15 +43,22 @@ describe("UninsuredVestingV1", () => {
     await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: anyUser }), "vesting has not started");
   });
 
-  it("can claim tokens for entire vesting period", async () => {
+  it("can claim tokens for entire vesting period, exact months passed", async () => {
     await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-    await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS);
+    await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS - 1);
+    await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
+    expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.eq(await xctd.amount(TOKENS_PER_USER));
+  });
+
+  it("can claim tokens for entire vesting period, many months passed", async () => {
+    await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+    await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS * 8);
     await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
     expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.eq(await xctd.amount(TOKENS_PER_USER));
   });
 
   it("cannot claim if there's no eligibility", async () => {
-    await advanceMonths(LOCKUP_MONTHS + 1);
+    await advanceMonths(LOCKUP_MONTHS);
     await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
     expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.zero;
   });

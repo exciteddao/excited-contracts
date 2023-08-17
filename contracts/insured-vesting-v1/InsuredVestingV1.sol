@@ -3,6 +3,7 @@ pragma solidity 0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 import "hardhat/console.sol";
 
 /**
@@ -164,7 +165,8 @@ contract InsuredVestingV1 is Ownable {
     function vestingPeriodsPassed() public view returns (uint256) {
         if (startTime == 0) return 0;
         if (block.timestamp < startTime) return 0;
-        return uint256((block.timestamp - startTime) / 30 days);
+        // + 1 means that once start time has been reached, a vesting period had already passed
+        return Math.min(uint256((block.timestamp - startTime) / 30 days) + 1, periodCount);
     }
 
     function setStartTime(uint256 _startTime) public onlyOwner {
