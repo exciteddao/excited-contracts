@@ -59,8 +59,7 @@ contract InsuredVestingV1 is Ownable {
     }
 
     struct VestingStatus {
-        // A flag to 1. prevent double claim per period; 2. allow claim for previous periods if user hasn't claimed for more than one period
-        mapping(uint256 => bool) claimedForPeriod;
+        uint256 lastPeriodClaimed;
         // Actual USDC amount funded by user
         uint256 usdcFunded;
         // Investment allocation, set by owner
@@ -73,8 +72,15 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // Events
-    event UserClaimed(address indexed target, uint256 indexed period, uint256 usdcAmount, uint256 xctdAmount, bool isEmergency);
-    event ProjectClaimed(address indexed target, uint256 indexed period, uint256 usdcAmount, uint256 xctdAmount, bool isEmergency);
+    event UserClaimed(address indexed target, uint256 indexed period, uint256 numberOfPeriodsClaimed, uint256 usdcAmount, uint256 xctdAmount, bool isEmergency);
+    event ProjectClaimed(
+        address indexed target,
+        uint256 indexed period,
+        uint256 numberOfPeriodsClaimed,
+        uint256 usdcAmount,
+        uint256 xctdAmount,
+        bool isEmergency
+    );
     event AllocationAdded(address indexed target, uint256 amount);
     event FundsAdded(address indexed target, uint256 amount);
     event StartTimeSet(uint256 timestamp);
@@ -111,41 +117,48 @@ contract InsuredVestingV1 is Ownable {
         emit FundsAdded(msg.sender, amount);
     }
 
-    function claim(address target, uint256 period) public {
+    function claim(address target) public {
         VestingStatus storage userStatus = vestingStatus[target];
+        uint256 _vestingPeriodsPassed = vestingPeriodsPassed();
+        uint256 periodsToClaim = _vestingPeriodsPassed - userStatus.lastPeriodClaimed;
 
         require(!emergencyRelease, "emergency released");
-        require(period >= 1 && period <= periodCount, "invalid period");
-        require(period <= vestingPeriodsPassed(), "period not reached");
-        require(!userStatus.claimedForPeriod[period], "already claimed");
+        require(_vestingPeriodsPassed > 0, "vesting has not started");
+        require(periodsToClaim > 0, "already claimed until vesting period");
+
+        // require(period >= 1 && period <= periodCount, "invalid period");
+        // require(period <= _vestingPeriodsPassed, "period not reached");
+        // require(!userStatus.claimedForPeriod[period], "already claimed");
         require(userStatus.usdcFunded > 0, "no funds added");
 
-        userStatus.claimedForPeriod[period] = true;
+        uint256 usdcToTransfer;
+        uint256 xctdToTransfer;
 
-        uint256 usdcToTransfer = (userStatus.usdcFunded) / periodCount;
-        uint256 xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate) / periodCount;
-
-        // I think I have an interesting attack here -> you don't claim until last period, then you claim last period, and then all the rest muhahahaha
-        if (period == periodCount) {
+        if (_vestingPeriodsPassed == periodCount) {
             usdcToTransfer = (userStatus.usdcFunded - userStatus.usdcClaimed);
             xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate - userStatus.xctdClaimed);
+        } else {
+            uint256 multiplier = _vestingPeriodsPassed - userStatus.lastPeriodClaimed;
+            usdcToTransfer = (multiplier * (userStatus.usdcFunded)) / periodCount;
+            xctdToTransfer = (multiplier * (userStatus.usdcFunded * usdcToXctdRate)) / periodCount;
         }
 
         userStatus.usdcClaimed += usdcToTransfer;
         userStatus.xctdClaimed += xctdToTransfer;
+        userStatus.lastPeriodClaimed = _vestingPeriodsPassed;
 
         if (userStatus.claimDecision == ClaimDecision.TOKENS) {
             xctd.safeTransfer(target, xctdToTransfer);
             usdc.safeTransfer(project, usdcToTransfer);
 
-            emit UserClaimed(target, period, 0, xctdToTransfer, false);
-            emit ProjectClaimed(target, period, usdcToTransfer, 0, false);
+            emit UserClaimed(target, _vestingPeriodsPassed, periodsToClaim, 0, xctdToTransfer, false);
+            emit ProjectClaimed(target, _vestingPeriodsPassed, periodsToClaim, usdcToTransfer, 0, false);
         } else {
             xctd.safeTransfer(project, xctdToTransfer);
             usdc.safeTransfer(target, usdcToTransfer);
 
-            emit UserClaimed(target, period, usdcToTransfer, 0, false);
-            emit ProjectClaimed(target, period, 0, xctdToTransfer, false);
+            emit UserClaimed(target, _vestingPeriodsPassed, periodsToClaim, usdcToTransfer, 0, false);
+            emit ProjectClaimed(target, _vestingPeriodsPassed, periodsToClaim, 0, xctdToTransfer, false);
         }
     }
 
@@ -184,10 +197,10 @@ contract InsuredVestingV1 is Ownable {
 
         require(emergencyRelease, "emergency not released");
         require(userStatus.usdcFunded > 0, "no funds added");
+        // check that lastperiodclaimed!=periodcount
 
-        for (uint256 i = 1; i <= periodCount; i++) {
-            userStatus.claimedForPeriod[i] = true;
-        }
+        uint256 periodsClaimed = periodCount - userStatus.lastPeriodClaimed;
+        userStatus.lastPeriodClaimed = periodCount;
 
         uint256 usdcToTransfer = (userStatus.usdcFunded - userStatus.usdcClaimed);
         uint256 xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate - userStatus.xctdClaimed);
@@ -198,8 +211,8 @@ contract InsuredVestingV1 is Ownable {
         xctd.safeTransfer(project, xctdToTransfer);
         usdc.safeTransfer(target, usdcToTransfer);
 
-        emit UserClaimed(target, periodCount, usdcToTransfer, 0, true);
-        emit ProjectClaimed(target, periodCount, 0, xctdToTransfer, true);
+        emit UserClaimed(target, periodCount, periodsClaimed, usdcToTransfer, 0, true);
+        emit ProjectClaimed(target, periodCount, periodsClaimed, 0, xctdToTransfer, true);
     }
 
     function recover(address tokenAddress) external onlyOwner {

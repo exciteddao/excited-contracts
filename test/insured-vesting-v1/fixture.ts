@@ -57,6 +57,9 @@ export async function withFixture() {
 
   await transferXctdToVesting();
   await insuredVesting.methods.setStartTime(BN(await getCurrentTimestamp()).plus(6 * MONTH)).send({ from: deployer });
+
+  await insuredVesting.methods.addAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+  await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user2 });
 }
 
 export async function transferXctdToVesting() {
