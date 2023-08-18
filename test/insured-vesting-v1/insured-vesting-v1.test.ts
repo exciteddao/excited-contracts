@@ -17,6 +17,8 @@ import {
   deployer,
   someOtherToken,
   getCurrentTimestamp,
+  MONTH,
+  user2,
 } from "./fixture";
 import { web3 } from "@defi.org/web3-candies";
 
@@ -44,6 +46,7 @@ describe("InsuredVestingV1", () => {
 
   beforeEach(async () => {
     await withFixture();
+    await insuredVesting.methods.setStartTime(BN(await getCurrentTimestamp()).plus(LOCKUP_MONTHS * MONTH)).send({ from: deployer });
   });
 
   async function setBalancesForDelta() {
@@ -94,7 +97,7 @@ describe("InsuredVestingV1", () => {
       await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), "already claimed");
     });
 
-    it("cannot claim tokens before starting period", async () => {
+    it("cannot claim tokens before starting period, zero time", async () => {
       await addAllocationForUser1();
       await addFundingFromUser1();
       await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), "vesting has not started");
@@ -320,7 +323,7 @@ describe("InsuredVestingV1", () => {
     // TODO does retrieiving XCTD work only based off allocations or do we have the option to cancel before vesting started.
     it("recovers unallocated xctd", async () => {
       await addAllocationForUser1();
-      // await insuredVesting.methods.addAllocation(user2, await mockUsdc.amount(1000)).send({ from: deployer });
+      await insuredVesting.methods.addAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
       await insuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
       // Recover all but the tokens allocated to users
       expect(await xctd.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(

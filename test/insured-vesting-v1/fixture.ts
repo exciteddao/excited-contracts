@@ -19,8 +19,7 @@ export let someOtherToken: MockERC20 & Token;
 export let insuredVesting: InsuredVestingV1;
 
 const DAY = 60 * 60 * 24;
-const MONTH = DAY * 30;
-// export const PRECISION = 10000;
+export const MONTH = DAY * 30;
 
 export const XCTD_TOKENS_ON_SALE = 1_000_000;
 export const USDC_TO_XCTD_RATIO = 7;
@@ -56,10 +55,6 @@ export async function withFixture() {
   }
 
   await transferXctdToVesting();
-  await insuredVesting.methods.setStartTime(BN(await getCurrentTimestamp()).plus(6 * MONTH)).send({ from: deployer });
-
-  await insuredVesting.methods.addAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-  await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user2 });
 }
 
 export async function transferXctdToVesting() {
