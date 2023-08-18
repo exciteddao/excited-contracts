@@ -95,6 +95,28 @@ describe("InsuredVestingV1", () => {
         await expectUserBalanceDelta("usdc", 0);
       });
 
+      it("can fund a partial allocation and claim tokens for vesting period 1", async () => {
+        await addAllocationForUser1();
+        await addFundingFromUser1(FUNDING_PER_USER / 2);
+        await setBalancesForDelta();
+        await advanceMonths(LOCKUP_MONTHS);
+        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await expectUserBalanceDelta("xctd", (await vestedAmount(1, "xctd")).dividedBy(2));
+        await expectUserBalanceDelta("usdc", 0);
+      });
+
+      it("can fund a partial allocation multiple times and claim tokens for vesting period 1", async () => {
+        await addAllocationForUser1();
+        await addFundingFromUser1(FUNDING_PER_USER / 4);
+        await advanceMonths(2);
+        await addFundingFromUser1(FUNDING_PER_USER / 4);
+        await setBalancesForDelta();
+        await advanceMonths(LOCKUP_MONTHS - 2);
+        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await expectUserBalanceDelta("xctd", (await vestedAmount(1, "xctd")).dividedBy(2));
+        await expectUserBalanceDelta("usdc", 0);
+      });
+
       it("cannot claim tokens for vesting period 1 twice", async () => {
         await addAllocationForUser1();
         await addFundingFromUser1();
@@ -231,10 +253,18 @@ describe("InsuredVestingV1", () => {
         );
       });
 
-      it("user cannot add more funds than allocation", async () => {
+      it("user cannot add more funds than allocation, two attempts", async () => {
         await addAllocationForUser1();
         await addFundingFromUser1();
         await expectRevert(async () => insuredVesting.methods.addFunds(await mockUsdc.amount(1)).send({ from: user1 }), "amount exceeds allocation");
+      });
+
+      it("user cannot add more funds than allocation, single attempts", async () => {
+        await addAllocationForUser1();
+        await expectRevert(
+          async () => insuredVesting.methods.addFunds(await mockUsdc.amount(1 + FUNDING_PER_USER)).send({ from: user1 }),
+          "amount exceeds allocation"
+        );
       });
 
       it("cannot add funds after period started", async () => {
@@ -423,8 +453,8 @@ describe("InsuredVestingV1", () => {
   });
 });
 
-async function addFundingFromUser1() {
-  await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+async function addFundingFromUser1(fundingAmount = FUNDING_PER_USER) {
+  await insuredVesting.methods.addFunds(await mockUsdc.amount(fundingAmount)).send({ from: user1 });
 }
 
 async function addAllocationForUser1() {
