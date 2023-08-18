@@ -22,12 +22,14 @@
     "test:avax": "NETWORK=AVAX hardhat test",
     "test:poly": "NETWORK=POLY hardhat test",
     "test:arb": "NETWORK=ARB hardhat test",
-    "test:bsc": "NETWORK=BSC hardhat test"
+    "test:bsc": "NETWORK=BSC hardhat test",
+    "prepare": "husky install"
   },
   "prettier": {
     "printWidth": 160
   },
   "devDependencies": {
-    "@types/mocha": "^10.0.1"
+    "@types/mocha": "^10.0.1",
+    "husky": "^8.0.3"
   }
 }
