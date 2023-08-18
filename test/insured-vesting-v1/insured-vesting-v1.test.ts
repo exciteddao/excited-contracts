@@ -31,182 +31,232 @@ import { web3 } from "@defi.org/web3-candies";
  */
 
 describe("InsuredVestingV1", () => {
-  beforeEach(async () => withFixture());
+  const balances = {
+    project: {
+      xctd: BN(-1),
+      usdc: BN(-1),
+    },
+    user1: {
+      xctd: BN(-1),
+      usdc: BN(-1),
+    },
+  };
 
-  it("can add funds", async () => {
-    await addAllocationForUser1();
-    const startingBalance = BN(await mockUsdc.methods.balanceOf(user1).call());
-    await addFundingFromUser1();
-    expect(await mockUsdc.methods.balanceOf(user1).call()).to.be.bignumber.eq(startingBalance.minus(await mockUsdc.amount(FUNDING_PER_USER)));
+  beforeEach(async () => {
+    await withFixture();
   });
 
-  it("can claim tokens for vesting period 1", async () => {
-    await addAllocationForUser1();
-    await addFundingFromUser1();
-    await advanceMonths(LOCKUP_MONTHS);
-    await insuredVesting.methods.claim(user1).send({ from: anyUser });
-    expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.eq(
-      await xctd.amount(BN(FUNDING_PER_USER).multipliedBy(USDC_TO_XCTD_RATIO).dividedBy(VESTING_PERIODS))
-    );
+  async function setBalancesForDelta() {
+    balances.user1.usdc = BN(await mockUsdc.methods.balanceOf(user1).call());
+    balances.user1.xctd = BN(await xctd.methods.balanceOf(user1).call());
+    balances.project.usdc = BN(await mockUsdc.methods.balanceOf(project).call());
+    balances.project.xctd = BN(await xctd.methods.balanceOf(project).call());
+  }
+
+  async function vestedAmount(months: number, token: "usdc" | "xctd") {
+    let amount = BN(FUNDING_PER_USER).dividedBy(VESTING_PERIODS).multipliedBy(months);
+    if (token === "xctd") {
+      return xctd.amount(amount.multipliedBy(USDC_TO_XCTD_RATIO));
+    } else {
+      return mockUsdc.amount(amount);
+    }
+  }
+
+  async function expectBalanceDelta(target: "project" | "user1", token: "usdc" | "xctd", expectedDelta: BN | number, closeTo = 0) {
+    const amount = BN(await (token === "xctd" ? xctd : mockUsdc).methods.balanceOf(target === "user1" ? user1 : project).call());
+    return expect(amount.minus(balances[target][token])).to.bignumber.closeTo(expectedDelta, closeTo);
+  }
+
+  async function expectUserBalanceDelta(token: "usdc" | "xctd", expectedDelta: BN | number, closeTo = 0) {
+    return expectBalanceDelta("user1", token, expectedDelta, closeTo);
+  }
+
+  async function expectProjectBalanceDelta(token: "usdc" | "xctd", expectedDelta: BN | number, closeTo = 0) {
+    return expectBalanceDelta("project", token, expectedDelta, closeTo);
+  }
+
+  describe("claim", () => {
+    it("can claim tokens for vesting period 1", async () => {
+      await addAllocationForUser1();
+      await addFundingFromUser1();
+      await setBalancesForDelta();
+      await advanceMonths(LOCKUP_MONTHS);
+      await insuredVesting.methods.claim(user1).send({ from: anyUser });
+      await expectUserBalanceDelta("xctd", await vestedAmount(1, "xctd"));
+      // toDO add usdc expectations in all of these
+    });
+
+    it("cannot claim tokens for vesting period 1 twice", async () => {
+      await addAllocationForUser1();
+      await addFundingFromUser1();
+      await advanceMonths(LOCKUP_MONTHS);
+      await insuredVesting.methods.claim(user1).send({ from: anyUser });
+      await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), "already claimed");
+    });
+
+    it("cannot claim tokens before starting period", async () => {
+      await addAllocationForUser1();
+      await addFundingFromUser1();
+      await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), "vesting has not started");
+    });
+
+    it("cannot claim tokens before starting period, some time has passed", async () => {
+      await advanceMonths(LOCKUP_MONTHS / 2);
+      await addAllocationForUser1();
+      await addFundingFromUser1();
+      await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), "vesting has not started");
+    });
+
+    it("cannot claim if not funded", async () => {
+      await advanceMonths(LOCKUP_MONTHS);
+      await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: anyUser }), "no funds added");
+    });
+
+    it("can claim tokens for entire vesting period, exact months passed", async () => {
+      await addAllocationForUser1();
+      await addFundingFromUser1();
+      await setBalancesForDelta();
+      await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS - 1);
+      await insuredVesting.methods.claim(user1).send({ from: anyUser });
+      await expectUserBalanceDelta("xctd", await vestedAmount(VESTING_PERIODS, "xctd"));
+    });
+
+    it("can claim tokens for entire vesting period, many months passed", async () => {
+      await addAllocationForUser1();
+      await addFundingFromUser1();
+      await setBalancesForDelta();
+      await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS * 8);
+      await insuredVesting.methods.claim(user1).send({ from: anyUser });
+      await expectUserBalanceDelta("xctd", await vestedAmount(VESTING_PERIODS, "xctd"));
+    });
+
+    it("project receives funding when claim is made", async () => {
+      await setBalancesForDelta();
+      await addAllocationForUser1();
+      await addFundingFromUser1();
+      await advanceMonths(LOCKUP_MONTHS);
+      await insuredVesting.methods.claim(user1).send({ from: anyUser });
+      await expectProjectBalanceDelta("usdc", await vestedAmount(1, "usdc"));
+    });
   });
 
-  it("cannot claim tokens for vesting period 1 twice", async () => {
-    await addAllocationForUser1();
-    await addFundingFromUser1();
-    await advanceMonths(LOCKUP_MONTHS);
-    await insuredVesting.methods.claim(user1).send({ from: anyUser });
-    await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), "already claimed");
+  describe("toggle decision", () => {
+    it("can toggle decision and  claim usdc back for vesting period 1", async () => {
+      await addAllocationForUser1();
+      await addFundingFromUser1();
+      await setBalancesForDelta();
+      await advanceMonths(LOCKUP_MONTHS);
+
+      await insuredVesting.methods.toggleDecision().send({ from: user1 });
+      await insuredVesting.methods.claim(user1).send({ from: anyUser });
+
+      await expectUserBalanceDelta("xctd", 0);
+      await expectProjectBalanceDelta("xctd", await vestedAmount(1, "xctd"));
+      await expectUserBalanceDelta("usdc", await vestedAmount(1, "usdc"));
+      await expectProjectBalanceDelta("usdc", 0);
+    });
+
+    it("can claim some tokens, some usdc for entire vesting period, use toggle multiple times", async () => {
+      await addAllocationForUser1();
+      await addFundingFromUser1();
+      await setBalancesForDelta();
+
+      // Claim for 11 months (remember that when LOCKUP_MONTHS has arrived, we're already in vesting period 1)
+      await advanceMonths(LOCKUP_MONTHS + 10);
+      await insuredVesting.methods.claim(user1).send({ from: anyUser });
+      await expectUserBalanceDelta("xctd", await vestedAmount(11, "xctd"));
+      await expectUserBalanceDelta("usdc", 0);
+      await expectProjectBalanceDelta("xctd", 0);
+      await expectProjectBalanceDelta("usdc", await vestedAmount(11, "usdc"));
+
+      // Toggle, let 3 months pass and claim USDC (we're at month 14)
+      await insuredVesting.methods.toggleDecision().send({ from: user1 });
+      await advanceMonths(3);
+      await insuredVesting.methods.claim(user1).send({ from: anyUser });
+      await expectUserBalanceDelta("xctd", await vestedAmount(11, "xctd"));
+      await expectUserBalanceDelta("usdc", await vestedAmount(3, "usdc"));
+      await expectProjectBalanceDelta("xctd", await vestedAmount(3, "xctd"));
+      await expectProjectBalanceDelta("usdc", await vestedAmount(11, "usdc"));
+
+      // Let another 3 months pass, toggle again to token and claim (we're at month 17)
+      await advanceMonths(3);
+      await insuredVesting.methods.toggleDecision().send({ from: user1 });
+      await insuredVesting.methods.claim(user1).send({ from: anyUser });
+      await expectUserBalanceDelta("xctd", await vestedAmount(14, "xctd"));
+      await expectUserBalanceDelta("usdc", await vestedAmount(3, "usdc"));
+      await expectProjectBalanceDelta("xctd", await vestedAmount(3, "xctd"));
+      await expectProjectBalanceDelta("usdc", await vestedAmount(14, "usdc"));
+
+      // Toggle again and claim USDC for remaining periods (we're at month 24 - finished)
+      await insuredVesting.methods.toggleDecision().send({ from: user1 });
+      await advanceMonths(7);
+      await insuredVesting.methods.claim(user1).send({ from: anyUser });
+
+      await expectUserBalanceDelta("xctd", await vestedAmount(14, "xctd"), 1);
+      await expectUserBalanceDelta("usdc", await vestedAmount(10, "usdc"), 1);
+      await expectProjectBalanceDelta("xctd", await vestedAmount(10, "xctd"), 1);
+      await expectProjectBalanceDelta("usdc", await vestedAmount(14, "usdc"), 1);
+
+      // Update balances and verify no remainders
+      await setBalancesForDelta();
+      expect(balances.project.usdc.plus(balances.user1.usdc)).to.be.bignumber.eq(await mockUsdc.amount(FUNDING_PER_USER));
+      expect(balances.project.xctd.plus(balances.user1.xctd)).to.be.bignumber.eq((await xctd.amount(FUNDING_PER_USER)).multipliedBy(USDC_TO_XCTD_RATIO));
+    });
   });
 
-  it("cannot claim tokens before starting period", async () => {
-    await addAllocationForUser1();
-    await addFundingFromUser1();
-    await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), "vesting has not started");
+  describe("add funds", () => {
+    it("can add funds", async () => {
+      await setBalancesForDelta();
+      await addAllocationForUser1();
+      await addFundingFromUser1();
+      await expectUserBalanceDelta("usdc", (await mockUsdc.amount(FUNDING_PER_USER)).negated());
+    });
+
+    it("user cannot fund if does not have allocation", async () => {
+      await expectRevert(
+        async () => insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 }),
+        "amount exceeds allocation"
+      );
+    });
+
+    it("user cannot add more funds than allocation", async () => {
+      await addAllocationForUser1();
+      await addFundingFromUser1();
+      await expectRevert(async () => insuredVesting.methods.addFunds(await mockUsdc.amount(1)).send({ from: user1 }), "amount exceeds allocation");
+    });
+
+    it("cannot add funds after period started", async () => {
+      await advanceMonths(LOCKUP_MONTHS);
+      await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), "vesting already started");
+    });
   });
 
-  it("cannot claim tokens before starting period, some time has passed", async () => {
-    await advanceMonths(LOCKUP_MONTHS / 2);
-    await addAllocationForUser1();
-    await addFundingFromUser1();
-    await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), "vesting has not started");
-  });
+  describe("admin", () => {
+    it("cannot set amounts after period started", async () => {
+      await advanceMonths(LOCKUP_MONTHS);
+      await expectRevert(
+        async () => insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer }),
+        "vesting already started"
+      );
+    });
 
-  it("cannot claim if not funded", async () => {
-    await advanceMonths(LOCKUP_MONTHS);
-    await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: anyUser }), "no funds added");
-  });
+    it("cannot set start time after period started", async () => {
+      await advanceMonths(LOCKUP_MONTHS);
+      await expectRevert(async () => insuredVesting.methods.setStartTime(await getCurrentTimestamp()).send({ from: deployer }), "vesting already started");
+    });
 
-  it("can claim tokens for entire vesting period, exact months passed", async () => {
-    await addAllocationForUser1();
-    await addFundingFromUser1();
-    await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS - 1);
-    await insuredVesting.methods.claim(user1).send({ from: anyUser });
-    expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.eq(await xctd.amount(BN(FUNDING_PER_USER).multipliedBy(USDC_TO_XCTD_RATIO)));
-  });
+    it("owner can set project address", async () => {
+      expect(await insuredVesting.methods.project().call()).to.be.not.eq(anyUser);
+      await insuredVesting.methods.setProjectAddress(anyUser).send({ from: deployer });
+      expect(await insuredVesting.methods.project().call()).to.be.eq(anyUser);
+    });
 
-  it("can claim tokens for entire vesting period, many months passed", async () => {
-    await addAllocationForUser1();
-    await addFundingFromUser1();
-    await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS * 8);
-    await insuredVesting.methods.claim(user1).send({ from: anyUser });
-    expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.eq(await xctd.amount(BN(FUNDING_PER_USER).multipliedBy(USDC_TO_XCTD_RATIO)));
-  });
-
-  it("can claim some tokens, some usdc for entire vesting period", async () => {
-    await addAllocationForUser1();
-    await addFundingFromUser1();
-
-    const userStartingUsdcBalance = BN(await mockUsdc.methods.balanceOf(user1).call());
-    const projectStartingUsdcBalance = BN(await mockUsdc.methods.balanceOf(project).call());
-    const projectStartingXctdBalance = BN(await xctd.methods.balanceOf(project).call());
-
-    // Claim for 14 months (remember that when LOCKUP_MONTHS has arrived, we're already in vesting period 1)
-    await advanceMonths(LOCKUP_MONTHS + 13);
-    await insuredVesting.methods.claim(user1).send({ from: anyUser });
-
-    // Toggle to USDC decision
-    await insuredVesting.methods.toggleDecision().send({ from: user1 });
-
-    // Claim USDC for remaining periods
-    await advanceMonths(10);
-    await insuredVesting.methods.claim(user1).send({ from: anyUser });
-
-    const deltaUsdcProject = BN(await mockUsdc.methods.balanceOf(project).call()).minus(projectStartingUsdcBalance);
-    const deltaXctdProject = BN(await xctd.methods.balanceOf(project).call()).minus(projectStartingXctdBalance);
-    const deltaUsdcUser = BN(await mockUsdc.methods.balanceOf(user1).call()).minus(userStartingUsdcBalance);
-    const deltaXctdUser = BN(await xctd.methods.balanceOf(user1).call());
-
-    expect(deltaXctdUser).to.be.bignumber.closeTo(
-      await xctd.amount(BN(FUNDING_PER_USER).multipliedBy(USDC_TO_XCTD_RATIO).dividedBy(VESTING_PERIODS).multipliedBy(14)),
-      30
-    );
-
-    expect(deltaXctdProject).to.be.bignumber.closeTo(
-      await xctd.amount(BN(FUNDING_PER_USER).multipliedBy(USDC_TO_XCTD_RATIO).dividedBy(VESTING_PERIODS).multipliedBy(10)),
-      30
-    );
-
-    expect(deltaUsdcUser).to.be.bignumber.closeTo(await mockUsdc.amount(BN(FUNDING_PER_USER).dividedBy(VESTING_PERIODS).multipliedBy(10)), 30);
-    expect(deltaUsdcProject).to.be.bignumber.closeTo(await mockUsdc.amount(BN(FUNDING_PER_USER).dividedBy(VESTING_PERIODS).multipliedBy(14)), 30);
-
-    // Ensure no remainders
-    expect(deltaUsdcProject.plus(deltaUsdcUser)).to.be.bignumber.eq(await mockUsdc.amount(FUNDING_PER_USER));
-    expect(deltaXctdProject.plus(deltaXctdUser)).to.be.bignumber.eq((await xctd.amount(FUNDING_PER_USER)).multipliedBy(USDC_TO_XCTD_RATIO));
-  });
-
-  it("project receives funding when claim is made", async () => {
-    const startingBalance = await mockUsdc.methods.balanceOf(project).call();
-    await addAllocationForUser1();
-    await addFundingFromUser1();
-    await advanceMonths(LOCKUP_MONTHS);
-    await insuredVesting.methods.claim(user1).send({ from: anyUser });
-    const currentBalance = await mockUsdc.methods.balanceOf(project).call();
-    expect(currentBalance).to.be.bignumber.eq(BN(startingBalance).plus(await mockUsdc.amount(BN(FUNDING_PER_USER).dividedBy(VESTING_PERIODS))));
-  });
-
-  it("can claim usdc back for vesting period 1", async () => {
-    const projectXctdStartBalance = BN(await xctd.methods.balanceOf(project).call());
-    const userUsdcStartBalance = BN(await xctd.methods.balanceOf(project).call());
-
-    await addAllocationForUser1();
-    await addFundingFromUser1();
-    await advanceMonths(LOCKUP_MONTHS);
-
-    await insuredVesting.methods.toggleDecision().send({ from: user1 });
-    await insuredVesting.methods.claim(user1).send({ from: anyUser });
-
-    expect(await xctd.methods.balanceOf(project).call()).to.be.bignumber.closeTo(
-      projectXctdStartBalance
-        .plus(await xctd.amount(FUNDING_PER_USER))
-        .multipliedBy(USDC_TO_XCTD_RATIO)
-        .dividedBy(VESTING_PERIODS),
-      await xctd.amount(0.1)
-    );
-    expect(await mockUsdc.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
-      userUsdcStartBalance.plus(BN(await mockUsdc.amount(FUNDING_PER_USER)).dividedBy(VESTING_PERIODS)),
-      await mockUsdc.amount(0.1)
-    );
-  });
-
-  it("user cannot fund if does not have allocation", async () => {
-    await expectRevert(async () => insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 }), "amount exceeds allocation");
-  });
-
-  it("user cannot add more funds than allocation", async () => {
-    await addAllocationForUser1();
-    await addFundingFromUser1();
-    await expectRevert(async () => insuredVesting.methods.addFunds(await mockUsdc.amount(1)).send({ from: user1 }), "amount exceeds allocation");
-  });
-
-  it("cannot set amounts after period started", async () => {
-    await advanceMonths(LOCKUP_MONTHS);
-    await expectRevert(
-      async () => insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer }),
-      "vesting already started"
-    );
-  });
-
-  it("cannot set start time after period started", async () => {
-    await advanceMonths(LOCKUP_MONTHS);
-    await expectRevert(async () => insuredVesting.methods.setStartTime(await getCurrentTimestamp()).send({ from: deployer }), "vesting already started");
-  });
-
-  it("owner can set project address", async () => {
-    expect(await insuredVesting.methods.project().call()).to.be.not.eq(anyUser);
-    await insuredVesting.methods.setProjectAddress(anyUser).send({ from: deployer });
-    expect(await insuredVesting.methods.project().call()).to.be.eq(anyUser);
-  });
-
-  it("cannot set start time after period started", async () => {
-    await expectRevert(
-      async () => insuredVesting.methods.setStartTime(BN(await getCurrentTimestamp()).minus(100)).send({ from: deployer }),
-      "cannot set start time in the past"
-    );
-  });
-
-  it("cannot add funds after period started", async () => {
-    await advanceMonths(LOCKUP_MONTHS);
-    await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), "vesting already started");
+    it("cannot set start time after period started", async () => {
+      await expectRevert(
+        async () => insuredVesting.methods.setStartTime(BN(await getCurrentTimestamp()).minus(100)).send({ from: deployer }),
+        "cannot set start time in the past"
+      );
+    });
   });
 
   describe("emergency release", () => {
