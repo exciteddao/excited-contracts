@@ -27,21 +27,22 @@ import { web3 } from "@defi.org/web3-candies";
     - many months passing
     - large of amount users, different fundings
     - toggling
+
  */
 
 describe("InsuredVestingV1", () => {
   beforeEach(async () => withFixture());
 
   it("can add funds", async () => {
-    await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+    await addAllocationForUser1();
     const startingBalance = BN(await mockUsdc.methods.balanceOf(user1).call());
-    await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+    await addFundingFromUser1();
     expect(await mockUsdc.methods.balanceOf(user1).call()).to.be.bignumber.eq(startingBalance.minus(await mockUsdc.amount(FUNDING_PER_USER)));
   });
 
   it("can claim tokens for vesting period 1", async () => {
-    await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-    await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+    await addAllocationForUser1();
+    await addFundingFromUser1();
     await advanceMonths(LOCKUP_MONTHS);
     await insuredVesting.methods.claim(user1).send({ from: anyUser });
     expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.eq(
@@ -50,23 +51,23 @@ describe("InsuredVestingV1", () => {
   });
 
   it("cannot claim tokens for vesting period 1 twice", async () => {
-    await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-    await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+    await addAllocationForUser1();
+    await addFundingFromUser1();
     await advanceMonths(LOCKUP_MONTHS);
     await insuredVesting.methods.claim(user1).send({ from: anyUser });
     await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), "already claimed");
   });
 
   it("cannot claim tokens before starting period", async () => {
-    await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-    await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+    await addAllocationForUser1();
+    await addFundingFromUser1();
     await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), "vesting has not started");
   });
 
   it("cannot claim tokens before starting period, some time has passed", async () => {
     await advanceMonths(LOCKUP_MONTHS / 2);
-    await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-    await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+    await addAllocationForUser1();
+    await addFundingFromUser1();
     await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), "vesting has not started");
   });
 
@@ -76,24 +77,24 @@ describe("InsuredVestingV1", () => {
   });
 
   it("can claim tokens for entire vesting period, exact months passed", async () => {
-    await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-    await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+    await addAllocationForUser1();
+    await addFundingFromUser1();
     await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS - 1);
     await insuredVesting.methods.claim(user1).send({ from: anyUser });
     expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.eq(await xctd.amount(BN(FUNDING_PER_USER).multipliedBy(USDC_TO_XCTD_RATIO)));
   });
 
   it("can claim tokens for entire vesting period, many months passed", async () => {
-    await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-    await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+    await addAllocationForUser1();
+    await addFundingFromUser1();
     await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS * 8);
     await insuredVesting.methods.claim(user1).send({ from: anyUser });
     expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.eq(await xctd.amount(BN(FUNDING_PER_USER).multipliedBy(USDC_TO_XCTD_RATIO)));
   });
 
   it("can claim some tokens, some usdc for entire vesting period", async () => {
-    await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-    await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+    await addAllocationForUser1();
+    await addFundingFromUser1();
 
     const userStartingUsdcBalance = BN(await mockUsdc.methods.balanceOf(user1).call());
     const projectStartingUsdcBalance = BN(await mockUsdc.methods.balanceOf(project).call());
@@ -135,8 +136,8 @@ describe("InsuredVestingV1", () => {
 
   it("project receives funding when claim is made", async () => {
     const startingBalance = await mockUsdc.methods.balanceOf(project).call();
-    await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-    await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+    await addAllocationForUser1();
+    await addFundingFromUser1();
     await advanceMonths(LOCKUP_MONTHS);
     await insuredVesting.methods.claim(user1).send({ from: anyUser });
     const currentBalance = await mockUsdc.methods.balanceOf(project).call();
@@ -147,8 +148,8 @@ describe("InsuredVestingV1", () => {
     const projectXctdStartBalance = BN(await xctd.methods.balanceOf(project).call());
     const userUsdcStartBalance = BN(await xctd.methods.balanceOf(project).call());
 
-    await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-    await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+    await addAllocationForUser1();
+    await addFundingFromUser1();
     await advanceMonths(LOCKUP_MONTHS);
 
     await insuredVesting.methods.toggleDecision().send({ from: user1 });
@@ -172,8 +173,8 @@ describe("InsuredVestingV1", () => {
   });
 
   it("user cannot add more funds than allocation", async () => {
-    await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-    await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+    await addAllocationForUser1();
+    await addFundingFromUser1();
     await expectRevert(async () => insuredVesting.methods.addFunds(await mockUsdc.amount(1)).send({ from: user1 }), "amount exceeds allocation");
   });
 
@@ -211,7 +212,7 @@ describe("InsuredVestingV1", () => {
   describe("emergency release", () => {
     it("owner can emergency release vesting period, user hasn't claimed XCTD yet", async () => {
       await insuredVesting.methods.addAllocation(user1, await xctd.amount(FUNDING_PER_USER)).send({ from: deployer });
-      await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+      await addFundingFromUser1();
       await insuredVesting.methods.emergencyReleaseVesting().send({ from: deployer });
       await insuredVesting.methods.emergencyClaim(user1).send({ from: anyUser });
       expect(await mockUsdc.methods.balanceOf(user1).call()).to.be.bignumber.eq(await mockUsdc.amount(FUNDING_PER_USER));
@@ -219,7 +220,7 @@ describe("InsuredVestingV1", () => {
 
     it("owner can emergency release vesting period, user claimed some XCTD", async () => {
       await insuredVesting.methods.addAllocation(user1, await xctd.amount(FUNDING_PER_USER)).send({ from: deployer });
-      await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+      await addFundingFromUser1();
       await advanceMonths(LOCKUP_MONTHS + 2);
       await insuredVesting.methods.claim(user1).send({ from: deployer });
       await insuredVesting.methods.emergencyReleaseVesting().send({ from: deployer });
@@ -237,7 +238,7 @@ describe("InsuredVestingV1", () => {
 
     it("cannot claim once emergency released", async () => {
       await insuredVesting.methods.addAllocation(user1, await xctd.amount(FUNDING_PER_USER)).send({ from: deployer });
-      await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+      await addFundingFromUser1();
       await insuredVesting.methods.emergencyReleaseVesting().send({ from: deployer });
       await advanceMonths(LOCKUP_MONTHS);
       await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: anyUser }), "emergency released");
@@ -245,7 +246,7 @@ describe("InsuredVestingV1", () => {
 
     it("cannot emergency claim if owner hasn't released", async () => {
       await insuredVesting.methods.addAllocation(user1, await xctd.amount(FUNDING_PER_USER)).send({ from: deployer });
-      await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+      await addFundingFromUser1();
       await expectRevert(() => insuredVesting.methods.emergencyClaim(user1).send({ from: anyUser }), "emergency not released");
     });
   });
@@ -268,7 +269,7 @@ describe("InsuredVestingV1", () => {
 
     // TODO does retrieiving XCTD work only based off allocations or do we have the option to cancel before vesting started.
     it("recovers unallocated xctd", async () => {
-      await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+      await addAllocationForUser1();
       // await insuredVesting.methods.addAllocation(user2, await mockUsdc.amount(1000)).send({ from: deployer });
       await insuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
       // Recover all but the tokens allocated to users
@@ -305,3 +306,11 @@ describe("InsuredVestingV1", () => {
     });
   });
 });
+
+async function addFundingFromUser1() {
+  await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+}
+
+async function addAllocationForUser1() {
+  await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+}
