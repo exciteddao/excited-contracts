@@ -6,35 +6,6 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "hardhat/console.sol";
 
-/**
- Expected interface:
-
- Contract Vesting:
- 
- constructor(address xctdToken, address whitelistContract)
- setTokenToUsdRate(uint256) adminOnly
- 
- // throws if not enough unallocated tokens
- withdrawTokens(uint256 amount) adminOnly
- 
- // claims for investor, either usdc or token, according to current decision
- // claims for project according to decision
- // maintains a map of target=>period=>claimed. obviously throws if already claimed or if period hasn't arrived yet
- claim(address target, period uint256) 
-
- // START: throw if already started
- addTokens(uint256 amount) adminOnly
- setInsuranceRate(uint256 percentage) adminOnly
- setVestingPeriodCount(uint256 number) adminOnly
- setVestingFrequency(uint256 number) adminOnly
- setStartBlock(uint256 block) adminOnly
- addFunds(uint256 amount) // USDC. Throws if not in whitelist or does not match allocation
- // END: throw if already started
- */
-
-// TODO add more events (both contracts)
-// TODO remainder of USDC + XCTD
-
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
@@ -94,8 +65,8 @@ contract InsuredVestingV1 is Ownable {
         xctd = IERC20(_xctd);
         periodCount = _periods;
         usdcToXctdRate = _usdcToXctdRate;
-        require(usdcToXctdRate > 1e12, "minimum rate is 1 USDC:XCTD");
-        require(usdcToXctdRate < 100 * 1e12, "maximum rate is 100 USDC:XCTD");
+        require(usdcToXctdRate > 1 * 1e12, "minimum rate is 1 USDC:XCTD");
+        require(usdcToXctdRate < 10_000 * 1e12, "maximum rate is 10000 USDC:XCTD");
         project = _project;
     }
 

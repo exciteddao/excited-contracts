@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@defi.org/web3-candies": "4.x",
-    "hardhat-watcher": "^2.5.0"
+    "hardhat-watcher": "^2.5.0",
+    "solidity-coverage": "^0.8.4"
   },
   "scripts": {
     "prettier": "prettier --write '{contracts,src,test}/**/*.{ts,js,json,sol}'",

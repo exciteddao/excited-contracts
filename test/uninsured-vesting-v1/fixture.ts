@@ -17,8 +17,7 @@ export let someOtherToken: MockERC20 & Token;
 export let uninsuredVesting: UninsuredVestingV1;
 
 const DAY = 60 * 60 * 24;
-const MONTH = DAY * 30;
-// export const PRECISION = 10000;
+export const MONTH = DAY * 30;
 
 export const XCTD_TOKENS_ON_SALE = 1_000_000;
 export const USDC_TO_XCTD_RATIO = 7;
@@ -41,7 +40,6 @@ export async function withFixture() {
   uninsuredVesting = await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [xctd.options.address, VESTING_PERIODS]);
 
   await transferXctdToVesting();
-  await uninsuredVesting.methods.setStartTime(BN(await getCurrentTimestamp()).plus(6 * MONTH)).send({ from: deployer });
 }
 
 export async function transferXctdToVesting() {

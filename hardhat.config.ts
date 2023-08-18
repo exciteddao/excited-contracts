@@ -7,18 +7,18 @@ import "hardhat-tracer";
 import { hardhatDefaultConfig } from "@defi.org/web3-candies/dist/hardhat";
 import _ from "lodash";
 import "hardhat-watcher";
+import "solidity-coverage";
 
 export default _.merge(hardhatDefaultConfig(), {
   networks: {
-    hardhat: {
-    },
+    hardhat: {},
   },
   mocha: {
     bail: false,
   },
   watcher: {
     test: {
-      tasks: ['test'],
+      tasks: ["test"],
     },
   },
 } as HardhatUserConfig);
