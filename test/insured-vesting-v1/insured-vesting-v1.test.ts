@@ -86,7 +86,7 @@ describe("InsuredVestingV1", () => {
       await advanceMonths(LOCKUP_MONTHS);
       await insuredVesting.methods.claim(user1).send({ from: anyUser });
       await expectUserBalanceDelta("xctd", await vestedAmount(1, "xctd"));
-      // toDO add usdc expectations in all of these
+      await expectUserBalanceDelta("usdc", 0);
     });
 
     it("cannot claim tokens for vesting period 1 twice", async () => {
@@ -122,6 +122,7 @@ describe("InsuredVestingV1", () => {
       await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS - 1);
       await insuredVesting.methods.claim(user1).send({ from: anyUser });
       await expectUserBalanceDelta("xctd", await vestedAmount(VESTING_PERIODS, "xctd"));
+      await expectUserBalanceDelta("usdc", 0);
     });
 
     it("can claim tokens for entire vesting period, many months passed", async () => {
@@ -131,6 +132,7 @@ describe("InsuredVestingV1", () => {
       await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS * 8);
       await insuredVesting.methods.claim(user1).send({ from: anyUser });
       await expectUserBalanceDelta("xctd", await vestedAmount(VESTING_PERIODS, "xctd"));
+      await expectUserBalanceDelta("usdc", 0);
     });
 
     it("project receives funding when claim is made", async () => {
@@ -140,6 +142,7 @@ describe("InsuredVestingV1", () => {
       await advanceMonths(LOCKUP_MONTHS);
       await insuredVesting.methods.claim(user1).send({ from: anyUser });
       await expectProjectBalanceDelta("usdc", await vestedAmount(1, "usdc"));
+      await expectProjectBalanceDelta("xctd", 0);
     });
   });
 
