@@ -157,5 +157,12 @@ describe("UninsuredVestingV1", () => {
         "startTime must be more than 7 days from now"
       );
     });
+
+    it("cannot deploy with fewer than 3 vesting periods", async () => {
+      await expectRevert(
+        async () => await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [xctd.options.address, 1, await getDefaultStartTime()]),
+        "periodCount must be at least 3"
+      );
+    });
   });
 });

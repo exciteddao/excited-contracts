@@ -30,10 +30,10 @@ contract UninsuredVestingV1 is Ownable {
 
     constructor(address _xctd, uint _periods, uint256 _startTime) {
         xctd = IERC20(_xctd);
-        periodCount = _periods;
-
         require(_startTime > block.timestamp + 7 days, "startTime must be more than 7 days from now");
+        require(_periods >= 3, "periodCount must be at least 3");
         startTime = _startTime;
+        periodCount = _periods;
     }
 
     function claim(address target) public {

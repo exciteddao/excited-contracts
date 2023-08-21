@@ -535,6 +535,21 @@ describe("InsuredVestingV1", () => {
         "startTime must be more than 7 days from now"
       );
     });
+
+    it("cannot deploy with fewer than 3 vesting periods", async () => {
+      await expectRevert(
+        async () =>
+          deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
+            mockUsdc.options.address,
+            xctd.options.address,
+            project,
+            0,
+            bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)),
+            await getDefaultStartTime(),
+          ]),
+        "periodCount must be at least 3"
+      );
+    });
   });
 });
 

@@ -65,13 +65,14 @@ contract InsuredVestingV1 is Ownable {
     constructor(address _usdc, address _xctd, address _project, uint _periods, uint256 _usdcToXctdRate, uint256 _startTime) {
         usdc = IERC20(_usdc);
         xctd = IERC20(_xctd);
-        periodCount = _periods;
-        usdcToXctdRate = _usdcToXctdRate;
-        require(usdcToXctdRate > 1 * 1e12, "minimum rate is 1 USDC:XCTD");
-        require(usdcToXctdRate < 10_000 * 1e12, "maximum rate is 10000 USDC:XCTD");
+        require(_usdcToXctdRate > 1 * 1e12, "minimum rate is 1 USDC:XCTD");
+        require(_usdcToXctdRate < 10_000 * 1e12, "maximum rate is 10000 USDC:XCTD");
         require(_startTime > block.timestamp + 7 days, "startTime must be more than 7 days from now");
+        require(_periods >= 3, "periodCount must be at least 3");
+        usdcToXctdRate = _usdcToXctdRate;
         project = _project;
         startTime = _startTime;
+        periodCount = _periods;
     }
 
     // TODO: return timestamp of next claiming period
@@ -151,7 +152,7 @@ contract InsuredVestingV1 is Ownable {
         emit StartTimeSet(newStartTime);
     }
 
-    // TODO: should this be set in constructor?
+    // TODO (product decision): should this be set in constructor?
     function setProjectAddress(address _project) public onlyOwner {
         project = _project;
     }
