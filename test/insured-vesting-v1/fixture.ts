@@ -55,6 +55,7 @@ export async function withFixture() {
     project,
     VESTING_PERIODS,
     bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)),
+    await getDefaultStartTime(),
   ]);
 
   for (const target of [user1, user2].concat(additionalUsers)) {
@@ -79,4 +80,8 @@ export function advanceMonths(months: number): Promise<BlockInfo> {
 
 export async function getCurrentTimestamp(): Promise<string | number | BN> {
   return (await web3().eth.getBlock("latest")).timestamp;
+}
+
+export async function getDefaultStartTime(): Promise<BN> {
+  return await BN(await getCurrentTimestamp()).plus(MONTH * 6);
 }

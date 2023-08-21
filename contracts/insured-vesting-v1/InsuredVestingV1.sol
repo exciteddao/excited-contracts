@@ -21,7 +21,7 @@ contract InsuredVestingV1 is Ownable {
     bool public emergencyRelease = false;
 
     // Changeable by owner until start time has arrived
-    uint256 public startTime = 0;
+    uint256 public startTime;
 
     uint256 public totalXctdAllocated = 0;
 
@@ -62,20 +62,24 @@ contract InsuredVestingV1 is Ownable {
     event DecisionChanged(address indexed target, ClaimDecision decision);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
-    constructor(address _usdc, address _xctd, address _project, uint _periods, uint256 _usdcToXctdRate) {
+    constructor(address _usdc, address _xctd, address _project, uint _periods, uint256 _usdcToXctdRate, uint256 _startTime) {
         usdc = IERC20(_usdc);
         xctd = IERC20(_xctd);
         periodCount = _periods;
         usdcToXctdRate = _usdcToXctdRate;
         require(usdcToXctdRate > 1 * 1e12, "minimum rate is 1 USDC:XCTD");
         require(usdcToXctdRate < 10_000 * 1e12, "maximum rate is 10000 USDC:XCTD");
+        require(_startTime > block.timestamp + 7 days, "startTime must be more than 7 days from now");
         project = _project;
+        startTime = _startTime;
     }
+
+    // TODO: return timestamp of next claiming period
 
     // TODO should we change this to a "set" functionality instead
     // if we do, naively totalXctdAllocated would be wrong and we should add a test for that
     function addAllocation(address target, uint256 _usdcAllocation) public onlyOwner {
-        require(startTime == 0 || block.timestamp < startTime, "vesting already started");
+        require(block.timestamp < startTime, "vesting already started");
         vestingStatus[target].usdcAllocation += _usdcAllocation;
         totalXctdAllocated += _usdcAllocation * usdcToXctdRate;
 
@@ -83,7 +87,7 @@ contract InsuredVestingV1 is Ownable {
     }
 
     function addFunds(uint256 amount) public {
-        require(startTime == 0 || block.timestamp < startTime, "vesting already started");
+        require(block.timestamp < startTime, "vesting already started");
         require((vestingStatus[msg.sender].usdcAllocation - vestingStatus[msg.sender].usdcFunded) >= amount, "amount exceeds allocation");
         require(amount > MIN_USDC_TO_FUND, "amount must be greater than 10 USDC");
         usdc.safeTransferFrom(msg.sender, address(this), amount);
@@ -100,9 +104,6 @@ contract InsuredVestingV1 is Ownable {
         require(!emergencyRelease, "emergency released");
         require(_vestingPeriodsPassed > 0, "vesting has not started");
         require(periodsToClaim > 0, "already claimed until vesting period");
-
-        // require(period <= _vestingPeriodsPassed, "period not reached");
-        // require(!userStatus.claimedForPeriod[period], "already claimed");
         require(userStatus.usdcFunded > 0, "no funds added");
 
         uint256 usdcToTransfer;
@@ -137,20 +138,20 @@ contract InsuredVestingV1 is Ownable {
     }
 
     function vestingPeriodsPassed() public view returns (uint256) {
-        if (startTime == 0) return 0;
         if (block.timestamp < startTime) return 0;
         // + 1 means that once start time has been reached, a vesting period had already passed
         return Math.min(uint256((block.timestamp - startTime) / 30 days) + 1, periodCount);
     }
 
     function setStartTime(uint256 newStartTime) public onlyOwner {
-        require(startTime == 0 || block.timestamp < startTime, "vesting already started");
+        require(block.timestamp < startTime, "vesting already started");
         require(newStartTime > block.timestamp, "start time has to be in the future");
         startTime = newStartTime;
 
         emit StartTimeSet(newStartTime);
     }
 
+    // TODO: should this be set in constructor?
     function setProjectAddress(address _project) public onlyOwner {
         project = _project;
     }
