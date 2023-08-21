@@ -20,7 +20,7 @@ contract UninsuredVestingV1 is Ownable {
     IERC20 immutable xctd;
     uint256 immutable periodCount;
 
-    uint256 startTime = 0;
+    uint256 startTime;
     uint256 amountAssigned = 0;
 
     event Claimed(uint256 indexed period, address indexed target, uint256 amount);
@@ -28,9 +28,12 @@ contract UninsuredVestingV1 is Ownable {
     event StartTimeSet(uint256 timestamp);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
-    constructor(address _xctd, uint _periods) {
+    constructor(address _xctd, uint _periods, uint256 _startTime) {
         xctd = IERC20(_xctd);
         periodCount = _periods;
+
+        require(_startTime > block.timestamp + 7 days, "startTime must be more than 7 days from now");
+        startTime = _startTime;
     }
 
     function claim(address target) public {
@@ -58,22 +61,21 @@ contract UninsuredVestingV1 is Ownable {
     }
 
     function vestingPeriodsPassed() public view returns (uint256) {
-        if (startTime == 0) return 0;
         if (block.timestamp < startTime) return 0;
         // + 1 means that once start time has been reached, a vesting period had already passed
         return Math.min(uint256((block.timestamp - startTime) / 30 days) + 1, periodCount);
     }
 
-    function setStartTime(uint256 _startTime) public onlyOwner {
-        if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
-        if (_startTime < block.timestamp) revert("cannot set start time in the past");
-        startTime = _startTime;
-        emit StartTimeSet(_startTime);
+    function setStartTime(uint256 newStartTime) public onlyOwner {
+        if (block.timestamp > startTime) revert("vesting already started");
+        if (newStartTime < block.timestamp) revert("cannot set start time in the past");
+        startTime = newStartTime;
+        emit StartTimeSet(newStartTime);
     }
 
     // TODO - do we want here an "add" or "set" functionality
     function addAmount(address target, uint256 amount) public onlyOwner {
-        if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
+        if (block.timestamp > startTime) revert("vesting already started");
         vestingStatuses[target].amount += amount;
         amountAssigned += amount;
         emit AmountAdded(target, amount);

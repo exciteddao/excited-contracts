@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import BN from "bignumber.js";
-import { expectRevert, setBalance } from "@defi.org/web3-candies/dist/hardhat";
+import { deployArtifact, expectRevert, setBalance } from "@defi.org/web3-candies/dist/hardhat";
 import {
   LOCKUP_MONTHS,
   VESTING_PERIODS,
@@ -16,8 +16,10 @@ import {
   someOtherToken,
   user2,
   MONTH,
+  getDefaultStartTime,
 } from "./fixture";
 import { web3 } from "@defi.org/web3-candies";
+import { UninsuredVestingV1 } from "../../typechain-hardhat/contracts/uninsured-vesting-v1/UninsuredVestingV1";
 
 describe("UninsuredVestingV1", () => {
   beforeEach(async () => withFixture());
@@ -143,11 +145,17 @@ describe("UninsuredVestingV1", () => {
     });
   });
 
-  describe("with lockup period not set set", () => {
-    it("cannot claim if vesting period is not set", async () => {
-      await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-      await advanceMonths(LOCKUP_MONTHS);
-      await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: anyUser }), "vesting has not started");
+  describe("deployment", () => {
+    it("startTime must be more than 7 days from deployment time", async () => {
+      await expectRevert(
+        async () =>
+          await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [
+            xctd.options.address,
+            VESTING_PERIODS,
+            await getCurrentTimestamp(),
+          ]),
+        "startTime must be more than 7 days from now"
+      );
     });
   });
 });
