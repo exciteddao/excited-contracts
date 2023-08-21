@@ -49,6 +49,17 @@ describe("UninsuredVestingV1", () => {
       await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: anyUser }), "vesting has not started");
     });
 
+    it("can claim for multiple periods at once", async () => {
+      await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+      const monthsPassed = 3;
+      await advanceMonths(LOCKUP_MONTHS + monthsPassed);
+      await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
+      expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
+        (await xctd.amount(TOKENS_PER_USER)).dividedBy(VESTING_PERIODS).multipliedBy(monthsPassed + 1),
+        1
+      );
+    });
+
     it("can claim tokens for entire vesting period, exact months passed", async () => {
       await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
       await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS - 1);

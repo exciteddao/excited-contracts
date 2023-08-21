@@ -47,7 +47,7 @@ contract UninsuredVestingV1 is Ownable {
         if (_vestingPeriodsPassed == periodCount) {
             amount = targetStatus.amount - targetStatus.totalClaimed;
         } else {
-            amount = targetStatus.amount / periodCount;
+            amount = (targetStatus.amount * periodsToClaim) / periodCount;
         }
 
         targetStatus.totalClaimed += amount;
