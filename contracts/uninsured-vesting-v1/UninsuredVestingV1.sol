@@ -71,6 +71,7 @@ contract UninsuredVestingV1 is Ownable {
         emit StartTimeSet(_startTime);
     }
 
+    // TODO - do we want here an "add" or "set" functionality
     function addAmount(address target, uint256 amount) public onlyOwner {
         if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
         vestingStatuses[target].amount += amount;

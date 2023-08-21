@@ -10,6 +10,7 @@ useChaiBigNumber();
 export let deployer: string;
 export let user1: string;
 export let user2: string;
+export let additionalUsers: string[] = [];
 export let anyUser: string;
 export let project: string;
 
@@ -27,7 +28,7 @@ export const VESTING_PERIODS = 24;
 export const LOCKUP_MONTHS = 6;
 export const FUNDING_PER_USER = 10_000;
 
-export async function withFixture() {
+export async function setup() {
   deployer = await account(9);
   user1 = await account(0);
   user2 = await account(3);
@@ -38,6 +39,13 @@ export async function withFixture() {
   tag(user2, "user2");
   tag(anyUser, "anyUser");
 
+  for (let i = 1; i <= 6; i++) {
+    additionalUsers.push(await account(i + 10));
+    tag(additionalUsers[i], "additionalUser" + i);
+  }
+}
+
+export async function withFixture() {
   someOtherToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "SomeOtherToken"])).options.address);
   mockUsdc = erc20("MockERC20", (await deployArtifact<MockUSDC>("MockUSDC", { from: deployer }, [bn6(1e9), "MockUSDC"])).options.address);
   xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "XCTD"])).options.address);
@@ -49,7 +57,7 @@ export async function withFixture() {
     bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)),
   ]);
 
-  for (const target of [user1, user2]) {
+  for (const target of [user1, user2].concat(additionalUsers)) {
     await mockUsdc.methods.transfer(target, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
     await mockUsdc.methods.approve(insuredVesting.options.address, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: target });
   }

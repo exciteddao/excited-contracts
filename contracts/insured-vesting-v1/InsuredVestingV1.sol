@@ -9,6 +9,8 @@ import "hardhat/console.sol";
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
+    uint256 constant MIN_USDC_TO_FUND = 10 * 1e6; // 10 USDC
+
     IERC20 public immutable usdc;
     IERC20 public immutable xctd;
     uint256 public immutable usdcToXctdRate;
@@ -73,7 +75,7 @@ contract InsuredVestingV1 is Ownable {
     // TODO should we change this to a "set" functionality instead
     // if we do, naively totalXctdAllocated would be wrong and we should add a test for that
     function addAllocation(address target, uint256 _usdcAllocation) public onlyOwner {
-        if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
+        require(startTime == 0 || block.timestamp < startTime, "vesting already started");
         vestingStatus[target].usdcAllocation += _usdcAllocation;
         totalXctdAllocated += _usdcAllocation * usdcToXctdRate;
 
@@ -81,8 +83,9 @@ contract InsuredVestingV1 is Ownable {
     }
 
     function addFunds(uint256 amount) public {
-        if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
-        if ((vestingStatus[msg.sender].usdcAllocation - vestingStatus[msg.sender].usdcFunded) < amount) revert("amount exceeds allocation");
+        require(startTime == 0 || block.timestamp < startTime, "vesting already started");
+        require((vestingStatus[msg.sender].usdcAllocation - vestingStatus[msg.sender].usdcFunded) >= amount, "amount exceeds allocation");
+        require(amount > MIN_USDC_TO_FUND, "amount must be greater than 10 USDC");
         usdc.safeTransferFrom(msg.sender, address(this), amount);
         vestingStatus[msg.sender].usdcFunded += amount;
 
@@ -140,12 +143,12 @@ contract InsuredVestingV1 is Ownable {
         return Math.min(uint256((block.timestamp - startTime) / 30 days) + 1, periodCount);
     }
 
-    function setStartTime(uint256 _startTime) public onlyOwner {
-        if (startTime != 0 && block.timestamp > startTime) revert("vesting already started");
-        if (_startTime < block.timestamp) revert("cannot set start time in the past");
-        startTime = _startTime;
+    function setStartTime(uint256 newStartTime) public onlyOwner {
+        require(startTime == 0 || block.timestamp < startTime, "vesting already started");
+        require(newStartTime > block.timestamp, "start time has to be in the future");
+        startTime = newStartTime;
 
-        emit StartTimeSet(_startTime);
+        emit StartTimeSet(newStartTime);
     }
 
     function setProjectAddress(address _project) public onlyOwner {
@@ -158,12 +161,16 @@ contract InsuredVestingV1 is Ownable {
         emit DecisionChanged(msg.sender, vestingStatus[msg.sender].claimDecision);
     }
 
+    // TODO: freeze/unfreeze by owner?
+    // TODO: adding view functions -> claimElgibility, lastClaimedPeriod
+
     // Used to allow users to claim back USDC if anything goes wrong
     function emergencyReleaseVesting() public onlyOwner {
         emergencyRelease = true;
         emit EmergencyRelease();
     }
 
+    // TODO does this give too much power to the owner - being able to effectively cancel the agreement?
     function emergencyClaim(address target) public {
         VestingStatus storage userStatus = vestingStatus[target];
 

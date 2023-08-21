@@ -19,6 +19,8 @@ import {
   getCurrentTimestamp,
   MONTH,
   user2,
+  additionalUsers,
+  setup,
 } from "./fixture";
 import { bn18, bn6, web3 } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
@@ -74,6 +76,8 @@ describe("InsuredVestingV1", () => {
     return expectBalanceDelta("project", token, expectedDelta, closeTo);
   }
 
+  before(async () => await setup());
+
   beforeEach(async () => {
     await withFixture();
   });
@@ -93,6 +97,55 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
         await expectUserBalanceDelta("xctd", await vestedAmount(1, "xctd"));
         await expectUserBalanceDelta("usdc", 0);
+      });
+
+      it("can claim tokens for vesting period 1, multiple allocations/fundings", async () => {
+        await addAllocationForUser1(FUNDING_PER_USER / 4);
+        await addFundingFromUser1(FUNDING_PER_USER / 4);
+        await advanceMonths(1);
+        await addAllocationForUser1(FUNDING_PER_USER / 4);
+        await addFundingFromUser1(FUNDING_PER_USER / 4);
+        await advanceMonths(1);
+        await addAllocationForUser1(FUNDING_PER_USER / 4);
+        await addFundingFromUser1(FUNDING_PER_USER / 4);
+        await advanceMonths(1);
+        await addAllocationForUser1(FUNDING_PER_USER / 4);
+        await addFundingFromUser1(FUNDING_PER_USER / 4);
+        await setBalancesForDelta();
+        await advanceMonths(LOCKUP_MONTHS - 3);
+        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await expectUserBalanceDelta("xctd", await vestedAmount(1, "xctd"));
+        await expectUserBalanceDelta("usdc", 0);
+      });
+
+      it("can claim tokens for multiple users, random amounts", async () => {
+        const additionalUsersFunding = [];
+
+        for (const user of additionalUsers) {
+          const amountToAllocate = Math.round(10 + (Math.random() * FUNDING_PER_USER - 10));
+          await insuredVesting.methods.addAllocation(user, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+          const amountToFund = Math.round(10 + (Math.random() * amountToAllocate - 10));
+          await insuredVesting.methods.addFunds(await mockUsdc.amount(amountToFund)).send({ from: user });
+          additionalUsersFunding.push(amountToFund);
+        }
+
+        await addAllocationForUser1();
+        await addFundingFromUser1();
+        await setBalancesForDelta();
+        await advanceMonths(LOCKUP_MONTHS);
+        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await expectUserBalanceDelta("xctd", await vestedAmount(1, "xctd"));
+        await expectUserBalanceDelta("usdc", 0);
+
+        for (const [index, user] of additionalUsers.entries()) {
+          const funding = additionalUsersFunding[index];
+          expect(await xctd.methods.balanceOf(user).call()).to.be.bignumber.zero;
+          await insuredVesting.methods.claim(user).send({ from: anyUser });
+          expect(await xctd.methods.balanceOf(user).call()).to.be.bignumber.closeTo(
+            (await xctd.amount(funding)).multipliedBy(USDC_TO_XCTD_RATIO).dividedBy(VESTING_PERIODS),
+            1
+          );
+        }
       });
 
       it("can fund a partial allocation and claim tokens for vesting period 1", async () => {
@@ -175,13 +228,31 @@ describe("InsuredVestingV1", () => {
     });
 
     describe("toggle decision", () => {
-      it("can toggle decision and  claim usdc back for vesting period 1", async () => {
+      it("can toggle decision and claim usdc back for vesting period 1 (toggle after vesting)", async () => {
         await addAllocationForUser1();
         await addFundingFromUser1();
         await setBalancesForDelta();
+
         await advanceMonths(LOCKUP_MONTHS);
 
         await insuredVesting.methods.toggleDecision().send({ from: user1 });
+        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+
+        await expectUserBalanceDelta("xctd", 0);
+        await expectProjectBalanceDelta("xctd", await vestedAmount(1, "xctd"));
+        await expectUserBalanceDelta("usdc", await vestedAmount(1, "usdc"));
+        await expectProjectBalanceDelta("usdc", 0);
+      });
+
+      it("can toggle decision and claim usdc back for vesting period 1 (toggle before vesting)", async () => {
+        await addAllocationForUser1();
+        await addFundingFromUser1();
+        await setBalancesForDelta();
+
+        await insuredVesting.methods.toggleDecision().send({ from: user1 });
+
+        await advanceMonths(LOCKUP_MONTHS);
+
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
 
         await expectUserBalanceDelta("xctd", 0);
@@ -246,6 +317,11 @@ describe("InsuredVestingV1", () => {
         await expectUserBalanceDelta("usdc", (await mockUsdc.amount(FUNDING_PER_USER)).negated());
       });
 
+      it("cannot add funds less than minimum required", async () => {
+        await addAllocationForUser1();
+        await expectRevert(async () => addFundingFromUser1(1), "amount must be greater than 10 USDC");
+      });
+
       it("user cannot fund if does not have allocation", async () => {
         await expectRevert(
           async () => insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 }),
@@ -296,7 +372,7 @@ describe("InsuredVestingV1", () => {
       it("cannot set start time after period started", async () => {
         await expectRevert(
           async () => insuredVesting.methods.setStartTime(BN(await getCurrentTimestamp()).minus(100)).send({ from: deployer }),
-          "cannot set start time in the past"
+          "start time has to be in the future"
         );
       });
     });
@@ -453,10 +529,10 @@ describe("InsuredVestingV1", () => {
   });
 });
 
-async function addFundingFromUser1(fundingAmount = FUNDING_PER_USER) {
-  await insuredVesting.methods.addFunds(await mockUsdc.amount(fundingAmount)).send({ from: user1 });
+async function addFundingFromUser1(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.addFunds(await mockUsdc.amount(amount)).send({ from: user1 });
 }
 
-async function addAllocationForUser1() {
-  await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+async function addAllocationForUser1(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(amount)).send({ from: deployer });
 }
