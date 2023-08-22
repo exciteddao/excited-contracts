@@ -27,16 +27,6 @@ import {
 import { bn18, bn6, web3 } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 
-/*
-  TODOs:
-  - Check extreme cases / complex:
-    - large amount of funding
-    - many months passing
-    - large of amount users, different fundings
-    - toggling
-
- */
-
 describe("InsuredVestingV1", () => {
   const balances = {
     project: {

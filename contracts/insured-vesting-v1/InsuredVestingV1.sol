@@ -159,7 +159,7 @@ contract InsuredVestingV1 is Ownable {
         if (block.timestamp < startTime) return 0;
         // Calculate the number of full 30-day periods that have passed
         uint256 fullPeriodsPassed = (block.timestamp - startTime) / 30 days;
-        // We add 1 because a vesting period is considered passed at the start time
+        // We add 1 because one vesting period is considered passed at the start time
         uint256 totalPeriodsPassed = fullPeriodsPassed + 1;
         // Use min to ensure that we don't return a number greater than the total number of periods
         return Math.min(totalPeriodsPassed, periodCount);
