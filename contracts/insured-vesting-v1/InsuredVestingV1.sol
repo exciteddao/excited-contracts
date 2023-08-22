@@ -6,6 +6,18 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "hardhat/console.sol";
 
+/* 
+Internal Audit:
+- tests
+- refactor
+- line by line
+- 7th september, most blocks are 4-7 september
+- compare to other vesting contracts (open zeppelin)
+
+Notes:
+- 
+*/
+
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
@@ -25,14 +37,14 @@ contract InsuredVestingV1 is Ownable {
 
     uint256 public totalXctdAllocated = 0;
 
-    mapping(address => VestingStatus) public vestingStatus;
+    mapping(address => UserVesting) public userVestings;
 
     enum ClaimDecision {
         TOKENS,
         USDC
     }
 
-    struct VestingStatus {
+    struct UserVesting {
         uint256 lastPeriodClaimed;
         // Actual USDC amount funded by user
         uint256 usdcFunded;
@@ -75,13 +87,17 @@ contract InsuredVestingV1 is Ownable {
         periodCount = _periods;
     }
 
-    // TODO: return timestamp of next claiming period
+    function getNextVestingPeriodTimestamp() public view returns (uint256) {
+        // TODO: think if we can make this more intuitive
+        // Reason we're not using vestingPeriodsPassed+1 is because at startTime, vesting period 1 alread passed
+        return startTime + vestingPeriodsPassed() * 30 days;
+    }
 
     // TODO should we change this to a "set" functionality instead
     // if we do, naively totalXctdAllocated would be wrong and we should add a test for that
     function addAllocation(address target, uint256 _usdcAllocation) public onlyOwner {
         require(block.timestamp < startTime, "vesting already started");
-        vestingStatus[target].usdcAllocation += _usdcAllocation;
+        userVestings[target].usdcAllocation += _usdcAllocation;
         totalXctdAllocated += _usdcAllocation * usdcToXctdRate;
 
         emit AllocationAdded(target, _usdcAllocation);
@@ -89,16 +105,16 @@ contract InsuredVestingV1 is Ownable {
 
     function addFunds(uint256 amount) public {
         require(block.timestamp < startTime, "vesting already started");
-        require((vestingStatus[msg.sender].usdcAllocation - vestingStatus[msg.sender].usdcFunded) >= amount, "amount exceeds allocation");
+        require((userVestings[msg.sender].usdcAllocation - userVestings[msg.sender].usdcFunded) >= amount, "amount exceeds allocation");
         require(amount > MIN_USDC_TO_FUND, "amount must be greater than 10 USDC");
         usdc.safeTransferFrom(msg.sender, address(this), amount);
-        vestingStatus[msg.sender].usdcFunded += amount;
+        userVestings[msg.sender].usdcFunded += amount;
 
         emit FundsAdded(msg.sender, amount);
     }
 
     function claim(address target) public {
-        VestingStatus storage userStatus = vestingStatus[target];
+        UserVesting storage userStatus = userVestings[target];
         uint256 _vestingPeriodsPassed = vestingPeriodsPassed();
         uint256 periodsToClaim = _vestingPeriodsPassed - userStatus.lastPeriodClaimed;
 
@@ -149,10 +165,6 @@ contract InsuredVestingV1 is Ownable {
         return Math.min(totalPeriodsPassed, periodCount);
     }
 
-    function lastClaimedDetails(address target) public view returns (VestingStatus memory) {
-        return vestingStatus[target];
-    }
-
     function setStartTime(uint256 newStartTime) public onlyOwner {
         require(block.timestamp < startTime, "vesting already started");
         require(newStartTime > block.timestamp, "start time has to be in the future");
@@ -167,9 +179,9 @@ contract InsuredVestingV1 is Ownable {
     }
 
     function toggleDecision() public {
-        vestingStatus[msg.sender].claimDecision = vestingStatus[msg.sender].claimDecision == ClaimDecision.TOKENS ? ClaimDecision.USDC : ClaimDecision.TOKENS;
+        userVestings[msg.sender].claimDecision = userVestings[msg.sender].claimDecision == ClaimDecision.TOKENS ? ClaimDecision.USDC : ClaimDecision.TOKENS;
 
-        emit DecisionChanged(msg.sender, vestingStatus[msg.sender].claimDecision);
+        emit DecisionChanged(msg.sender, userVestings[msg.sender].claimDecision);
     }
 
     // TODO: freeze/unfreeze by owner?
@@ -182,7 +194,7 @@ contract InsuredVestingV1 is Ownable {
 
     // TODO does this give too much power to the owner - being able to effectively cancel the agreement?
     function emergencyClaim(address target) public {
-        VestingStatus storage userStatus = vestingStatus[target];
+        UserVesting storage userStatus = userVestings[target];
 
         require(emergencyRelease, "emergency not released");
         require(userStatus.usdcFunded > 0, "no funds added");

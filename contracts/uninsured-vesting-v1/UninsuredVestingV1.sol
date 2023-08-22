@@ -9,13 +9,13 @@ import "hardhat/console.sol";
 contract UninsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
-    struct VestingStatus {
+    struct UserVesting {
         uint256 lastPeriodClaimed;
         uint256 amount;
         uint256 totalClaimed;
     }
 
-    mapping(address => VestingStatus) public vestingStatuses;
+    mapping(address => UserVesting) public userVestings;
 
     IERC20 immutable xctd;
     uint256 immutable periodCount;
@@ -37,7 +37,7 @@ contract UninsuredVestingV1 is Ownable {
     }
 
     function claim(address target) public {
-        VestingStatus storage targetStatus = vestingStatuses[target];
+        UserVesting storage targetStatus = userVestings[target];
         uint256 _vestingPeriodsPassed = vestingPeriodsPassed();
         uint256 periodsToClaim = _vestingPeriodsPassed - targetStatus.lastPeriodClaimed;
 
@@ -76,7 +76,7 @@ contract UninsuredVestingV1 is Ownable {
     // TODO - do we want here an "add" or "set" functionality
     function addAmount(address target, uint256 amount) public onlyOwner {
         if (block.timestamp > startTime) revert("vesting already started");
-        vestingStatuses[target].amount += amount;
+        userVestings[target].amount += amount;
         amountAssigned += amount;
         emit AmountAdded(target, amount);
     }

@@ -22,6 +22,7 @@ import {
   additionalUsers,
   setup,
   getDefaultStartTime,
+  advanceDays,
 } from "./fixture";
 import { bn18, bn6, web3 } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
@@ -86,7 +87,6 @@ describe("InsuredVestingV1", () => {
   describe("with lockup period set", () => {
     beforeEach(async () => {
       await withFixture();
-      await insuredVesting.methods.setStartTime(BN(await getCurrentTimestamp()).plus(LOCKUP_MONTHS * MONTH)).send({ from: deployer });
     });
 
     describe("claim", () => {
@@ -225,18 +225,6 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
         await expectProjectBalanceDelta("usdc", await vestedAmount(1, "usdc"));
         await expectProjectBalanceDelta("xctd", 0);
-      });
-
-      it("a user can view their last claimed period details", async () => {
-        await setBalancesForDelta();
-        await addAllocationForUser1();
-        await addFundingFromUser1();
-        await advanceMonths(LOCKUP_MONTHS);
-        const initialClaimDetails = await insuredVesting.methods.lastClaimedDetails(user1).call();
-        expect(initialClaimDetails[0]).to.be.bignumber.eq(0);
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
-        const lastClaimedDetails = await insuredVesting.methods.lastClaimedDetails(user1).call();
-        expect(lastClaimedDetails[0]).to.be.bignumber.eq(1);
       });
     });
 
@@ -498,6 +486,43 @@ describe("InsuredVestingV1", () => {
 
       it("cannot change project address if not owner", async () => {
         await expectRevert(async () => insuredVesting.methods.emergencyReleaseVesting().send({ from: anyUser }), "Ownable: caller is not the owner");
+      });
+    });
+
+    describe("misc", () => {
+      // TODO: add these tests to uninsured
+      describe("getNextVestingPeriodTimestamp", () => {
+        let lockupTime: number = 0; // initialTs + 30 * 6 * 86400
+
+        beforeEach(async () => {
+          lockupTime = ((await getCurrentTimestamp()) as number) + 30 * 6 * 86400;
+          await insuredVesting.methods.setStartTime(lockupTime).send({ from: deployer });
+        });
+
+        const vestPeriods = async (periods: number) => {
+          return advanceMonths(LOCKUP_MONTHS).then(() => advanceMonths(periods - 1));
+        };
+
+        const testCases: [string, any, () => number][] = [
+          ["0 days", async () => {}, () => lockupTime],
+          ["29 days", () => advanceDays(29), () => lockupTime],
+          ["140 days", () => advanceDays(140), () => lockupTime],
+          ["1 month vested", () => vestPeriods(1), () => lockupTime + 30 * 86400], // 25th of december
+          ["1.5 month vested", () => vestPeriods(1).then(() => advanceDays(15)), () => lockupTime + 30 * 86400], // 25th of december
+          ["2 months vested", () => vestPeriods(2), () => lockupTime + 2 * 30 * 86400], // 20-something of January
+          ["7 month vested", () => vestPeriods(7), () => lockupTime + 7 * 30 * 86400],
+          ["12 month vested", () => vestPeriods(12), () => lockupTime + 12 * 30 * 86400],
+          ["23 month vested", () => vestPeriods(23), () => lockupTime + 23 * 30 * 86400],
+          ["24 month vested", () => vestPeriods(24), () => lockupTime + 24 * 30 * 86400],
+          ["24 month vested (after vesting is done)", () => vestPeriods(24).then(() => advanceMonths(100)), () => lockupTime + 24 * 30 * 86400],
+        ];
+
+        for (const [description, advanceTimeFn, expected] of testCases) {
+          it(`should return the next vesting period after ${description}`, async () => {
+            await advanceTimeFn();
+            expect(await insuredVesting.methods.getNextVestingPeriodTimestamp().call()).to.be.bignumber.eq(BN(expected()));
+          });
+        }
       });
     });
   });

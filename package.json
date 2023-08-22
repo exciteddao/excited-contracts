@@ -30,6 +30,7 @@
     "printWidth": 160
   },
   "devDependencies": {
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.8",
     "@types/mocha": "^10.0.1",
     "husky": "^8.0.3",
     "prettier": "2.8.8",
