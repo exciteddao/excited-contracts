@@ -226,6 +226,18 @@ describe("InsuredVestingV1", () => {
         await expectProjectBalanceDelta("usdc", await vestedAmount(1, "usdc"));
         await expectProjectBalanceDelta("xctd", 0);
       });
+
+      it("a user can view their last claimed period details", async () => {
+        await setBalancesForDelta();
+        await addAllocationForUser1();
+        await addFundingFromUser1();
+        await advanceMonths(LOCKUP_MONTHS);
+        const initialClaimDetails = await insuredVesting.methods.lastClaimedDetails(user1).call();
+        expect(initialClaimDetails[0]).to.be.bignumber.eq(0);
+        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        const lastClaimedDetails = await insuredVesting.methods.lastClaimedDetails(user1).call();
+        expect(lastClaimedDetails[0]).to.be.bignumber.eq(1);
+      });
     });
 
     describe("toggle decision", () => {

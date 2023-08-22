@@ -139,9 +139,18 @@ contract InsuredVestingV1 is Ownable {
     }
 
     function vestingPeriodsPassed() public view returns (uint256) {
+        // Start time not reached - no periods have passed
         if (block.timestamp < startTime) return 0;
-        // + 1 means that once start time has been reached, a vesting period had already passed
-        return Math.min(uint256((block.timestamp - startTime) / 30 days) + 1, periodCount);
+        // Calculate the number of full 30-day periods that have passed
+        uint256 fullPeriodsPassed = (block.timestamp - startTime) / 30 days;
+        // We add 1 because a vesting period is considered passed at the start time
+        uint256 totalPeriodsPassed = fullPeriodsPassed + 1;
+        // Use min to ensure that we don't return a number greater than the total number of periods
+        return Math.min(totalPeriodsPassed, periodCount);
+    }
+
+    function lastClaimedDetails(address target) public view returns (VestingStatus memory) {
+        return vestingStatus[target];
     }
 
     function setStartTime(uint256 newStartTime) public onlyOwner {
@@ -164,7 +173,6 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // TODO: freeze/unfreeze by owner?
-    // TODO: adding view functions -> claimElgibility, lastClaimedPeriod
 
     // Used to allow users to claim back USDC if anything goes wrong
     function emergencyReleaseVesting() public onlyOwner {
