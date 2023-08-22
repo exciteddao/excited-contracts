@@ -22,6 +22,7 @@ contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
     uint256 constant MIN_USDC_TO_FUND = 10 * 1e6; // 10 USDC
+    uint256 constant PERIOD_DURATION = 30 days;
 
     IERC20 public immutable usdc;
     IERC20 public immutable xctd;
@@ -90,7 +91,7 @@ contract InsuredVestingV1 is Ownable {
     function getNextVestingPeriodTimestamp() public view returns (uint256) {
         // TODO: think if we can make this more intuitive
         // Reason we're not using vestingPeriodsPassed+1 is because at startTime, vesting period 1 alread passed
-        return startTime + vestingPeriodsPassed() * 30 days;
+        return startTime + vestingPeriodsPassed() * PERIOD_DURATION;
     }
 
     // TODO should we change this to a "set" functionality instead
@@ -158,7 +159,7 @@ contract InsuredVestingV1 is Ownable {
         // Start time not reached - no periods have passed
         if (block.timestamp < startTime) return 0;
         // Calculate the number of full 30-day periods that have passed
-        uint256 fullPeriodsPassed = (block.timestamp - startTime) / 30 days;
+        uint256 fullPeriodsPassed = (block.timestamp - startTime) / PERIOD_DURATION;
         // We add 1 because one vesting period is considered passed at the start time
         uint256 totalPeriodsPassed = fullPeriodsPassed + 1;
         // Use min to ensure that we don't return a number greater than the total number of periods
