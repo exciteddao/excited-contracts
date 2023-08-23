@@ -6,6 +6,12 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "hardhat/console.sol";
 
+/*
+- consider moving to by-second resolution, this removes the need to handle remainders
+- move to addition instead of divison
+- switch to if-revert custom errors
+*/
+
 contract UninsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
@@ -22,6 +28,8 @@ contract UninsuredVestingV1 is Ownable {
 
     uint256 startTime;
     uint256 amountAssigned = 0;
+
+    error AlreadyStarted();
 
     event Claimed(uint256 indexed period, address indexed target, uint256 amount);
     event AmountAdded(address indexed target, uint256 amount);
@@ -66,6 +74,8 @@ contract UninsuredVestingV1 is Ownable {
         return Math.min(uint256((block.timestamp - startTime) / 30 days) + 1, periodCount);
     }
 
+    // TODO - should be removed unless explicitly asked by product. introduces a problem,
+    // because owner can delay indefinitely.
     function setStartTime(uint256 newStartTime) public onlyOwner {
         if (block.timestamp > startTime) revert("vesting already started");
         if (newStartTime < block.timestamp) revert("cannot set start time in the past");
@@ -73,9 +83,9 @@ contract UninsuredVestingV1 is Ownable {
         emit StartTimeSet(newStartTime);
     }
 
-    // TODO - do we want here an "add" or "set" functionality
+    // TODO - refactor to "setAmount"
     function addAmount(address target, uint256 amount) public onlyOwner {
-        if (block.timestamp > startTime) revert("vesting already started");
+        if (block.timestamp > startTime) revert AlreadyStarted();
         userVestings[target].amount += amount;
         amountAssigned += amount;
         emit AmountAdded(target, amount);

@@ -3,6 +3,7 @@ pragma solidity 0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "hardhat/console.sol";
 
@@ -14,8 +15,10 @@ Internal Audit:
 - 7th september, most blocks are 4-7 september
 - compare to other vesting contracts (open zeppelin)
 
-Notes:
-- 
+TODO:
+- Linear
+- Multiplying rather than dividing
+- Battle tested options contract (look at RibbonFinance, Opyn, Hegic, GMX, etc)
 */
 
 contract InsuredVestingV1 is Ownable {
@@ -75,11 +78,12 @@ contract InsuredVestingV1 is Ownable {
     event DecisionChanged(address indexed target, ClaimDecision decision);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
+    // in real life: 80*1e12 = $0.0125 XCTD
     constructor(address _usdc, address _xctd, address _project, uint _periods, uint256 _usdcToXctdRate, uint256 _startTime) {
         usdc = IERC20(_usdc);
         xctd = IERC20(_xctd);
-        require(_usdcToXctdRate > 1 * 1e12, "minimum rate is 1 USDC:XCTD");
-        require(_usdcToXctdRate < 10_000 * 1e12, "maximum rate is 10000 USDC:XCTD");
+        require(_usdcToXctdRate > 10 ** (ERC20(_xctd).decimals() - ERC20(_usdc).decimals()), "minimum rate is 1 USDC:XCTD");
+        require(_usdcToXctdRate < 10_000 * 1e12, "maximum rate is 10000 USDC:XCTD"); // TODO remove
         require(_startTime > block.timestamp + 7 days, "startTime must be more than 7 days from now");
         require(_periods >= 3, "periodCount must be at least 3");
         usdcToXctdRate = _usdcToXctdRate;
@@ -131,9 +135,8 @@ contract InsuredVestingV1 is Ownable {
             usdcToTransfer = (userStatus.usdcFunded - userStatus.usdcClaimed);
             xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate - userStatus.xctdClaimed);
         } else {
-            uint256 multiplier = _vestingPeriodsPassed - userStatus.lastPeriodClaimed;
-            usdcToTransfer = (multiplier * (userStatus.usdcFunded)) / periodCount;
-            xctdToTransfer = (multiplier * (userStatus.usdcFunded * usdcToXctdRate)) / periodCount;
+            usdcToTransfer = (periodsToClaim * (userStatus.usdcFunded)) / periodCount;
+            xctdToTransfer = (periodsToClaim * (userStatus.usdcFunded * usdcToXctdRate)) / periodCount;
         }
 
         userStatus.usdcClaimed += usdcToTransfer;
@@ -217,6 +220,7 @@ contract InsuredVestingV1 is Ownable {
         emit ProjectClaimed(target, periodCount, periodsClaimed, 0, xctdToTransfer, true);
     }
 
+    // TODO shouldnt be able to claim usdc
     function recover(address tokenAddress) external onlyOwner {
         // Return any balance of the token that's not xctd
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
