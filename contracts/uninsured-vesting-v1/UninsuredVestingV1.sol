@@ -15,6 +15,9 @@ import "hardhat/console.sol";
 contract UninsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
+    uint256 constant PERIOD_DURATION = 30 days;
+    uint8 constant PERIOD_COUNT = 24;
+
     struct UserVesting {
         uint256 lastPeriodClaimed;
         uint256 amount;
@@ -24,7 +27,6 @@ contract UninsuredVestingV1 is Ownable {
     mapping(address => UserVesting) public userVestings;
 
     IERC20 immutable xctd;
-    uint256 immutable periodCount;
 
     uint256 startTime;
     uint256 amountAssigned = 0;
@@ -36,12 +38,14 @@ contract UninsuredVestingV1 is Ownable {
     event StartTimeSet(uint256 timestamp);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
-    constructor(address _xctd, uint _periods, uint256 _startTime) {
+    constructor(address _xctd, uint256 _startTime) {
         xctd = IERC20(_xctd);
         require(_startTime > block.timestamp + 7 days, "startTime must be more than 7 days from now");
-        require(_periods >= 3, "periodCount must be at least 3");
         startTime = _startTime;
-        periodCount = _periods;
+    }
+
+    function getPeriodCount() public pure returns (uint8) {
+        return PERIOD_COUNT;
     }
 
     function claim(address target) public {
@@ -55,10 +59,10 @@ contract UninsuredVestingV1 is Ownable {
         uint256 amount;
 
         // last period, ensure remainder gets sent
-        if (_vestingPeriodsPassed == periodCount) {
+        if (_vestingPeriodsPassed == PERIOD_COUNT) {
             amount = targetStatus.amount - targetStatus.totalClaimed;
         } else {
-            amount = (targetStatus.amount * periodsToClaim) / periodCount;
+            amount = (targetStatus.amount * periodsToClaim) / PERIOD_COUNT;
         }
 
         targetStatus.totalClaimed += amount;
@@ -71,7 +75,7 @@ contract UninsuredVestingV1 is Ownable {
     function vestingPeriodsPassed() public view returns (uint256) {
         if (block.timestamp < startTime) return 0;
         // + 1 means that once start time has been reached, a vesting period had already passed
-        return Math.min(uint256((block.timestamp - startTime) / 30 days) + 1, periodCount);
+        return Math.min(uint256((block.timestamp - startTime) / PERIOD_DURATION) + 1, PERIOD_COUNT);
     }
 
     // TODO - should be removed unless explicitly asked by product. introduces a problem,
@@ -85,6 +89,7 @@ contract UninsuredVestingV1 is Ownable {
 
     // TODO - refactor to "setAmount"
     function addAmount(address target, uint256 amount) public onlyOwner {
+        // TODO: follow this pattern for error handling everywhere
         if (block.timestamp > startTime) revert AlreadyStarted();
         userVestings[target].amount += amount;
         amountAssigned += amount;

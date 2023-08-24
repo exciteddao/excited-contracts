@@ -514,6 +514,10 @@ describe("InsuredVestingV1", () => {
           });
         }
       });
+
+      it("should have PERIOD_COUNT set to 24", async () => {
+        expect(await insuredVesting.methods.getPeriodCount().call()).to.be.bignumber.eq(VESTING_PERIODS);
+      });
     });
   });
 
@@ -525,7 +529,6 @@ describe("InsuredVestingV1", () => {
             mockUsdc.options.address,
             xctd.options.address,
             project,
-            VESTING_PERIODS,
             bn18(0.9).dividedBy(bn6(1)),
             await getDefaultStartTime(),
           ]),
@@ -540,7 +543,6 @@ describe("InsuredVestingV1", () => {
             mockUsdc.options.address,
             xctd.options.address,
             project,
-            VESTING_PERIODS,
             bn18(10_001).dividedBy(bn6(1)),
             await getDefaultStartTime(),
           ]),
@@ -555,26 +557,10 @@ describe("InsuredVestingV1", () => {
             mockUsdc.options.address,
             xctd.options.address,
             project,
-            VESTING_PERIODS,
             bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)),
             await getCurrentTimestamp(),
           ]),
         "startTime must be more than 7 days from now"
-      );
-    });
-
-    it("cannot deploy with fewer than 3 vesting periods", async () => {
-      await expectRevert(
-        async () =>
-          deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
-            mockUsdc.options.address,
-            xctd.options.address,
-            project,
-            0,
-            bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)),
-            await getDefaultStartTime(),
-          ]),
-        "periodCount must be at least 3"
       );
     });
   });

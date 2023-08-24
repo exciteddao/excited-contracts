@@ -84,10 +84,7 @@ describe("UninsuredVestingV1", () => {
 
     it("cannot set amounts after period started", async () => {
       await advanceMonths(LOCKUP_MONTHS);
-      await expectRevert(
-        async () => uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer }),
-        "vesting already started"
-      );
+      await expectRevert(async () => uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer }), "AlreadyStarted");
     });
 
     it("cannot set start time after period started", async () => {
@@ -148,21 +145,15 @@ describe("UninsuredVestingV1", () => {
   describe("deployment", () => {
     it("startTime must be more than 7 days from deployment time", async () => {
       await expectRevert(
-        async () =>
-          await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [
-            xctd.options.address,
-            VESTING_PERIODS,
-            await getCurrentTimestamp(),
-          ]),
+        async () => await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [xctd.options.address, await getCurrentTimestamp()]),
         "startTime must be more than 7 days from now"
       );
     });
+  });
 
-    it("cannot deploy with fewer than 3 vesting periods", async () => {
-      await expectRevert(
-        async () => await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [xctd.options.address, 1, await getDefaultStartTime()]),
-        "periodCount must be at least 3"
-      );
+  describe("misc", () => {
+    it("should have PERIOD_COUNT set to 24", async () => {
+      expect(await uninsuredVesting.methods.getPeriodCount().call()).to.be.bignumber.eq(VESTING_PERIODS);
     });
   });
 });
