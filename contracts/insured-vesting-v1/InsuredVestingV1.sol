@@ -26,11 +26,11 @@ contract InsuredVestingV1 is Ownable {
 
     uint256 constant MIN_USDC_TO_FUND = 10 * 1e6; // 10 USDC
     uint256 constant PERIOD_DURATION = 30 days;
+    uint8 constant PERIOD_COUNT = 24;
 
     IERC20 public immutable usdc;
     IERC20 public immutable xctd;
     uint256 public immutable usdcToXctdRate;
-    uint256 public immutable periodCount;
 
     // Changeable by owner
     address public project;
@@ -79,17 +79,19 @@ contract InsuredVestingV1 is Ownable {
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
     // in real life: 80*1e12 = $0.0125 XCTD
-    constructor(address _usdc, address _xctd, address _project, uint _periods, uint256 _usdcToXctdRate, uint256 _startTime) {
+    constructor(address _usdc, address _xctd, address _project, uint256 _usdcToXctdRate, uint256 _startTime) {
         usdc = IERC20(_usdc);
         xctd = IERC20(_xctd);
         require(_usdcToXctdRate > 10 ** (ERC20(_xctd).decimals() - ERC20(_usdc).decimals()), "minimum rate is 1 USDC:XCTD");
         require(_usdcToXctdRate < 10_000 * 1e12, "maximum rate is 10000 USDC:XCTD"); // TODO remove
         require(_startTime > block.timestamp + 7 days, "startTime must be more than 7 days from now");
-        require(_periods >= 3, "periodCount must be at least 3");
         usdcToXctdRate = _usdcToXctdRate;
         project = _project;
         startTime = _startTime;
-        periodCount = _periods;
+    }
+
+    function getPeriodCount() public pure returns (uint8) {
+        return PERIOD_COUNT;
     }
 
     function getNextVestingPeriodTimestamp() public view returns (uint256) {
@@ -131,12 +133,12 @@ contract InsuredVestingV1 is Ownable {
         uint256 usdcToTransfer;
         uint256 xctdToTransfer;
 
-        if (_vestingPeriodsPassed == periodCount) {
+        if (_vestingPeriodsPassed == PERIOD_COUNT) {
             usdcToTransfer = (userStatus.usdcFunded - userStatus.usdcClaimed);
             xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate - userStatus.xctdClaimed);
         } else {
-            usdcToTransfer = (periodsToClaim * (userStatus.usdcFunded)) / periodCount;
-            xctdToTransfer = (periodsToClaim * (userStatus.usdcFunded * usdcToXctdRate)) / periodCount;
+            usdcToTransfer = (periodsToClaim * (userStatus.usdcFunded)) / PERIOD_COUNT;
+            xctdToTransfer = (periodsToClaim * (userStatus.usdcFunded * usdcToXctdRate)) / PERIOD_COUNT;
         }
 
         userStatus.usdcClaimed += usdcToTransfer;
@@ -166,7 +168,7 @@ contract InsuredVestingV1 is Ownable {
         // We add 1 because one vesting period is considered passed at the start time
         uint256 totalPeriodsPassed = fullPeriodsPassed + 1;
         // Use min to ensure that we don't return a number greater than the total number of periods
-        return Math.min(totalPeriodsPassed, periodCount);
+        return Math.min(totalPeriodsPassed, PERIOD_COUNT);
     }
 
     function setStartTime(uint256 newStartTime) public onlyOwner {
@@ -204,8 +206,8 @@ contract InsuredVestingV1 is Ownable {
         require(userStatus.usdcFunded > 0, "no funds added");
         // check that lastperiodclaimed!=periodcount
 
-        uint256 periodsClaimed = periodCount - userStatus.lastPeriodClaimed;
-        userStatus.lastPeriodClaimed = periodCount;
+        uint256 periodsClaimed = PERIOD_COUNT - userStatus.lastPeriodClaimed;
+        userStatus.lastPeriodClaimed = PERIOD_COUNT;
 
         uint256 usdcToTransfer = (userStatus.usdcFunded - userStatus.usdcClaimed);
         uint256 xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate - userStatus.xctdClaimed);
@@ -216,8 +218,8 @@ contract InsuredVestingV1 is Ownable {
         xctd.safeTransfer(project, xctdToTransfer);
         usdc.safeTransfer(target, usdcToTransfer);
 
-        emit UserClaimed(target, periodCount, periodsClaimed, usdcToTransfer, 0, true);
-        emit ProjectClaimed(target, periodCount, periodsClaimed, 0, xctdToTransfer, true);
+        emit UserClaimed(target, PERIOD_COUNT, periodsClaimed, usdcToTransfer, 0, true);
+        emit ProjectClaimed(target, PERIOD_COUNT, periodsClaimed, 0, xctdToTransfer, true);
     }
 
     // TODO shouldnt be able to claim usdc
