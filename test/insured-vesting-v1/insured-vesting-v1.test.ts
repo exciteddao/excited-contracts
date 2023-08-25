@@ -339,6 +339,13 @@ describe("InsuredVestingV1", () => {
         await advanceMonths(LOCKUP_MONTHS);
         await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), "vesting already started");
       });
+
+      it("not enough XCTD balance for deposited USDC", async () => {
+        const amount = 100_000_000;
+        await insuredVesting.methods.addAllocation(user1, await mockUsdc.amount(amount)).send({ from: deployer });
+
+        await expectRevert(async () => insuredVesting.methods.addFunds(await mockUsdc.amount(amount)).send({ from: user1 }), "ERC20: insufficient allowance");
+      });
     });
 
     describe("admin", () => {
