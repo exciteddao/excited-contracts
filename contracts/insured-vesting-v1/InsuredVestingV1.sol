@@ -31,9 +31,9 @@ contract InsuredVestingV1 is Ownable {
     IERC20 public immutable usdc;
     IERC20 public immutable xctd;
     uint256 public immutable usdcToXctdRate;
+    address public immutable project;
 
     // Changeable by owner
-    address public project;
     bool public emergencyRelease = false;
 
     // Changeable by owner until start time has arrived
@@ -78,6 +78,9 @@ contract InsuredVestingV1 is Ownable {
     event DecisionChanged(address indexed target, ClaimDecision decision);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
+    // Errors
+    error ZeroAddress();
+
     // in real life: 80*1e12 = $0.0125 XCTD
     constructor(address _usdc, address _xctd, address _project, uint256 _usdcToXctdRate, uint256 _startTime) {
         usdc = IERC20(_usdc);
@@ -85,6 +88,8 @@ contract InsuredVestingV1 is Ownable {
         require(_usdcToXctdRate > 10 ** (ERC20(_xctd).decimals() - ERC20(_usdc).decimals()), "minimum rate is 1 USDC:XCTD");
         require(_usdcToXctdRate < 10_000 * 1e12, "maximum rate is 10000 USDC:XCTD"); // TODO remove
         require(_startTime > block.timestamp + 7 days, "startTime must be more than 7 days from now");
+        if (_project == address(0)) revert ZeroAddress();
+
         usdcToXctdRate = _usdcToXctdRate;
         project = _project;
         startTime = _startTime;
@@ -177,11 +182,6 @@ contract InsuredVestingV1 is Ownable {
         startTime = newStartTime;
 
         emit StartTimeSet(newStartTime);
-    }
-
-    // TODO (product decision): should this be set in constructor?
-    function setProjectAddress(address _project) public onlyOwner {
-        project = _project;
     }
 
     function toggleDecision() public {

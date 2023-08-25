@@ -23,8 +23,9 @@ import {
   setup,
   getDefaultStartTime,
   advanceDays,
+  Error,
 } from "./fixture";
-import { bn18, bn6, web3 } from "@defi.org/web3-candies";
+import { bn18, bn6, web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 
 describe("InsuredVestingV1", () => {
@@ -354,12 +355,6 @@ describe("InsuredVestingV1", () => {
         await expectRevert(async () => insuredVesting.methods.setStartTime(await getCurrentTimestamp()).send({ from: deployer }), "vesting already started");
       });
 
-      it("owner can set project address", async () => {
-        expect(await insuredVesting.methods.project().call()).to.be.not.eq(anyUser);
-        await insuredVesting.methods.setProjectAddress(anyUser).send({ from: deployer });
-        expect(await insuredVesting.methods.project().call()).to.be.eq(anyUser);
-      });
-
       it("cannot set start time after period started", async () => {
         await expectRevert(
           async () => insuredVesting.methods.setStartTime(BN(await getCurrentTimestamp()).minus(100)).send({ from: deployer }),
@@ -470,11 +465,7 @@ describe("InsuredVestingV1", () => {
         await expectRevert(async () => insuredVesting.methods.recover(xctd.options.address).send({ from: anyUser }), "Ownable: caller is not the owner");
       });
 
-      it("cannot change project address if not owner", async () => {
-        await expectRevert(async () => insuredVesting.methods.setProjectAddress(anyUser).send({ from: anyUser }), "Ownable: caller is not the owner");
-      });
-
-      it("cannot change project address if not owner", async () => {
+      it("cannot trigger emergency release if not owner", async () => {
         await expectRevert(async () => insuredVesting.methods.emergencyReleaseVesting().send({ from: anyUser }), "Ownable: caller is not the owner");
       });
     });
@@ -522,32 +513,34 @@ describe("InsuredVestingV1", () => {
   });
 
   describe("deployment", () => {
-    it("cannot deploy with USDC_TO_XCTD below 1:1 ratio", async () => {
-      await expectRevert(
-        async () =>
-          deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
-            mockUsdc.options.address,
-            xctd.options.address,
-            project,
-            bn18(0.9).dividedBy(bn6(1)),
-            await getDefaultStartTime(),
-          ]),
-        "minimum rate is 1 USDC:XCTD"
-      );
-    });
+    describe("exchange rate", () => {
+      it("cannot deploy with USDC_TO_XCTD below 1:1 ratio", async () => {
+        await expectRevert(
+          async () =>
+            deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
+              mockUsdc.options.address,
+              xctd.options.address,
+              project,
+              bn18(0.9).dividedBy(bn6(1)),
+              await getDefaultStartTime(),
+            ]),
+          "minimum rate is 1 USDC:XCTD"
+        );
+      });
 
-    it("cannot deploy with USDC_TO_XCTD above 10000:1 ratio", async () => {
-      await expectRevert(
-        async () =>
-          deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
-            mockUsdc.options.address,
-            xctd.options.address,
-            project,
-            bn18(10_001).dividedBy(bn6(1)),
-            await getDefaultStartTime(),
-          ]),
-        "maximum rate is 10000 USDC:XCTD"
-      );
+      it("cannot deploy with USDC_TO_XCTD above 10000:1 ratio", async () => {
+        await expectRevert(
+          async () =>
+            deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
+              mockUsdc.options.address,
+              xctd.options.address,
+              project,
+              bn18(10_001).dividedBy(bn6(1)),
+              await getDefaultStartTime(),
+            ]),
+          "maximum rate is 10000 USDC:XCTD"
+        );
+      });
     });
 
     it("startTime must be more than 7 days from deployment time", async () => {
@@ -562,6 +555,27 @@ describe("InsuredVestingV1", () => {
           ]),
         "startTime must be more than 7 days from now"
       );
+    });
+
+    describe("project address", () => {
+      it("project address cannot be zero", async () => {
+        await expectRevert(
+          async () =>
+            deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
+              mockUsdc.options.address,
+              xctd.options.address,
+              zeroAddress,
+              bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)),
+              await getDefaultStartTime(),
+            ]),
+          Error.ZeroAddress
+        );
+      });
+
+      it("project address should be set correctly", async () => {
+        await withFixture();
+        expect(await insuredVesting.methods.project().call()).to.be.eq(project);
+      });
     });
   });
 });
