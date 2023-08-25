@@ -45,6 +45,10 @@ export async function setup() {
   }
 }
 
+export enum Error {
+  ZeroAddress = "ZeroAddress",
+}
+
 export async function withFixture() {
   someOtherToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "SomeOtherToken"])).options.address);
   mockUsdc = erc20("MockERC20", (await deployArtifact<MockUSDC>("MockUSDC", { from: deployer }, [bn6(1e9), "MockUSDC"])).options.address);
