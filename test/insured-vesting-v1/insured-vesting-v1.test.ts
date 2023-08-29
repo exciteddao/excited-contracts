@@ -24,6 +24,7 @@ import {
   getDefaultStartTime,
   advanceDays,
   Error,
+  MIN_USDC_TO_FUND,
 } from "./fixture";
 import { bn18, bn6, web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
@@ -167,25 +168,25 @@ describe("InsuredVestingV1", () => {
         await addFundingFromUser1();
         await advanceMonths(LOCKUP_MONTHS);
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
-        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), "already claimed");
+        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), Error.NothingToClaim);
       });
 
       it("cannot claim tokens before starting period, zero time", async () => {
         await addAllocationForUser1();
         await addFundingFromUser1();
-        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), "vesting has not started");
+        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), Error.VestingNotStarted);
       });
 
       it("cannot claim tokens before starting period, some time has passed", async () => {
         await advanceMonths(LOCKUP_MONTHS / 2);
         await addAllocationForUser1();
         await addFundingFromUser1();
-        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), "vesting has not started");
+        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), Error.VestingNotStarted);
       });
 
       it("cannot claim if not funded", async () => {
         await advanceMonths(LOCKUP_MONTHS);
-        await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: anyUser }), "no funds added");
+        await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: anyUser }), Error.NoFundsAdded);
       });
 
       it("can claim tokens for entire vesting period, exact months passed", async () => {
@@ -311,33 +312,33 @@ describe("InsuredVestingV1", () => {
 
       it("cannot add funds less than minimum required", async () => {
         await addAllocationForUser1();
-        await expectRevert(async () => addFundingFromUser1(1), "amount must be greater than 10 USDC");
+        await expectRevert(
+          async () => addFundingFromUser1(1),
+          `${Error.InsufficientFunds}(${await mockUsdc.amount(1)}, ${await mockUsdc.amount(MIN_USDC_TO_FUND)})`
+        );
       });
 
       it("user cannot fund if does not have allocation", async () => {
-        await expectRevert(
-          async () => insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 }),
-          "amount exceeds allocation"
-        );
+        const amount = await mockUsdc.amount(FUNDING_PER_USER);
+        await expectRevert(async () => insuredVesting.methods.addFunds(amount).send({ from: user1 }), `${Error.AllocationExceeded}(${amount})`);
       });
 
       it("user cannot add more funds than allocation, two attempts", async () => {
         await addAllocationForUser1();
         await addFundingFromUser1();
-        await expectRevert(async () => insuredVesting.methods.addFunds(await mockUsdc.amount(1)).send({ from: user1 }), "amount exceeds allocation");
+        const amount = await mockUsdc.amount(1);
+        await expectRevert(async () => insuredVesting.methods.addFunds(amount).send({ from: user1 }), `${Error.AllocationExceeded}(${amount})`);
       });
 
       it("user cannot add more funds than allocation, single attempts", async () => {
         await addAllocationForUser1();
-        await expectRevert(
-          async () => insuredVesting.methods.addFunds(await mockUsdc.amount(1 + FUNDING_PER_USER)).send({ from: user1 }),
-          "amount exceeds allocation"
-        );
+        const amount = await mockUsdc.amount(1 + FUNDING_PER_USER);
+        await expectRevert(async () => insuredVesting.methods.addFunds(amount).send({ from: user1 }), `${Error.AllocationExceeded}(${amount})`);
       });
 
       it("cannot add funds after period started", async () => {
         await advanceMonths(LOCKUP_MONTHS);
-        await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), "vesting already started");
+        await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), Error.VestingAlreadyStarted);
       });
 
       it("not enough XCTD balance for deposited USDC", async () => {
@@ -359,13 +360,14 @@ describe("InsuredVestingV1", () => {
 
       it("cannot set start time after period started", async () => {
         await advanceMonths(LOCKUP_MONTHS);
-        await expectRevert(async () => insuredVesting.methods.setStartTime(await getCurrentTimestamp()).send({ from: deployer }), "vesting already started");
+        await expectRevert(async () => insuredVesting.methods.setStartTime(await getCurrentTimestamp()).send({ from: deployer }), Error.VestingAlreadyStarted);
       });
 
       it("cannot set start time after period started", async () => {
+        const newStartTime = BN(await getCurrentTimestamp()).minus(100);
         await expectRevert(
-          async () => insuredVesting.methods.setStartTime(BN(await getCurrentTimestamp()).minus(100)).send({ from: deployer }),
-          "start time has to be in the future"
+          async () => insuredVesting.methods.setStartTime(newStartTime).send({ from: deployer }),
+          `${Error.StartTimeNotInFuture}(${newStartTime})`
         );
       });
     });
@@ -382,7 +384,7 @@ describe("InsuredVestingV1", () => {
       it("cannot emergency claim if hasn't funded", async () => {
         await addAllocationForUser1();
         await insuredVesting.methods.emergencyReleaseVesting().send({ from: deployer });
-        await expectRevert(() => insuredVesting.methods.emergencyClaim(user1).send({ from: anyUser }), "no funds added");
+        await expectRevert(() => insuredVesting.methods.emergencyClaim(user1).send({ from: anyUser }), Error.NoFundsAdded);
       });
 
       it("owner can emergency release vesting period, user hasn't claimed XCTD yet", async () => {
@@ -416,13 +418,13 @@ describe("InsuredVestingV1", () => {
         await addFundingFromUser1();
         await insuredVesting.methods.emergencyReleaseVesting().send({ from: deployer });
         await advanceMonths(LOCKUP_MONTHS);
-        await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: anyUser }), "emergency released");
+        await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: anyUser }), Error.EmergencyReleased);
       });
 
       it("cannot emergency claim if owner hasn't released", async () => {
         await addAllocationForUser1();
         await addFundingFromUser1();
-        await expectRevert(() => insuredVesting.methods.emergencyClaim(user1).send({ from: anyUser }), "emergency not released");
+        await expectRevert(() => insuredVesting.methods.emergencyClaim(user1).send({ from: anyUser }), Error.EmergencyNotReleased);
       });
     });
 
@@ -522,30 +524,17 @@ describe("InsuredVestingV1", () => {
   describe("deployment", () => {
     describe("exchange rate", () => {
       it("cannot deploy with USDC_TO_XCTD below 1:1 ratio", async () => {
+        const usdcToXctdRate = bn18(0.9).dividedBy(bn6(1));
         await expectRevert(
           async () =>
             deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
               mockUsdc.options.address,
               xctd.options.address,
               project,
-              bn18(0.9).dividedBy(bn6(1)),
+              usdcToXctdRate,
               await getDefaultStartTime(),
             ]),
-          "minimum rate is 1 USDC:XCTD"
-        );
-      });
-
-      it("cannot deploy with USDC_TO_XCTD above 10000:1 ratio", async () => {
-        await expectRevert(
-          async () =>
-            deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
-              mockUsdc.options.address,
-              xctd.options.address,
-              project,
-              bn18(10_001).dividedBy(bn6(1)),
-              await getDefaultStartTime(),
-            ]),
-          "maximum rate is 10000 USDC:XCTD"
+          `${Error.UsdcToXctdRateTooLow}(${usdcToXctdRate})`
         );
       });
     });
@@ -560,7 +549,7 @@ describe("InsuredVestingV1", () => {
             bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)),
             await getCurrentTimestamp(),
           ]),
-        "startTime must be more than 7 days from now"
+        Error.StartTimeTooSoon
       );
     });
 

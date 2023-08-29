@@ -27,6 +27,7 @@ export const USDC_TO_XCTD_RATIO = 7;
 export const VESTING_PERIODS = 24;
 export const LOCKUP_MONTHS = 6;
 export const FUNDING_PER_USER = 10_000;
+export const MIN_USDC_TO_FUND = 10;
 
 export async function setup() {
   deployer = await account(9);
@@ -47,6 +48,17 @@ export async function setup() {
 
 export enum Error {
   ZeroAddress = "ZeroAddress",
+  VestingAlreadyStarted = "VestingAlreadyStarted",
+  VestingNotStarted = "VestingNotStarted",
+  UsdcToXctdRateTooLow = "UsdcToXctdRateTooLow",
+  StartTimeTooSoon = "StartTimeTooSoon",
+  StartTimeNotInFuture = "StartTimeNotInFuture",
+  AllocationExceeded = "AllocationExceeded",
+  InsufficientFunds = "InsufficientFunds",
+  NothingToClaim = "NothingToClaim",
+  NoFundsAdded = "NoFundsAdded",
+  EmergencyReleased = "EmergencyReleased",
+  EmergencyNotReleased = "EmergencyNotReleased",
 }
 
 export async function withFixture() {

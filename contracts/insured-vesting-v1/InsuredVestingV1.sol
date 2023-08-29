@@ -80,14 +80,25 @@ contract InsuredVestingV1 is Ownable {
 
     // Errors
     error ZeroAddress();
+    error VestingAlreadyStarted();
+    error VestingNotStarted();
+    error UsdcToXctdRateTooLow(uint256 usdcToXctdRate);
+    error StartTimeTooSoon(uint256 startTime, uint256 minStartTime);
+    error StartTimeNotInFuture(uint256 newStartTime);
+    error AllocationExceeded(uint256 amount);
+    error InsufficientFunds(uint256 amount, uint256 minAmount);
+    error NothingToClaim();
+    error NoFundsAdded();
+    error EmergencyReleased();
+    error EmergencyNotReleased();
 
     // in real life: 80*1e12 = $0.0125 XCTD
     constructor(address _usdc, address _xctd, address _project, uint256 _usdcToXctdRate, uint256 _startTime) {
         usdc = IERC20(_usdc);
         xctd = IERC20(_xctd);
-        require(_usdcToXctdRate > 10 ** (ERC20(_xctd).decimals() - ERC20(_usdc).decimals()), "minimum rate is 1 USDC:XCTD");
-        require(_usdcToXctdRate < 10_000 * 1e12, "maximum rate is 10000 USDC:XCTD"); // TODO remove
-        require(_startTime > block.timestamp + 7 days, "startTime must be more than 7 days from now");
+
+        if (_usdcToXctdRate < 10 ** (ERC20(_xctd).decimals() - ERC20(_usdc).decimals())) revert UsdcToXctdRateTooLow(_usdcToXctdRate);
+        if (_startTime < block.timestamp + 7 days) revert StartTimeTooSoon(_startTime, block.timestamp + 7 days);
         if (_project == address(0)) revert ZeroAddress();
 
         usdcToXctdRate = _usdcToXctdRate;
@@ -109,6 +120,7 @@ contract InsuredVestingV1 is Ownable {
     // if we do, naively totalXctdAllocated would be wrong and we should add a test for that
     function addAllocation(address target, uint256 _usdcAllocation) public onlyOwner {
         require(block.timestamp < startTime, "vesting already started");
+
         userVestings[target].usdcAllocation += _usdcAllocation;
         totalXctdAllocated += _usdcAllocation * usdcToXctdRate;
 
@@ -116,9 +128,10 @@ contract InsuredVestingV1 is Ownable {
     }
 
     function addFunds(uint256 amount) public {
-        require(block.timestamp < startTime, "vesting already started");
-        require((userVestings[msg.sender].usdcAllocation - userVestings[msg.sender].usdcFunded) >= amount, "amount exceeds allocation");
-        require(amount > MIN_USDC_TO_FUND, "amount must be greater than 10 USDC");
+        if (block.timestamp > startTime) revert VestingAlreadyStarted();
+        if ((userVestings[msg.sender].usdcAllocation - userVestings[msg.sender].usdcFunded) < amount) revert AllocationExceeded(amount);
+        if (amount < MIN_USDC_TO_FUND) revert InsufficientFunds(amount, MIN_USDC_TO_FUND);
+
         usdc.safeTransferFrom(msg.sender, address(this), amount);
         userVestings[msg.sender].usdcFunded += amount;
 
@@ -130,10 +143,10 @@ contract InsuredVestingV1 is Ownable {
         uint256 _vestingPeriodsPassed = vestingPeriodsPassed();
         uint256 periodsToClaim = _vestingPeriodsPassed - userStatus.lastPeriodClaimed;
 
-        require(!emergencyRelease, "emergency released");
-        require(_vestingPeriodsPassed > 0, "vesting has not started");
-        require(periodsToClaim > 0, "already claimed until vesting period");
-        require(userStatus.usdcFunded > 0, "no funds added");
+        if (emergencyRelease) revert EmergencyReleased();
+        if (_vestingPeriodsPassed == 0) revert VestingNotStarted();
+        if (periodsToClaim == 0) revert NothingToClaim();
+        if (userStatus.usdcFunded == 0) revert NoFundsAdded();
 
         uint256 usdcToTransfer;
         uint256 xctdToTransfer;
@@ -177,8 +190,9 @@ contract InsuredVestingV1 is Ownable {
     }
 
     function setStartTime(uint256 newStartTime) public onlyOwner {
-        require(block.timestamp < startTime, "vesting already started");
-        require(newStartTime > block.timestamp, "start time has to be in the future");
+        if (block.timestamp > startTime) revert VestingAlreadyStarted();
+        if (newStartTime < block.timestamp) revert StartTimeNotInFuture(newStartTime);
+
         startTime = newStartTime;
 
         emit StartTimeSet(newStartTime);
@@ -195,6 +209,7 @@ contract InsuredVestingV1 is Ownable {
     // Used to allow users to claim back USDC if anything goes wrong
     function emergencyReleaseVesting() public onlyOwner {
         emergencyRelease = true;
+
         emit EmergencyRelease();
     }
 
@@ -202,8 +217,8 @@ contract InsuredVestingV1 is Ownable {
     function emergencyClaim(address target) public {
         UserVesting storage userStatus = userVestings[target];
 
-        require(emergencyRelease, "emergency not released");
-        require(userStatus.usdcFunded > 0, "no funds added");
+        if (!emergencyRelease) revert EmergencyNotReleased();
+        if (userStatus.usdcFunded == 0) revert NoFundsAdded();
         // check that lastperiodclaimed!=periodcount
 
         uint256 periodsClaimed = PERIOD_COUNT - userStatus.lastPeriodClaimed;
