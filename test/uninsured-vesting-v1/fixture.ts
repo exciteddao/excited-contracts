@@ -1,6 +1,5 @@
 import { Token, account, bn18, erc20, BlockInfo, Receipt, web3 } from "@defi.org/web3-candies";
 import { deployArtifact, mineBlock, tag, useChaiBigNumber } from "@defi.org/web3-candies/dist/hardhat";
-import { expect } from "chai";
 import BN from "bignumber.js";
 import { UninsuredVestingV1 } from "../../typechain-hardhat/contracts/uninsured-vesting-v1/UninsuredVestingV1";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
@@ -40,6 +39,14 @@ export async function withFixture() {
   uninsuredVesting = await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [xctd.options.address, await getDefaultStartTime()]);
 
   await transferXctdToVesting();
+}
+
+export enum Error {
+  StartTimeTooSoon = "StartTimeTooSoon",
+  StartTimeNotInFuture = "StartTimeNotInFuture",
+  VestingNotStarted = "VestingNotStarted",
+  VestingAlreadyStarted = "VestingAlreadyStarted",
+  NothingToClaim = "NothingToClaim",
 }
 
 export async function transferXctdToVesting() {
