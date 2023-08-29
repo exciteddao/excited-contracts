@@ -9,7 +9,6 @@ import "hardhat/console.sol";
 /*
 - consider moving to by-second resolution, this removes the need to handle remainders
 - move to addition instead of divison
-- switch to if-revert custom errors
 */
 
 contract UninsuredVestingV1 is Ownable {
@@ -31,16 +30,24 @@ contract UninsuredVestingV1 is Ownable {
     uint256 startTime;
     uint256 amountAssigned = 0;
 
-    error AlreadyStarted();
-
+    // Events
     event Claimed(uint256 indexed period, address indexed target, uint256 amount);
     event AmountAdded(address indexed target, uint256 amount);
     event StartTimeSet(uint256 timestamp);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
+    // Errors
+    error StartTimeTooSoon(uint256 startTime, uint256 minStartTime);
+    error StartTimeNotInFuture(uint256 newStartTime);
+    error VestingNotStarted();
+    error VestingAlreadyStarted();
+    error NothingToClaim();
+
     constructor(address _xctd, uint256 _startTime) {
         xctd = IERC20(_xctd);
-        require(_startTime > block.timestamp + 7 days, "startTime must be more than 7 days from now");
+
+        if (_startTime < block.timestamp + 7 days) revert StartTimeTooSoon(_startTime, block.timestamp + 7 days);
+
         startTime = _startTime;
     }
 
@@ -53,8 +60,8 @@ contract UninsuredVestingV1 is Ownable {
         uint256 _vestingPeriodsPassed = vestingPeriodsPassed();
         uint256 periodsToClaim = _vestingPeriodsPassed - targetStatus.lastPeriodClaimed;
 
-        require(_vestingPeriodsPassed > 0, "vesting has not started");
-        require(periodsToClaim > 0, "already claimed until vesting period");
+        if (_vestingPeriodsPassed == 0) revert VestingNotStarted();
+        if (periodsToClaim == 0) revert NothingToClaim();
 
         uint256 amount;
 
@@ -69,6 +76,7 @@ contract UninsuredVestingV1 is Ownable {
         targetStatus.lastPeriodClaimed = _vestingPeriodsPassed;
 
         xctd.safeTransfer(target, amount);
+
         emit Claimed(_vestingPeriodsPassed, target, amount);
     }
 
@@ -81,18 +89,21 @@ contract UninsuredVestingV1 is Ownable {
     // TODO - should be removed unless explicitly asked by product. introduces a problem,
     // because owner can delay indefinitely.
     function setStartTime(uint256 newStartTime) public onlyOwner {
-        if (block.timestamp > startTime) revert("vesting already started");
-        if (newStartTime < block.timestamp) revert("cannot set start time in the past");
+        if (block.timestamp > startTime) revert VestingAlreadyStarted();
+        if (newStartTime < block.timestamp) revert StartTimeNotInFuture(newStartTime);
+
         startTime = newStartTime;
+
         emit StartTimeSet(newStartTime);
     }
 
     // TODO - refactor to "setAmount"
     function addAmount(address target, uint256 amount) public onlyOwner {
-        // TODO: follow this pattern for error handling everywhere
-        if (block.timestamp > startTime) revert AlreadyStarted();
+        if (block.timestamp > startTime) revert VestingAlreadyStarted();
+
         userVestings[target].amount += amount;
         amountAssigned += amount;
+
         emit AmountAdded(target, amount);
     }
 
