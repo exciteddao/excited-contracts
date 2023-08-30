@@ -6,19 +6,10 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "hardhat/console.sol";
 
-/*
-- consider moving to by-second resolution, this removes the need to handle remainders
-- move to addition instead of divison
-*/
-
 contract UninsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
-    uint256 constant PERIOD_DURATION = 30 days;
-    uint8 constant PERIOD_COUNT = 24;
-
     struct UserVesting {
-        uint256 lastPeriodClaimed;
         uint256 amount;
         uint256 totalClaimed;
     }
@@ -27,11 +18,14 @@ contract UninsuredVestingV1 is Ownable {
 
     IERC20 immutable xctd;
 
+    uint256 constant DURATION = 2 * 365 days;
+
     uint256 startTime;
+    // TODO: rename this / remove when we change recovery functionality
     uint256 amountAssigned = 0;
 
     // Events
-    event Claimed(uint256 indexed period, address indexed target, uint256 amount);
+    event Claimed(address indexed target, uint256 amount);
     event AmountAdded(address indexed target, uint256 amount);
     event StartTimeSet(uint256 timestamp);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
@@ -51,40 +45,7 @@ contract UninsuredVestingV1 is Ownable {
         startTime = _startTime;
     }
 
-    function getPeriodCount() public pure returns (uint8) {
-        return PERIOD_COUNT;
-    }
-
-    function claim(address target) public {
-        UserVesting storage targetStatus = userVestings[target];
-        uint256 _vestingPeriodsPassed = vestingPeriodsPassed();
-        uint256 periodsToClaim = _vestingPeriodsPassed - targetStatus.lastPeriodClaimed;
-
-        if (_vestingPeriodsPassed == 0) revert VestingNotStarted();
-        if (periodsToClaim == 0) revert NothingToClaim();
-
-        uint256 amount;
-
-        // last period, ensure remainder gets sent
-        if (_vestingPeriodsPassed == PERIOD_COUNT) {
-            amount = targetStatus.amount - targetStatus.totalClaimed;
-        } else {
-            amount = (targetStatus.amount * periodsToClaim) / PERIOD_COUNT;
-        }
-
-        targetStatus.totalClaimed += amount;
-        targetStatus.lastPeriodClaimed = _vestingPeriodsPassed;
-
-        xctd.safeTransfer(target, amount);
-
-        emit Claimed(_vestingPeriodsPassed, target, amount);
-    }
-
-    function vestingPeriodsPassed() public view returns (uint256) {
-        if (block.timestamp < startTime) return 0;
-        // + 1 means that once start time has been reached, a vesting period had already passed
-        return Math.min(uint256((block.timestamp - startTime) / PERIOD_DURATION) + 1, PERIOD_COUNT);
-    }
+    // Read functions
 
     // TODO - should be removed unless explicitly asked by product. introduces a problem,
     // because owner can delay indefinitely.
@@ -95,6 +56,34 @@ contract UninsuredVestingV1 is Ownable {
         startTime = newStartTime;
 
         emit StartTimeSet(newStartTime);
+    }
+
+    function totalVestedFor(address target) public view returns (uint256) {
+        if (block.timestamp < startTime) return 0;
+        UserVesting storage targetStatus = userVestings[target];
+        return Math.min(targetStatus.amount, ((block.timestamp - startTime) * targetStatus.amount) / DURATION);
+    }
+
+    function claimableFor(address target) public view returns (uint256) {
+        uint256 totalClaimed = userVestings[target].totalClaimed;
+        uint256 totalVested = totalVestedFor(target);
+
+        if (totalClaimed >= totalVested) return 0;
+
+        return totalVested - totalClaimed;
+    }
+
+    function claim(address target) public {
+        if (block.timestamp < startTime) revert VestingNotStarted();
+
+        uint256 claimable = claimableFor(target);
+
+        if (claimable == 0) revert NothingToClaim();
+
+        userVestings[target].totalClaimed += claimable;
+        xctd.safeTransfer(target, claimable);
+
+        emit Claimed(target, claimable);
     }
 
     // TODO - refactor to "setAmount"

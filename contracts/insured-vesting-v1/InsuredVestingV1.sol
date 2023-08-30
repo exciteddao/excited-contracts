@@ -14,24 +14,19 @@ Internal Audit:
 - line by line
 - 7th september, most blocks are 4-7 september
 - compare to other vesting contracts (open zeppelin)
-
-TODO:
-- Linear
-- Multiplying rather than dividing
-- Battle tested options contract (look at RibbonFinance, Opyn, Hegic, GMX, etc)
 */
 
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
     uint256 constant MIN_USDC_TO_FUND = 10 * 1e6; // 10 USDC
-    uint256 constant PERIOD_DURATION = 30 days;
-    uint8 constant PERIOD_COUNT = 24;
 
     IERC20 public immutable usdc;
     IERC20 public immutable xctd;
     uint256 public immutable usdcToXctdRate;
     address public immutable project;
+
+    uint256 constant DURATION = 2 * 365 days;
 
     // Changeable by owner
     bool public emergencyRelease = false;
@@ -49,28 +44,19 @@ contract InsuredVestingV1 is Ownable {
     }
 
     struct UserVesting {
-        uint256 lastPeriodClaimed;
         // Actual USDC amount funded by user
         uint256 usdcFunded;
         // Investment allocation, set by owner
         uint256 usdcAllocation;
         // Whether the user wants to claim XCTD or claim back USDC
         ClaimDecision claimDecision;
-        // Amount of USDC and XCTD claimed by user
+        // Amount of USDC claimed by user (XCTD is computed from that)
         uint256 usdcClaimed;
-        uint256 xctdClaimed;
     }
 
     // Events
-    event UserClaimed(address indexed target, uint256 indexed period, uint256 numberOfPeriodsClaimed, uint256 usdcAmount, uint256 xctdAmount, bool isEmergency);
-    event ProjectClaimed(
-        address indexed target,
-        uint256 indexed period,
-        uint256 numberOfPeriodsClaimed,
-        uint256 usdcAmount,
-        uint256 xctdAmount,
-        bool isEmergency
-    );
+    event UserClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount, bool isEmergency);
+    event ProjectClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount, bool isEmergency);
     event AllocationSet(address indexed target, uint256 amount);
     event FundsAdded(address indexed target, uint256 amount);
     event StartTimeSet(uint256 timestamp);
@@ -93,6 +79,7 @@ contract InsuredVestingV1 is Ownable {
     error EmergencyNotReleased();
 
     // in real life: 80*1e12 = $0.0125 XCTD
+    // TODO - do not use decimals()
     constructor(address _usdc, address _xctd, address _project, uint256 _usdcToXctdRate, uint256 _startTime) {
         usdc = IERC20(_usdc);
         xctd = IERC20(_xctd);
@@ -104,16 +91,6 @@ contract InsuredVestingV1 is Ownable {
         usdcToXctdRate = _usdcToXctdRate;
         project = _project;
         startTime = _startTime;
-    }
-
-    function getPeriodCount() public pure returns (uint8) {
-        return PERIOD_COUNT;
-    }
-
-    function getNextVestingPeriodTimestamp() public view returns (uint256) {
-        // TODO: think if we can make this more intuitive
-        // Reason we're not using vestingPeriodsPassed+1 is because at startTime, vesting period 1 alread passed
-        return startTime + vestingPeriodsPassed() * PERIOD_DURATION;
     }
 
     function setAllocation(address target, uint256 _usdcAllocation) external onlyOwner {
@@ -154,55 +131,49 @@ contract InsuredVestingV1 is Ownable {
         emit FundsAdded(msg.sender, amount);
     }
 
-    function claim(address target) public {
-        UserVesting storage userStatus = userVestings[target];
-        uint256 _vestingPeriodsPassed = vestingPeriodsPassed();
-        uint256 periodsToClaim = _vestingPeriodsPassed - userStatus.lastPeriodClaimed;
-
-        if (emergencyRelease) revert EmergencyReleased();
-        if (_vestingPeriodsPassed == 0) revert VestingNotStarted();
-        if (periodsToClaim == 0) revert NothingToClaim();
-        if (userStatus.usdcFunded == 0) revert NoFundsAdded();
-
-        uint256 usdcToTransfer;
-        uint256 xctdToTransfer;
-
-        if (_vestingPeriodsPassed == PERIOD_COUNT) {
-            usdcToTransfer = (userStatus.usdcFunded - userStatus.usdcClaimed);
-            xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate - userStatus.xctdClaimed);
-        } else {
-            usdcToTransfer = (periodsToClaim * (userStatus.usdcFunded)) / PERIOD_COUNT;
-            xctdToTransfer = (periodsToClaim * (userStatus.usdcFunded * usdcToXctdRate)) / PERIOD_COUNT;
-        }
-
-        userStatus.usdcClaimed += usdcToTransfer;
-        userStatus.xctdClaimed += xctdToTransfer;
-        userStatus.lastPeriodClaimed = _vestingPeriodsPassed;
-
-        if (userStatus.claimDecision == ClaimDecision.TOKENS) {
-            xctd.safeTransfer(target, xctdToTransfer);
-            usdc.safeTransfer(project, usdcToTransfer);
-
-            emit UserClaimed(target, _vestingPeriodsPassed, periodsToClaim, 0, xctdToTransfer, false);
-            emit ProjectClaimed(target, _vestingPeriodsPassed, periodsToClaim, usdcToTransfer, 0, false);
-        } else {
-            xctd.safeTransfer(project, xctdToTransfer);
-            usdc.safeTransfer(target, usdcToTransfer);
-
-            emit UserClaimed(target, _vestingPeriodsPassed, periodsToClaim, usdcToTransfer, 0, false);
-            emit ProjectClaimed(target, _vestingPeriodsPassed, periodsToClaim, 0, xctdToTransfer, false);
-        }
+    function totalVestedFor(address target) public view returns (uint256) {
+        if (block.timestamp < startTime) return 0;
+        UserVesting storage targetStatus = userVestings[target];
+        return Math.min(targetStatus.usdcFunded, ((block.timestamp - startTime) * targetStatus.usdcFunded) / DURATION);
     }
 
-    function vestingPeriodsPassed() public view returns (uint256) {
-        // Start time not reached - no periods have passed
-        if (block.timestamp < startTime) return 0;
-        // Calculate the number of full 30-day periods that have passed
-        uint256 fullPeriodsPassed = (block.timestamp - startTime) / PERIOD_DURATION;
-        // We add 1 because one vesting period is considered passed at the start time
-        uint256 totalPeriodsPassed = fullPeriodsPassed + 1;
-        // Use min to ensure that we don't return a number greater than the total number of periods
-        return Math.min(totalPeriodsPassed, PERIOD_COUNT);
+    function claimableFor(address target) public view returns (uint256) {
+        uint256 totalClaimed = userVestings[target].usdcClaimed;
+        uint256 totalVested = totalVestedFor(target);
+
+        if (totalClaimed >= totalVested) return 0;
+
+        return totalVested - totalClaimed;
+    }
+
+    function claim(address target) public {
+        if (block.timestamp < startTime) revert VestingNotStarted();
+
+        UserVesting storage userStatus = userVestings[target];
+        if (userStatus.usdcFunded == 0) revert NoFundsAdded();
+
+        uint256 claimableUsdc = claimableFor(target);
+
+        if (emergencyRelease) revert EmergencyReleased();
+        if (claimableUsdc == 0) revert NothingToClaim();
+
+        uint256 claimableXctd = claimableUsdc * usdcToXctdRate;
+
+        userStatus.usdcClaimed += claimableUsdc;
+
+        if (userStatus.claimDecision == ClaimDecision.TOKENS) {
+            xctd.safeTransfer(target, claimableXctd);
+            usdc.safeTransfer(project, claimableUsdc);
+
+            emit UserClaimed(target, 0, claimableXctd, false);
+            emit ProjectClaimed(target, claimableUsdc, 0, false);
+        } else {
+            xctd.safeTransfer(project, claimableXctd);
+            usdc.safeTransfer(target, claimableUsdc);
+
+            emit UserClaimed(target, claimableUsdc, 0, false);
+            emit ProjectClaimed(target, 0, claimableXctd, false);
+        }
     }
 
     function setStartTime(uint256 newStartTime) public onlyOwner {
@@ -231,26 +202,20 @@ contract InsuredVestingV1 is Ownable {
 
     // TODO does this give too much power to the owner - being able to effectively cancel the agreement?
     function emergencyClaim(address target) public {
-        UserVesting storage userStatus = userVestings[target];
-
-        if (!emergencyRelease) revert EmergencyNotReleased();
-        if (userStatus.usdcFunded == 0) revert NoFundsAdded();
-        // check that lastperiodclaimed!=periodcount
-
-        uint256 periodsClaimed = PERIOD_COUNT - userStatus.lastPeriodClaimed;
-        userStatus.lastPeriodClaimed = PERIOD_COUNT;
-
-        uint256 usdcToTransfer = (userStatus.usdcFunded - userStatus.usdcClaimed);
-        uint256 xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate - userStatus.xctdClaimed);
-
-        userStatus.usdcClaimed += usdcToTransfer;
-        userStatus.xctdClaimed += xctdToTransfer;
-
-        xctd.safeTransfer(project, xctdToTransfer);
-        usdc.safeTransfer(target, usdcToTransfer);
-
-        emit UserClaimed(target, PERIOD_COUNT, periodsClaimed, usdcToTransfer, 0, true);
-        emit ProjectClaimed(target, PERIOD_COUNT, periodsClaimed, 0, xctdToTransfer, true);
+        // UserVesting storage userStatus = userVestings[target];
+        // if (!emergencyRelease) revert EmergencyNotReleased();
+        // if (userStatus.usdcFunded == 0) revert NoFundsAdded();
+        // // check that lastperiodclaimed!=periodcount
+        // uint256 periodsClaimed = PERIOD_COUNT - userStatus.lastPeriodClaimed;
+        // userStatus.lastPeriodClaimed = PERIOD_COUNT;
+        // uint256 usdcToTransfer = (userStatus.usdcFunded - userStatus.usdcClaimed);
+        // uint256 xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate - userStatus.xctdClaimed);
+        // userStatus.usdcClaimed += usdcToTransfer;
+        // userStatus.xctdClaimed += xctdToTransfer;
+        // xctd.safeTransfer(project, xctdToTransfer);
+        // usdc.safeTransfer(target, usdcToTransfer);
+        // emit UserClaimed(target, PERIOD_COUNT, periodsClaimed, usdcToTransfer, 0, true);
+        // emit ProjectClaimed(target, PERIOD_COUNT, periodsClaimed, 0, xctdToTransfer, true);
     }
 
     // TODO shouldnt be able to claim usdc

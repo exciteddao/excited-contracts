@@ -19,12 +19,13 @@ export let mockUsdc: MockERC20 & Token;
 export let someOtherToken: MockERC20 & Token;
 export let insuredVesting: InsuredVestingV1;
 
-const DAY = 60 * 60 * 24;
+export const DAY = 60 * 60 * 24;
 export const MONTH = DAY * 30;
 
 export const XCTD_TOKENS_ON_SALE = 1_000_000;
 export const USDC_TO_XCTD_RATIO = 7;
-export const VESTING_PERIODS = 24;
+export const VESTING_DURATION_DAYS = 730;
+export const VESTING_DURATION_SECONDS = DAY * VESTING_DURATION_DAYS;
 export const LOCKUP_MONTHS = 6;
 export const FUNDING_PER_USER = 10_000;
 export const MIN_USDC_TO_FUND = 10;

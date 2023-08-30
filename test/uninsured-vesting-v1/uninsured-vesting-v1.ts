@@ -18,33 +18,70 @@ import {
   MONTH,
   getDefaultStartTime,
   Error,
+  advanceDays,
+  DAY,
+  VESTING_DURATION_SECONDS,
 } from "./fixture";
 import { web3 } from "@defi.org/web3-candies";
 import { UninsuredVestingV1 } from "../../typechain-hardhat/contracts/uninsured-vesting-v1/UninsuredVestingV1";
+
+async function advanceToStartTime() {
+  await advanceMonths(LOCKUP_MONTHS);
+}
 
 describe("UninsuredVestingV1", () => {
   beforeEach(async () => withFixture());
 
   describe("with lockup period set", () => {
-    beforeEach(async () => {
-      await uninsuredVesting.methods.setStartTime(BN(await getCurrentTimestamp()).plus(LOCKUP_MONTHS * MONTH)).send({ from: deployer });
+    const testCases = [0, 1, 5, 10, 100, 200, 534];
+
+    for (const days of testCases) {
+      it(`can claim tokens proportional to amount of seconds in ${days} days passed`, async () => {
+        await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+        await advanceToStartTime();
+        await advanceDays(days);
+        await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
+
+        expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
+          (await xctd.amount(TOKENS_PER_USER)).multipliedBy(days * DAY).dividedBy(VESTING_DURATION_SECONDS),
+          await xctd.amount(0.01)
+        );
+      });
+    }
+
+    it(`can claim tokens for the entire period`, async () => {
+      await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+      await advanceToStartTime();
+      await advanceDays(VESTING_DURATION_SECONDS);
+      await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
+
+      expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(await xctd.amount(TOKENS_PER_USER), await xctd.amount(0.01));
     });
 
-    it("can claim tokens for vesting period 1", async () => {
+    it(`can claim tokens for the entire period, longer than vesting period has passed`, async () => {
       await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-      await advanceMonths(LOCKUP_MONTHS);
+      await advanceToStartTime();
+      await advanceDays(VESTING_DURATION_SECONDS * 2);
       await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
-      expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
-        (await xctd.amount(TOKENS_PER_USER)).dividedBy(VESTING_PERIODS),
-        await xctd.amount(0.1)
+
+      expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(await xctd.amount(TOKENS_PER_USER), await xctd.amount(0.01));
+    });
+
+    it("cannot double-claim tokens for same period of time", async () => {
+      await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+      await advanceToStartTime();
+      const daysToAdvance = 66;
+      await advanceDays(daysToAdvance);
+
+      await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
+      const balanceAfterFirstClaim = await xctd.methods.balanceOf(user1).call();
+      expect(balanceAfterFirstClaim).to.be.bignumber.closeTo(
+        (await xctd.amount(TOKENS_PER_USER)).multipliedBy(daysToAdvance * DAY).dividedBy(VESTING_DURATION_SECONDS),
+        await xctd.amount(0.01)
       );
-    });
 
-    it("cannot claim tokens for vesting period 1 twice", async () => {
-      await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-      await advanceMonths(LOCKUP_MONTHS);
       await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
-      await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: anyUser }), Error.NothingToClaim);
+      expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(balanceAfterFirstClaim, await xctd.amount(0.01));
     });
 
     it("cannot claim tokens before starting period", async () => {
@@ -52,39 +89,14 @@ describe("UninsuredVestingV1", () => {
       await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: anyUser }), Error.VestingNotStarted);
     });
 
-    it("can claim for multiple periods at once", async () => {
-      await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-      const monthsPassed = 3;
-      await advanceMonths(LOCKUP_MONTHS + monthsPassed);
-      await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
-      expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
-        (await xctd.amount(TOKENS_PER_USER)).dividedBy(VESTING_PERIODS).multipliedBy(monthsPassed + 1),
-        1
-      );
-    });
-
-    it("can claim tokens for entire vesting period, exact months passed", async () => {
-      await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-      await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS - 1);
-      await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
-      expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.eq(await xctd.amount(TOKENS_PER_USER));
-    });
-
-    it("can claim tokens for entire vesting period, many months passed", async () => {
-      await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-      await advanceMonths(LOCKUP_MONTHS + VESTING_PERIODS * 8);
-      await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
-      expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.eq(await xctd.amount(TOKENS_PER_USER));
-    });
-
     it("cannot claim if there's no eligibility", async () => {
-      await advanceMonths(LOCKUP_MONTHS);
-      await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
-      expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.zero;
+      await advanceToStartTime();
+      await advanceDays(1);
+      await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: anyUser }), Error.NothingToClaim);
     });
 
     it("cannot set amounts after period started", async () => {
-      await advanceMonths(LOCKUP_MONTHS);
+      await advanceToStartTime();
       await expectRevert(
         async () => uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer }),
         Error.VestingAlreadyStarted
@@ -92,7 +104,7 @@ describe("UninsuredVestingV1", () => {
     });
 
     it("cannot set start time after period started", async () => {
-      await advanceMonths(LOCKUP_MONTHS);
+      await advanceToStartTime();
       await expectRevert(async () => uninsuredVesting.methods.setStartTime(await getCurrentTimestamp()).send({ from: deployer }), Error.VestingAlreadyStarted);
     });
 
@@ -153,12 +165,6 @@ describe("UninsuredVestingV1", () => {
         async () => await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [xctd.options.address, await getCurrentTimestamp()]),
         Error.StartTimeTooSoon
       );
-    });
-  });
-
-  describe("misc", () => {
-    it("should have PERIOD_COUNT set to 24", async () => {
-      expect(await uninsuredVesting.methods.getPeriodCount().call()).to.be.bignumber.eq(VESTING_PERIODS);
     });
   });
 });
