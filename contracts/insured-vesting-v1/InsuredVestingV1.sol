@@ -71,7 +71,7 @@ contract InsuredVestingV1 is Ownable {
         uint256 xctdAmount,
         bool isEmergency
     );
-    event AllocationAdded(address indexed target, uint256 amount);
+    event AllocationSet(address indexed target, uint256 amount);
     event FundsAdded(address indexed target, uint256 amount);
     event StartTimeSet(uint256 timestamp);
     event EmergencyRelease();
@@ -116,15 +116,31 @@ contract InsuredVestingV1 is Ownable {
         return startTime + vestingPeriodsPassed() * PERIOD_DURATION;
     }
 
-    // TODO should we change this to a "set" functionality instead
-    // if we do, naively totalXctdAllocated would be wrong and we should add a test for that
-    function addAllocation(address target, uint256 _usdcAllocation) public onlyOwner {
-        require(block.timestamp < startTime, "vesting already started");
+    function setAllocation(address target, uint256 _usdcAllocation) external onlyOwner {
+        // Vesting must not have started
+        if (block.timestamp > startTime) revert VestingAlreadyStarted();
 
-        userVestings[target].usdcAllocation += _usdcAllocation;
-        totalXctdAllocated += _usdcAllocation * usdcToXctdRate;
+        // Get previous allocation for user
+        uint256 currentAllocationForUser = userVestings[target].usdcAllocation;
 
-        emit AllocationAdded(target, _usdcAllocation);
+        // Update totalXctdAllocated
+        if (_usdcAllocation > currentAllocationForUser) {
+            totalXctdAllocated += (_usdcAllocation - currentAllocationForUser) * usdcToXctdRate;
+        } else {
+            totalXctdAllocated -= (currentAllocationForUser - _usdcAllocation) * usdcToXctdRate;
+        }
+
+        // Update user allocation
+        userVestings[target].usdcAllocation = _usdcAllocation;
+
+        // Refund user if they have funded more than the new allocation
+        if (userVestings[target].usdcFunded > _usdcAllocation) {
+            uint256 _usdcToRefund = userVestings[target].usdcFunded - _usdcAllocation;
+            userVestings[target].usdcFunded = _usdcAllocation;
+            usdc.safeTransfer(target, _usdcToRefund);
+        }
+
+        emit AllocationSet(target, _usdcAllocation);
     }
 
     function addFunds(uint256 amount) public {

@@ -100,3 +100,9 @@ export async function getCurrentTimestamp(): Promise<string | number | BN> {
 export async function getDefaultStartTime(): Promise<BN> {
   return await BN(await getCurrentTimestamp()).plus(MONTH * 6);
 }
+
+export function usdcToXctd(amountInUsdc: BN): BN {
+  const xctdDecimals = 18;
+  const multiplier = USDC_TO_XCTD_RATIO * 10 ** xctdDecimals;
+  return amountInUsdc.multipliedBy(multiplier);
+}
