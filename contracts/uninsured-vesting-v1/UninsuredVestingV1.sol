@@ -20,13 +20,13 @@ contract UninsuredVestingV1 is Ownable {
 
     uint256 constant DURATION = 2 * 365 days;
 
-    uint256 startTime;
+    uint256 public startTime;
     // TODO: rename this / remove when we change recovery functionality
-    uint256 amountAssigned = 0;
+    uint256 public amountAssigned = 0;
 
     // Events
     event Claimed(address indexed target, uint256 amount);
-    event AmountAdded(address indexed target, uint256 amount);
+    event AmountSet(address indexed target, uint256 amount);
     event StartTimeSet(uint256 timestamp);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
@@ -86,14 +86,20 @@ contract UninsuredVestingV1 is Ownable {
         emit Claimed(target, claimable);
     }
 
-    // TODO - refactor to "setAmount"
-    function addAmount(address target, uint256 amount) public onlyOwner {
+    function setAmount(address target, uint256 amount) public onlyOwner {
         if (block.timestamp > startTime) revert VestingAlreadyStarted();
 
-        userVestings[target].amount += amount;
-        amountAssigned += amount;
+        uint256 currentAmountForUser = userVestings[target].amount;
 
-        emit AmountAdded(target, amount);
+        if (amount > currentAmountForUser) {
+            amountAssigned += amount - currentAmountForUser;
+        } else {
+            amountAssigned -= currentAmountForUser - amount;
+        }
+
+        userVestings[target].amount = amount;
+
+        emit AmountSet(target, amount);
     }
 
     function recover(address tokenAddress) external onlyOwner {
