@@ -37,7 +37,7 @@ describe("UninsuredVestingV1", () => {
 
     for (const days of testCases) {
       it(`can claim tokens proportional to amount of seconds in ${days} days passed`, async () => {
-        await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+        await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
         await advanceToStartTime();
         await advanceDays(days);
         await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
@@ -50,7 +50,7 @@ describe("UninsuredVestingV1", () => {
     }
 
     it(`can claim tokens for the entire period`, async () => {
-      await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+      await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
       await advanceToStartTime();
       await advanceDays(VESTING_DURATION_SECONDS);
       await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
@@ -59,7 +59,7 @@ describe("UninsuredVestingV1", () => {
     });
 
     it(`can claim tokens for the entire period, longer than vesting period has passed`, async () => {
-      await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+      await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
       await advanceToStartTime();
       await advanceDays(VESTING_DURATION_SECONDS * 2);
       await uninsuredVesting.methods.claim(user1).send({ from: anyUser });
@@ -68,7 +68,7 @@ describe("UninsuredVestingV1", () => {
     });
 
     it("cannot double-claim tokens for same period of time", async () => {
-      await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+      await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
       await advanceToStartTime();
       const daysToAdvance = 66;
       await advanceDays(daysToAdvance);
@@ -85,7 +85,7 @@ describe("UninsuredVestingV1", () => {
     });
 
     it("cannot claim tokens before starting period", async () => {
-      await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+      await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
       await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: anyUser }), Error.VestingNotStarted);
     });
 
@@ -93,14 +93,6 @@ describe("UninsuredVestingV1", () => {
       await advanceToStartTime();
       await advanceDays(1);
       await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: anyUser }), Error.NothingToClaim);
-    });
-
-    it("cannot set amounts after period started", async () => {
-      await advanceToStartTime();
-      await expectRevert(
-        async () => uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer }),
-        Error.VestingAlreadyStarted
-      );
     });
 
     it("cannot set start time after period started", async () => {
@@ -133,8 +125,8 @@ describe("UninsuredVestingV1", () => {
       });
 
       it("recovers unallocated xctd", async () => {
-        await uninsuredVesting.methods.addAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-        await uninsuredVesting.methods.addAmount(user2, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+        await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+        await uninsuredVesting.methods.setAmount(user2, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
         await uninsuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
         // Recover all but the tokens allocated to users
         expect(await xctd.methods.balanceOf(uninsuredVesting.options.address).call()).to.be.bignumber.eq(await xctd.amount(TOKENS_PER_USER * 2));
@@ -150,7 +142,7 @@ describe("UninsuredVestingV1", () => {
       });
 
       it("cannot set amounts if not owner", async () => {
-        await expectRevert(async () => uninsuredVesting.methods.addAmount(user1, 1).send({ from: anyUser }), "Ownable: caller is not the owner");
+        await expectRevert(async () => uninsuredVesting.methods.setAmount(user1, 1).send({ from: anyUser }), "Ownable: caller is not the owner");
       });
 
       it("cannot recover if not owner", async () => {
@@ -165,6 +157,70 @@ describe("UninsuredVestingV1", () => {
         async () => await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [xctd.options.address, await getCurrentTimestamp()]),
         Error.StartTimeTooSoon
       );
+    });
+  });
+
+  describe("admin", () => {
+    describe("set amount", () => {
+      it("only owner can set amount", async () => {
+        await expectRevert(
+          async () => uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: user1 }),
+          "Ownable: caller is not the owner"
+        );
+      });
+
+      it("cannot set amount after period started", async () => {
+        await advanceToStartTime();
+        await expectRevert(
+          async () => uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer }),
+          Error.VestingAlreadyStarted
+        );
+      });
+
+      describe("per user and global amounts are accurate", () => {
+        it("no users", async () => {
+          expect(await uninsuredVesting.methods.amountAssigned().call()).to.be.bignumber.zero;
+        });
+
+        it("single user", async () => {
+          await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+          expect((await uninsuredVesting.methods.userVestings(user1).call()).amount).to.be.bignumber.eq(await xctd.amount(TOKENS_PER_USER));
+          expect(await uninsuredVesting.methods.amountAssigned().call()).to.be.bignumber.eq(await xctd.amount(TOKENS_PER_USER));
+        });
+
+        it("single user, amount updated to same amount as previously", async () => {
+          await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+          await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+          expect((await uninsuredVesting.methods.userVestings(user1).call()).amount).to.be.bignumber.eq(await xctd.amount(TOKENS_PER_USER));
+          expect(await uninsuredVesting.methods.amountAssigned().call()).to.be.bignumber.eq(await xctd.amount(TOKENS_PER_USER));
+        });
+
+        it("multiple users", async () => {
+          await uninsuredVesting.methods.setAmount(user1, await xctd.amount(3_500)).send({ from: deployer });
+          await uninsuredVesting.methods.setAmount(user2, await xctd.amount(1_000)).send({ from: deployer });
+          expect((await uninsuredVesting.methods.userVestings(user1).call()).amount).to.be.bignumber.eq(await xctd.amount(3_500));
+          expect((await uninsuredVesting.methods.userVestings(user2).call()).amount).to.be.bignumber.eq(await xctd.amount(1_000));
+          expect(await uninsuredVesting.methods.amountAssigned().call()).to.be.bignumber.eq(await (await xctd.amount(3_500)).plus(await xctd.amount(1_000)));
+        });
+
+        it("multiple users, amount reduced", async () => {
+          await uninsuredVesting.methods.setAmount(user1, await xctd.amount(10_000)).send({ from: deployer });
+          await uninsuredVesting.methods.setAmount(user2, await xctd.amount(10_000)).send({ from: deployer });
+          await uninsuredVesting.methods.setAmount(user1, await xctd.amount(3_000)).send({ from: deployer });
+          expect((await uninsuredVesting.methods.userVestings(user1).call()).amount).to.be.bignumber.eq(await xctd.amount(3_000));
+          expect((await uninsuredVesting.methods.userVestings(user2).call()).amount).to.be.bignumber.eq(await xctd.amount(10_000));
+          expect(await uninsuredVesting.methods.amountAssigned().call()).to.be.bignumber.eq(await await xctd.amount(13_000));
+        });
+
+        it("multiple users, amount reduced to zero", async () => {
+          await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+          await uninsuredVesting.methods.setAmount(user2, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+          await uninsuredVesting.methods.setAmount(user2, await xctd.amount(0)).send({ from: deployer });
+          expect((await uninsuredVesting.methods.userVestings(user1).call()).amount).to.be.bignumber.eq(await xctd.amount(TOKENS_PER_USER));
+          expect((await uninsuredVesting.methods.userVestings(user2).call()).amount).to.be.bignumber.eq(await xctd.amount(0));
+          expect(await uninsuredVesting.methods.amountAssigned().call()).to.be.bignumber.eq(await await xctd.amount(TOKENS_PER_USER));
+        });
+      });
     });
   });
 });
