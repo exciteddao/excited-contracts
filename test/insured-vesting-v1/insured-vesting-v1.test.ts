@@ -27,7 +27,7 @@ import {
   MIN_USDC_TO_FUND,
   usdcToXctd,
 } from "./fixture";
-import { bn18, bn6, erc20sData, web3, zeroAddress } from "@defi.org/web3-candies";
+import { bn18, bn6, web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 
 describe("InsuredVestingV1", () => {
@@ -368,19 +368,21 @@ describe("InsuredVestingV1", () => {
         });
 
         it("existing excess deposit is refunded in case of allocation decrease", async () => {
+          await setBalancesForDelta();
           await setAllocationForUser1();
-          await expectUserBalanceDelta("usdc", await mockUsdc.amount(FUNDING_PER_USER), 1);
           await addFundingFromUser1();
-          await expectUserBalanceDelta("usdc", await mockUsdc.amount(0), 1);
+          await expectUserBalanceDelta("usdc", (await mockUsdc.amount(FUNDING_PER_USER)).negated(), 1);
 
-          const newAllocation = await mockUsdc.amount(FUNDING_PER_USER / 2);
+          await setBalancesForDelta();
+          const newAmount = FUNDING_PER_USER / 3;
+          const newAllocation = await mockUsdc.amount(newAmount);
           await insuredVesting.methods.setAllocation(user1, newAllocation).send({ from: deployer });
 
-          // check user USDC balance reflects refunded amount
-          await expectUserBalanceDelta("usdc", newAllocation, 1);
-          // check contract USDC balance has been updated
+          // // check user USDC balance reflects refunded amount
+          await expectUserBalanceDelta("usdc", await mockUsdc.amount(FUNDING_PER_USER - newAmount), 1);
+          // // check contract USDC balance has been updated
           expect(await mockUsdc.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(newAllocation);
-          // check user allocation has been updated
+          // // check user allocation has been updated
           expect(await (await insuredVesting.methods.userVestings(user1).call()).usdcAllocation).to.be.bignumber.eq(newAllocation);
         });
 
