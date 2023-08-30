@@ -17,7 +17,8 @@ contract UninsuredVestingV1 is Ownable {
     mapping(address => UserVesting) public userVestings;
 
     IERC20 immutable xctd;
-    uint256 immutable DURATION = 2 * 365 days;
+
+    uint256 constant DURATION = 2 * 365 days;
 
     uint256 startTime;
     // TODO: rename this / remove when we change recovery functionality
