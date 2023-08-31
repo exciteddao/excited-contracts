@@ -387,26 +387,47 @@ describe("InsuredVestingV1", () => {
           );
         });
 
-        it("existing excess deposit is refunded in case of allocation decrease", async () => {
-          await setBalancesForDelta();
-          await setAllocationForUser1();
-          await addFundingFromUser1();
-          await expectUserBalanceDelta("usdc", (await mockUsdc.amount(FUNDING_PER_USER)).negated(), 1);
+        describe("existing excess deposit is refunded in case of allocation decrease", () => {
+          it("single user", async () => {
+            await setBalancesForDelta();
+            await setAllocationForUser1();
+            await addFundingFromUser1();
+            await expectUserBalanceDelta("usdc", (await mockUsdc.amount(FUNDING_PER_USER)).negated(), 1);
 
-          await setBalancesForDelta();
-          const newAmount = FUNDING_PER_USER / 3;
-          const newAllocation = await mockUsdc.amount(newAmount);
-          await insuredVesting.methods.setAllocation(user1, newAllocation).send({ from: deployer });
+            await setBalancesForDelta();
+            const newAmount = FUNDING_PER_USER / 3;
+            const newAllocation = await mockUsdc.amount(newAmount);
+            await insuredVesting.methods.setAllocation(user1, newAllocation).send({ from: deployer });
 
-          // // check user USDC balance reflects refunded amount
-          await expectUserBalanceDelta("usdc", await mockUsdc.amount(FUNDING_PER_USER - newAmount), 1);
-          // // check contract USDC balance has been updated
-          expect(await mockUsdc.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(newAllocation);
-          // // check user allocation has been updated
-          expect(await (await insuredVesting.methods.userVestings(user1).call()).usdcAllocation).to.be.bignumber.eq(newAllocation);
+            // // check user USDC balance reflects refunded amount
+            await expectUserBalanceDelta("usdc", await mockUsdc.amount(FUNDING_PER_USER - newAmount), 1);
+            // // check contract USDC balance has been updated
+            expect(await mockUsdc.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(newAllocation);
+            // // check user allocation has been updated
+            expect((await insuredVesting.methods.userVestings(user1).call()).usdcAllocation).to.be.bignumber.eq(newAllocation);
+          });
+
+          it("multiple users", async () => {
+            await setBalancesForDelta();
+            await setAllocationForUser1(5_000);
+            await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(2_000)).send({ from: deployer });
+            await addFundingFromUser1();
+            await expectUserBalanceDelta("usdc", (await mockUsdc.amount(FUNDING_PER_USER)).negated(), 1);
+
+            await setBalancesForDelta();
+            const newAmount = FUNDING_PER_USER / 3;
+            const newAllocation = await mockUsdc.amount(newAmount);
+            await insuredVesting.methods.setAllocation(user1, newAllocation).send({ from: deployer });
+
+            // // check user USDC balance reflects refunded amount
+            await expectUserBalanceDelta("usdc", await mockUsdc.amount(FUNDING_PER_USER - newAmount), 1);
+            // // check contract USDC balance has been updated
+            expect(await mockUsdc.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(newAllocation);
+            // // check user allocation has been updated
+            expect((await insuredVesting.methods.userVestings(user1).call()).usdcAllocation).to.be.bignumber.eq(newAllocation);
+          });
         });
 
-        // TODO should we adjust these to be funding tests instead
         describe("setAllocation", () => {
           const testCases: { description: string; setAllocationsFn: () => Promise<any>; expectedAllocation: BN }[] = [
             {

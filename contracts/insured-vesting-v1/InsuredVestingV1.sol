@@ -7,15 +7,6 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "hardhat/console.sol";
 
-/* 
-Internal Audit:
-- tests
-- refactor
-- line by line
-- 7th september, most blocks are 4-7 september
-- compare to other vesting contracts (open zeppelin)
-*/
-
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
@@ -32,7 +23,6 @@ contract InsuredVestingV1 is Ownable {
     bool public emergencyRelease = false;
 
     uint256 public startTime;
-
     uint256 public totalUsdcFunded = 0;
 
     mapping(address => UserVesting) public userVestings;
@@ -100,7 +90,7 @@ contract InsuredVestingV1 is Ownable {
         if (userVestings[target].usdcFunded > _usdcAllocation) {
             uint256 _usdcToRefund = userVestings[target].usdcFunded - _usdcAllocation;
             userVestings[target].usdcFunded = _usdcAllocation;
-            totalUsdcFunded -= _usdcToRefund;
+            // totalUsdcFunded -= _usdcToRefund;
             usdc.safeTransfer(target, _usdcToRefund);
         }
 
@@ -163,6 +153,7 @@ contract InsuredVestingV1 is Ownable {
         }
     }
 
+    // TODO: consider the case where this never gets locked, but USDC funds are locked in the contract
     function activate() external onlyOwner onlyBeforeVesting {
         if (totalUsdcFunded == 0) revert NoFundsAdded();
         startTime = block.timestamp;
