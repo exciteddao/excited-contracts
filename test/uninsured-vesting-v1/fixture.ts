@@ -37,21 +37,25 @@ export async function withFixture() {
 
   xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "XCTD"])).options.address);
   someOtherToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "SomeOtherToken"])).options.address);
-  uninsuredVesting = await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [xctd.options.address, await getDefaultStartTime()]);
-
-  await transferXctdToVesting();
+  uninsuredVesting = await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [xctd.options.address]);
 }
 
 export enum Error {
+  ZeroAddress = "ZeroAddress",
   StartTimeTooSoon = "StartTimeTooSoon",
   StartTimeNotInFuture = "StartTimeNotInFuture",
   VestingNotStarted = "VestingNotStarted",
   VestingAlreadyStarted = "VestingAlreadyStarted",
   NothingToClaim = "NothingToClaim",
+  NoAllocationsAdded = "NoAllocationsAdded",
 }
 
 export async function transferXctdToVesting() {
   await xctd.methods.transfer(uninsuredVesting.options.address, await xctd.amount(XCTD_TOKENS_ON_SALE)).send({ from: deployer });
+}
+
+export async function approveXctdToVesting(amount = XCTD_TOKENS_ON_SALE) {
+  await xctd.methods.approve(uninsuredVesting.options.address, await xctd.amount(amount)).send({ from: deployer });
 }
 
 export function advanceDays(days: number): Promise<BlockInfo> {
@@ -68,4 +72,12 @@ export async function getCurrentTimestamp(): Promise<string | number | BN> {
 
 export async function getDefaultStartTime(): Promise<BN> {
   return await BN(await getCurrentTimestamp()).plus(MONTH * 6);
+}
+
+export async function setAmountForUser1(amount = TOKENS_PER_USER) {
+  await uninsuredVesting.methods.setAmount(user1, await xctd.amount(amount)).send({ from: deployer });
+}
+
+export async function setAmountForUser2(amount = TOKENS_PER_USER) {
+  await uninsuredVesting.methods.setAmount(user2, await xctd.amount(amount)).send({ from: deployer });
 }
