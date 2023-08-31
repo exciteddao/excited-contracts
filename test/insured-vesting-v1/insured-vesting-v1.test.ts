@@ -16,25 +16,25 @@ import {
   deployer,
   someOtherToken,
   getCurrentTimestamp,
-  MONTH,
   user2,
   additionalUsers,
   setup,
-  getDefaultStartTime,
   advanceDays,
   Error,
   MIN_USDC_TO_FUND,
-  usdcToXctd,
   VESTING_DURATION_SECONDS,
   DAY,
   VESTING_DURATION_DAYS,
+  transferXctdToVesting,
+  approveXctdToVesting,
+  addFundingFromUser1,
+  addFundingFromUser2,
+  setAllocationForUser1,
+  setAllocationForUser2,
 } from "./fixture";
 import { bn18, bn6, web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
-
-async function advanceToStartTime() {
-  await advanceMonths(LOCKUP_MONTHS);
-}
+import { VESTING_PERIODS } from "../uninsured-vesting-v1/fixture";
 
 describe("InsuredVestingV1", () => {
   const balances = {
@@ -86,11 +86,10 @@ describe("InsuredVestingV1", () => {
     await withFixture();
   });
 
-  describe("with lockup period set", () => {
+  describe("with xctd approved to contract", () => {
     beforeEach(async () => {
-      await withFixture();
+      approveXctdToVesting();
     });
-
     describe("claim", () => {
       const testCases = [0, 1, 5, 10, 100, 200, 534];
 
@@ -98,7 +97,7 @@ describe("InsuredVestingV1", () => {
         it(`can claim tokens proportional to amount of seconds in ${days} days passed`, async () => {
           await setAllocationForUser1();
           await addFundingFromUser1();
-          await advanceToStartTime();
+          await insuredVesting.methods.activate().send({ from: deployer });
           await advanceDays(days);
           await insuredVesting.methods.claim(user1).send({ from: anyUser });
 
@@ -118,6 +117,7 @@ describe("InsuredVestingV1", () => {
         await addFundingFromUser1(FUNDING_PER_USER / 4);
         await setBalancesForDelta();
         await advanceMonths(LOCKUP_MONTHS - 3);
+        await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(6);
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
         await expectUserBalanceDelta("xctd", await vestedAmount(6, "xctd"));
@@ -138,7 +138,7 @@ describe("InsuredVestingV1", () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
         await setBalancesForDelta();
-        await advanceToStartTime();
+        await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(30);
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
         await expectUserBalanceDelta("xctd", await vestedAmount(30, "xctd"));
@@ -162,7 +162,7 @@ describe("InsuredVestingV1", () => {
         await setAllocationForUser1();
         await addFundingFromUser1(FUNDING_PER_USER / 3);
         await setBalancesForDelta();
-        await advanceToStartTime();
+        await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(20);
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
         await expectUserBalanceDelta("xctd", (await vestedAmount(20, "xctd")).dividedBy(3));
@@ -176,6 +176,7 @@ describe("InsuredVestingV1", () => {
         await addFundingFromUser1(FUNDING_PER_USER / 4);
         await setBalancesForDelta();
         await advanceMonths(LOCKUP_MONTHS - 2);
+        await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(20);
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
         await expectUserBalanceDelta("xctd", (await vestedAmount(20, "xctd")).dividedBy(2));
@@ -185,7 +186,7 @@ describe("InsuredVestingV1", () => {
       it("cannot double-claim tokens for same period of time", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
-        await advanceToStartTime();
+        await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(45);
 
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
@@ -210,14 +211,17 @@ describe("InsuredVestingV1", () => {
 
       it("cannot claim if not funded", async () => {
         await advanceMonths(LOCKUP_MONTHS);
-        await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: anyUser }), Error.NoFundsAdded);
+        await setAllocationForUser1();
+        await addFundingFromUser1();
+        await insuredVesting.methods.activate().send({ from: deployer });
+        await expectRevert(async () => insuredVesting.methods.claim(user2).send({ from: anyUser }), Error.NoFundsAdded);
       });
 
       it("can claim tokens for the entire vesting period", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
         await setBalancesForDelta();
-        await advanceToStartTime();
+        await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(VESTING_DURATION_DAYS);
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
         await expectUserBalanceDelta("xctd", await xctd.amount(FUNDING_PER_USER * USDC_TO_XCTD_RATIO));
@@ -228,7 +232,7 @@ describe("InsuredVestingV1", () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
         await setBalancesForDelta();
-        await advanceToStartTime();
+        await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(VESTING_DURATION_DAYS * 3);
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
         await expectUserBalanceDelta("xctd", await xctd.amount(FUNDING_PER_USER * USDC_TO_XCTD_RATIO));
@@ -239,7 +243,7 @@ describe("InsuredVestingV1", () => {
         await setBalancesForDelta();
         await setAllocationForUser1();
         await addFundingFromUser1();
-        await advanceToStartTime();
+        await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(77);
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
         await expectProjectBalanceDelta("usdc", await vestedAmount(77, "usdc"));
@@ -253,7 +257,7 @@ describe("InsuredVestingV1", () => {
         await addFundingFromUser1();
         await setBalancesForDelta();
 
-        await advanceToStartTime();
+        await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(30);
 
         await insuredVesting.methods.toggleDecision().send({ from: user1 });
@@ -272,7 +276,7 @@ describe("InsuredVestingV1", () => {
 
         await insuredVesting.methods.toggleDecision().send({ from: user1 });
 
-        await advanceToStartTime();
+        await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(30);
 
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
@@ -289,7 +293,7 @@ describe("InsuredVestingV1", () => {
         await setBalancesForDelta();
 
         // Claim for 11 months
-        await advanceToStartTime();
+        await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(11 * 30);
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
         await expectUserBalanceDelta("xctd", await vestedAmount(11 * 30, "xctd"));
@@ -358,8 +362,10 @@ describe("InsuredVestingV1", () => {
         await expectRevert(async () => insuredVesting.methods.addFunds(amount).send({ from: user1 }), `${Error.AllocationExceeded}(${amount})`);
       });
 
-      it("cannot add funds after period started", async () => {
-        await advanceToStartTime();
+      it("cannot add funds after vesting started", async () => {
+        await setAllocationForUser1();
+        await addFundingFromUser1(FUNDING_PER_USER / 2);
+        await insuredVesting.methods.activate().send({ from: deployer });
         await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), Error.VestingAlreadyStarted);
       });
 
@@ -372,53 +378,46 @@ describe("InsuredVestingV1", () => {
     });
 
     describe("admin", () => {
-      it("cannot set start time after period started", async () => {
-        await advanceToStartTime();
-        await expectRevert(async () => insuredVesting.methods.setStartTime(await getCurrentTimestamp()).send({ from: deployer }), Error.VestingAlreadyStarted);
-      });
-
-      it("cannot set start time after period started", async () => {
-        const newStartTime = BN(await getCurrentTimestamp()).minus(100);
-        await expectRevert(
-          async () => insuredVesting.methods.setStartTime(newStartTime).send({ from: deployer }),
-          `${Error.StartTimeNotInFuture}(${newStartTime})`
-        );
-      });
-
       describe("set allocation", () => {
         it("cannot set allocation after period started", async () => {
-          await advanceToStartTime();
+          await setAllocationForUser1(FUNDING_PER_USER / 4);
+          await addFundingFromUser1(FUNDING_PER_USER / 4);
+          await insuredVesting.methods.activate().send({ from: deployer });
           await expectRevert(
             async () => insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer }),
             Error.VestingAlreadyStarted
           );
         });
 
-        it("existing excess deposit is refunded in case of allocation decrease", async () => {
-          await setBalancesForDelta();
-          await setAllocationForUser1();
-          await addFundingFromUser1();
-          await expectUserBalanceDelta("usdc", (await mockUsdc.amount(FUNDING_PER_USER)).negated(), 1);
+        describe("existing excess deposit is refunded in case of allocation decrease", () => {
+          it("single user", async () => {
+            await setBalancesForDelta();
+            await setAllocationForUser1();
+            await addFundingFromUser1();
+            await expectUserBalanceDelta("usdc", (await mockUsdc.amount(FUNDING_PER_USER)).negated(), 1);
 
-          await setBalancesForDelta();
-          const newAmount = FUNDING_PER_USER / 3;
-          const newAllocation = await mockUsdc.amount(newAmount);
-          await insuredVesting.methods.setAllocation(user1, newAllocation).send({ from: deployer });
+            await setBalancesForDelta();
+            const newAmount = FUNDING_PER_USER / 3;
+            const newAllocation = await mockUsdc.amount(newAmount);
+            await insuredVesting.methods.setAllocation(user1, newAllocation).send({ from: deployer });
 
-          // // check user USDC balance reflects refunded amount
-          await expectUserBalanceDelta("usdc", await mockUsdc.amount(FUNDING_PER_USER - newAmount), 1);
-          // // check contract USDC balance has been updated
-          expect(await mockUsdc.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(newAllocation);
-          // // check user allocation has been updated
-          expect(await (await insuredVesting.methods.userVestings(user1).call()).usdcAllocation).to.be.bignumber.eq(newAllocation);
+            // // check user USDC balance reflects refunded amount
+            await expectUserBalanceDelta("usdc", await mockUsdc.amount(FUNDING_PER_USER - newAmount), 1);
+            // // check contract USDC balance has been updated
+            expect(await mockUsdc.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(newAllocation);
+            // // check user allocation has been updated
+            expect((await insuredVesting.methods.userVestings(user1).call()).usdcAllocation).to.be.bignumber.eq(newAllocation);
+          });
+
+          // TODO: multiple user scenarios
         });
 
-        describe("totalXctdAllocated is accurate", () => {
-          const testCases: { description: string; setAllocationsFn: () => void; expectedTotalXctdAllocated: BN }[] = [
+        describe("setAllocation", () => {
+          const testCases: { description: string; setAllocationsFn: () => Promise<any>; expectedAllocation: BN }[] = [
             {
               description: "single user",
               setAllocationsFn: async () => await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer }),
-              expectedTotalXctdAllocated: usdcToXctd(BN(FUNDING_PER_USER)),
+              expectedAllocation: BN(FUNDING_PER_USER),
             },
             {
               description: "multiple users, smaller allocation added",
@@ -427,7 +426,7 @@ describe("InsuredVestingV1", () => {
                 await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER / 5)).send({ from: deployer });
                 await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER / 2)).send({ from: deployer });
               },
-              expectedTotalXctdAllocated: usdcToXctd(BN(FUNDING_PER_USER / 5)).plus(usdcToXctd(BN(FUNDING_PER_USER / 2))),
+              expectedAllocation: BN(FUNDING_PER_USER / 2),
             },
             {
               description: "multiple users, larger allocation added",
@@ -436,7 +435,7 @@ describe("InsuredVestingV1", () => {
                 await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
                 await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
               },
-              expectedTotalXctdAllocated: usdcToXctd(BN(FUNDING_PER_USER)).plus(usdcToXctd(BN(FUNDING_PER_USER))),
+              expectedAllocation: BN(FUNDING_PER_USER),
             },
             {
               description: "multiple users, allocation removed",
@@ -445,7 +444,7 @@ describe("InsuredVestingV1", () => {
                 await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
                 await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(0)).send({ from: deployer });
               },
-              expectedTotalXctdAllocated: usdcToXctd(BN(FUNDING_PER_USER)),
+              expectedAllocation: BN(FUNDING_PER_USER),
             },
             {
               description: "allocation increased after funding",
@@ -455,15 +454,15 @@ describe("InsuredVestingV1", () => {
                 await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
                 await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER * 2)).send({ from: deployer });
               },
-              expectedTotalXctdAllocated: usdcToXctd(BN(FUNDING_PER_USER * 2)).plus(usdcToXctd(BN(FUNDING_PER_USER))),
+              expectedAllocation: BN(FUNDING_PER_USER * 2),
             },
           ];
 
-          testCases.forEach(({ description, setAllocationsFn, expectedTotalXctdAllocated }) => {
+          testCases.forEach(({ description, setAllocationsFn, expectedAllocation }) => {
             it(description, async () => {
               await setAllocationsFn();
-              const actualTotalXctdAllocated = await insuredVesting.methods.totalXctdAllocated().call();
-              expect(actualTotalXctdAllocated).to.be.bignumber.eq(expectedTotalXctdAllocated);
+              const actualUsdcAllocation = (await insuredVesting.methods.userVestings(user1).call()).usdcAllocation;
+              expect(actualUsdcAllocation).to.be.bignumber.eq(await mockUsdc.amount(expectedAllocation));
             });
           });
         });
@@ -544,27 +543,56 @@ describe("InsuredVestingV1", () => {
       });
 
       // TODO does retrieiving XCTD work only based off allocations or do we have the option to cancel before vesting started.
-      it("recovers unallocated xctd", async () => {
-        await setAllocationForUser1();
+      it("recovers excess xctd (fully funded) ", async () => {
+        await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
         await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+        await transferXctdToVesting();
+        await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+        await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user2 });
         await insuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
-        // Recover all but the tokens allocated to users
+        // Recover all but the tokens allocated to users, backed by funding
         expect(await xctd.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(
           (await xctd.amount(FUNDING_PER_USER * 2)).multipliedBy(USDC_TO_XCTD_RATIO)
         );
+      });
+
+      it("recovers excess xctd (underfunded)", async () => {
+        await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+        await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+        await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+        await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user2 });
+        await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(100)).send({ from: deployer });
+        await insuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
+        // Retains tokens in the contract, nothing to recover
+        expect(await xctd.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(await xctd.amount(100));
+      });
+
+      it("recovers by zeroing out allocations (pre-activation)", async () => {
+        await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+        await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+        await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+        await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user2 });
+        await transferXctdToVesting();
+        await insuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
+        expect(await xctd.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(
+          (await xctd.amount(FUNDING_PER_USER * 2)).multipliedBy(USDC_TO_XCTD_RATIO)
+        );
+
+        const user1UsdcBalanceBefore = await mockUsdc.methods.balanceOf(user1).call();
+        const user2UsdcBalanceBefore = await mockUsdc.methods.balanceOf(user2).call();
+        await insuredVesting.methods.setAllocation(user1, 0).send({ from: deployer });
+        await insuredVesting.methods.setAllocation(user2, 0).send({ from: deployer });
+        expect(BN(await mockUsdc.methods.balanceOf(user1).call()).minus(user1UsdcBalanceBefore)).to.be.bignumber.eq(await mockUsdc.amount(FUNDING_PER_USER));
+        expect(BN(await mockUsdc.methods.balanceOf(user2).call()).minus(user2UsdcBalanceBefore)).to.be.bignumber.eq(await mockUsdc.amount(FUNDING_PER_USER));
+
+        await insuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
+        expect(await xctd.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(0);
       });
 
       // TODO ensure that once funds were added we can't recover XCTDs for them
     });
 
     describe("access control", () => {
-      it("cannot set start time if not owner", async () => {
-        await expectRevert(
-          async () => insuredVesting.methods.setStartTime(await getCurrentTimestamp()).send({ from: anyUser }),
-          "Ownable: caller is not the owner"
-        );
-      });
-
       it("cannot add allocations if not owner", async () => {
         await expectRevert(async () => insuredVesting.methods.setAllocation(user1, 1).send({ from: anyUser }), "Ownable: caller is not the owner");
       });
@@ -579,36 +607,123 @@ describe("InsuredVestingV1", () => {
     });
   });
 
+  describe("activate", () => {
+    it("fails if there isn't enough XCTD allowance to cover funded USDC", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+      await expectRevert(async () => insuredVesting.methods.activate().send({ from: deployer }), "ERC20: insufficient allowance");
+    });
+
+    it("fails if there isn't enough XCTD balance to cover funded USDC", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+      await approveXctdToVesting();
+      // Get rid of all balance
+      await xctd.methods.transfer(anyUser, await xctd.amount(1e9)).send({ from: deployer });
+      await expectRevert(async () => insuredVesting.methods.activate().send({ from: deployer }), "ERC20: transfer amount exceeds balance");
+    });
+
+    it("transfers XCTD required to back USDC funding", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER / 4);
+
+      const requiredXctd = await xctd.amount((FUNDING_PER_USER / 4) * USDC_TO_XCTD_RATIO);
+
+      await approveXctdToVesting();
+
+      await insuredVesting.methods.activate().send({ from: deployer });
+
+      const contractXctdBalance = await xctd.methods.balanceOf(insuredVesting.options.address).call();
+
+      expect(contractXctdBalance).to.be.bignumber.eq(requiredXctd);
+    });
+
+    it("does not transfer XCTD if already funded sufficiently", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+
+      await approveXctdToVesting();
+
+      await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(FUNDING_PER_USER * 10)).send({ from: deployer });
+
+      const initialContractXctdBalance = await xctd.methods.balanceOf(insuredVesting.options.address).call();
+      await insuredVesting.methods.activate().send({ from: deployer });
+      const contractXctdBalance = await xctd.methods.balanceOf(insuredVesting.options.address).call();
+
+      expect(initialContractXctdBalance).to.be.bignumber.eq(contractXctdBalance);
+    });
+
+    it("transfers XCTD required to back USDC funding (partially pre-funded)", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+
+      const requiredXctd = await xctd.amount(FUNDING_PER_USER * USDC_TO_XCTD_RATIO);
+
+      await approveXctdToVesting();
+
+      await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(FUNDING_PER_USER / 3)).send({ from: deployer });
+
+      await insuredVesting.methods.activate().send({ from: deployer });
+
+      const contractXctdBalance = await xctd.methods.balanceOf(insuredVesting.options.address).call();
+
+      expect(contractXctdBalance).to.be.bignumber.eq(requiredXctd);
+    });
+
+    it("fails if already activated", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+      await approveXctdToVesting();
+
+      await insuredVesting.methods.activate().send({ from: deployer });
+
+      await expectRevert(async () => insuredVesting.methods.activate().send({ from: deployer }), Error.VestingAlreadyStarted);
+    });
+
+    it("fails if not owner", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+
+      await expectRevert(async () => insuredVesting.methods.activate().send({ from: anyUser }), "Ownable: caller is not the owner");
+    });
+
+    it("fails if not funded", async () => {
+      await expectRevert(async () => insuredVesting.methods.activate().send({ from: deployer }), Error.NoFundsAdded);
+    });
+
+    it("sets start time", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+      await approveXctdToVesting();
+
+      await insuredVesting.methods.activate().send({ from: deployer });
+
+      expect(await insuredVesting.methods.startTime().call()).to.be.bignumber.eq(await getCurrentTimestamp());
+    });
+
+    it("tranfers the correct amount of xctd after setting allocations with refunds", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+      await setAllocationForUser2(FUNDING_PER_USER);
+      await addFundingFromUser2(FUNDING_PER_USER);
+      // Reduce allocation
+      await setAllocationForUser2(FUNDING_PER_USER / 2);
+
+      await approveXctdToVesting((FUNDING_PER_USER + FUNDING_PER_USER / 2) * USDC_TO_XCTD_RATIO);
+      await insuredVesting.methods.activate().send({ from: deployer });
+    });
+  });
+
   describe("deployment", () => {
     describe("exchange rate", () => {
       it("cannot deploy with USDC_TO_XCTD below 1:1 ratio", async () => {
         const usdcToXctdRate = bn18(0.9).dividedBy(bn6(1));
         await expectRevert(
           async () =>
-            deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
-              mockUsdc.options.address,
-              xctd.options.address,
-              project,
-              usdcToXctdRate,
-              await getDefaultStartTime(),
-            ]),
+            deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [mockUsdc.options.address, xctd.options.address, project, usdcToXctdRate]),
           `${Error.UsdcToXctdRateTooLow}(${usdcToXctdRate})`
         );
       });
-    });
-
-    it("startTime must be more than 7 days from deployment time", async () => {
-      await expectRevert(
-        async () =>
-          deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
-            mockUsdc.options.address,
-            xctd.options.address,
-            project,
-            bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)),
-            await getCurrentTimestamp(),
-          ]),
-        Error.StartTimeTooSoon
-      );
     });
 
     describe("project address", () => {
@@ -620,7 +735,6 @@ describe("InsuredVestingV1", () => {
               xctd.options.address,
               zeroAddress,
               bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)),
-              await getDefaultStartTime(),
             ]),
           Error.ZeroAddress
         );
@@ -633,11 +747,3 @@ describe("InsuredVestingV1", () => {
     });
   });
 });
-
-async function addFundingFromUser1(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.addFunds(await mockUsdc.amount(amount)).send({ from: user1 });
-}
-
-async function setAllocationForUser1(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(amount)).send({ from: deployer });
-}

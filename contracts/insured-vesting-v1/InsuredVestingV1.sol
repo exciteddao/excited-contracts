@@ -7,15 +7,6 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
 import "hardhat/console.sol";
 
-/* 
-Internal Audit:
-- tests
-- refactor
-- line by line
-- 7th september, most blocks are 4-7 september
-- compare to other vesting contracts (open zeppelin)
-*/
-
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
@@ -31,10 +22,8 @@ contract InsuredVestingV1 is Ownable {
     // Changeable by owner
     bool public emergencyRelease = false;
 
-    // Changeable by owner until start time has arrived
     uint256 public startTime;
-
-    uint256 public totalXctdAllocated = 0;
+    uint256 public totalUsdcFunded = 0;
 
     mapping(address => UserVesting) public userVestings;
 
@@ -59,7 +48,6 @@ contract InsuredVestingV1 is Ownable {
     event ProjectClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount, bool isEmergency);
     event AllocationSet(address indexed target, uint256 amount);
     event FundsAdded(address indexed target, uint256 amount);
-    event StartTimeSet(uint256 timestamp);
     event EmergencyRelease();
     event DecisionChanged(address indexed target, ClaimDecision decision);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
@@ -69,8 +57,6 @@ contract InsuredVestingV1 is Ownable {
     error VestingAlreadyStarted();
     error VestingNotStarted();
     error UsdcToXctdRateTooLow(uint256 usdcToXctdRate);
-    error StartTimeTooSoon(uint256 startTime, uint256 minStartTime);
-    error StartTimeNotInFuture(uint256 newStartTime);
     error AllocationExceeded(uint256 amount);
     error InsufficientFunds(uint256 amount, uint256 minAmount);
     error NothingToClaim();
@@ -78,35 +64,25 @@ contract InsuredVestingV1 is Ownable {
     error EmergencyReleased();
     error EmergencyNotReleased();
 
+    modifier onlyBeforeVesting() {
+        if (startTime != 0 && block.timestamp > startTime) revert VestingAlreadyStarted();
+        _;
+    }
+
     // in real life: 80*1e12 = $0.0125 XCTD
     // TODO - do not use decimals()
-    constructor(address _usdc, address _xctd, address _project, uint256 _usdcToXctdRate, uint256 _startTime) {
+    constructor(address _usdc, address _xctd, address _project, uint256 _usdcToXctdRate) {
         usdc = IERC20(_usdc);
         xctd = IERC20(_xctd);
 
         if (_usdcToXctdRate < 10 ** (ERC20(_xctd).decimals() - ERC20(_usdc).decimals())) revert UsdcToXctdRateTooLow(_usdcToXctdRate);
-        if (_startTime < block.timestamp + 7 days) revert StartTimeTooSoon(_startTime, block.timestamp + 7 days);
         if (_project == address(0)) revert ZeroAddress();
 
         usdcToXctdRate = _usdcToXctdRate;
         project = _project;
-        startTime = _startTime;
     }
 
-    function setAllocation(address target, uint256 _usdcAllocation) external onlyOwner {
-        // Vesting must not have started
-        if (block.timestamp > startTime) revert VestingAlreadyStarted();
-
-        // Get previous allocation for user
-        uint256 currentAllocationForUser = userVestings[target].usdcAllocation;
-
-        // Update totalXctdAllocated
-        if (_usdcAllocation > currentAllocationForUser) {
-            totalXctdAllocated += (_usdcAllocation - currentAllocationForUser) * usdcToXctdRate;
-        } else {
-            totalXctdAllocated -= (currentAllocationForUser - _usdcAllocation) * usdcToXctdRate;
-        }
-
+    function setAllocation(address target, uint256 _usdcAllocation) external onlyOwner onlyBeforeVesting {
         // Update user allocation
         userVestings[target].usdcAllocation = _usdcAllocation;
 
@@ -114,25 +90,26 @@ contract InsuredVestingV1 is Ownable {
         if (userVestings[target].usdcFunded > _usdcAllocation) {
             uint256 _usdcToRefund = userVestings[target].usdcFunded - _usdcAllocation;
             userVestings[target].usdcFunded = _usdcAllocation;
+            totalUsdcFunded -= _usdcToRefund;
             usdc.safeTransfer(target, _usdcToRefund);
         }
 
         emit AllocationSet(target, _usdcAllocation);
     }
 
-    function addFunds(uint256 amount) public {
-        if (block.timestamp > startTime) revert VestingAlreadyStarted();
+    function addFunds(uint256 amount) public onlyBeforeVesting {
         if ((userVestings[msg.sender].usdcAllocation - userVestings[msg.sender].usdcFunded) < amount) revert AllocationExceeded(amount);
         if (amount < MIN_USDC_TO_FUND) revert InsufficientFunds(amount, MIN_USDC_TO_FUND);
 
-        usdc.safeTransferFrom(msg.sender, address(this), amount);
         userVestings[msg.sender].usdcFunded += amount;
+        totalUsdcFunded += amount;
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
 
         emit FundsAdded(msg.sender, amount);
     }
 
     function totalVestedFor(address target) public view returns (uint256) {
-        if (block.timestamp < startTime) return 0;
+        if (startTime == 0 || block.timestamp < startTime) return 0;
         UserVesting storage targetStatus = userVestings[target];
         return Math.min(targetStatus.usdcFunded, ((block.timestamp - startTime) * targetStatus.usdcFunded) / DURATION);
     }
@@ -147,7 +124,7 @@ contract InsuredVestingV1 is Ownable {
     }
 
     function claim(address target) public {
-        if (block.timestamp < startTime) revert VestingNotStarted();
+        if (startTime == 0 || block.timestamp < startTime) revert VestingNotStarted();
 
         UserVesting storage userStatus = userVestings[target];
         if (userStatus.usdcFunded == 0) revert NoFundsAdded();
@@ -176,13 +153,15 @@ contract InsuredVestingV1 is Ownable {
         }
     }
 
-    function setStartTime(uint256 newStartTime) public onlyOwner {
-        if (block.timestamp > startTime) revert VestingAlreadyStarted();
-        if (newStartTime < block.timestamp) revert StartTimeNotInFuture(newStartTime);
+    // TODO: consider the case where this never gets called, but USDC funds are locked in the contract
+    function activate() external onlyOwner onlyBeforeVesting {
+        if (totalUsdcFunded == 0) revert NoFundsAdded();
+        startTime = block.timestamp;
 
-        startTime = newStartTime;
-
-        emit StartTimeSet(newStartTime);
+        // TODO msg.sender or project?
+        uint256 totalRequiredXctd = totalUsdcFunded * usdcToXctdRate;
+        uint256 delta = totalRequiredXctd - Math.min(xctd.balanceOf(address(this)), totalRequiredXctd);
+        xctd.safeTransferFrom(msg.sender, address(this), delta);
     }
 
     function toggleDecision() public {
@@ -224,7 +203,7 @@ contract InsuredVestingV1 is Ownable {
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
         // // in case of XCTD, we also need to retain the total locked amount in the contract
         if (tokenAddress == address(xctd)) {
-            tokenBalanceToRecover -= totalXctdAllocated;
+            tokenBalanceToRecover -= Math.min(totalUsdcFunded * usdcToXctdRate, tokenBalanceToRecover);
         }
 
         IERC20(tokenAddress).safeTransfer(owner(), tokenBalanceToRecover);

@@ -71,19 +71,20 @@ export async function withFixture() {
     xctd.options.address,
     project,
     bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)), // 7*10^18 / 1,000,000 (7XCTD per USDC)
-    await getDefaultStartTime(),
   ]);
 
   for (const target of [user1, user2].concat(additionalUsers)) {
     await mockUsdc.methods.transfer(target, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
     await mockUsdc.methods.approve(insuredVesting.options.address, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: target });
   }
-
-  await transferXctdToVesting();
 }
 
 export async function transferXctdToVesting() {
   await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(XCTD_TOKENS_ON_SALE)).send({ from: deployer });
+}
+
+export async function approveXctdToVesting(amount = XCTD_TOKENS_ON_SALE) {
+  await xctd.methods.approve(insuredVesting.options.address, await xctd.amount(amount)).send({ from: deployer });
 }
 
 export function advanceDays(days: number): Promise<BlockInfo> {
@@ -106,4 +107,20 @@ export function usdcToXctd(amountInUsdc: BN): BN {
   const xctdDecimals = 18;
   const multiplier = USDC_TO_XCTD_RATIO * 10 ** xctdDecimals;
   return amountInUsdc.multipliedBy(multiplier);
+}
+
+export async function addFundingFromUser1(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.addFunds(await mockUsdc.amount(amount)).send({ from: user1 });
+}
+
+export async function setAllocationForUser1(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(amount)).send({ from: deployer });
+}
+
+export async function addFundingFromUser2(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.addFunds(await mockUsdc.amount(amount)).send({ from: user2 });
+}
+
+export async function setAllocationForUser2(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(amount)).send({ from: deployer });
 }
