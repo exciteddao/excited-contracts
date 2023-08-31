@@ -71,7 +71,6 @@ export async function withFixture() {
     xctd.options.address,
     project,
     bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)), // 7*10^18 / 1,000,000 (7XCTD per USDC)
-    await getDefaultStartTime(),
   ]);
 
   for (const target of [user1, user2].concat(additionalUsers)) {
