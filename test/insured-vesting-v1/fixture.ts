@@ -84,6 +84,10 @@ export async function transferXctdToVesting() {
   await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(XCTD_TOKENS_ON_SALE)).send({ from: deployer });
 }
 
+export async function approveXctdToVesting() {
+  await xctd.methods.approve(insuredVesting.options.address, await xctd.amount(XCTD_TOKENS_ON_SALE)).send({ from: deployer });
+}
+
 export function advanceDays(days: number): Promise<BlockInfo> {
   return mineBlock(days * DAY);
 }

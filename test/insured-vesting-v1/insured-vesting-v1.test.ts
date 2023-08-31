@@ -29,6 +29,7 @@ import {
   DAY,
   VESTING_DURATION_DAYS,
   transferXctdToVesting,
+  approveXctdToVesting,
 } from "./fixture";
 import { bn18, bn6, web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
@@ -578,6 +579,106 @@ describe("InsuredVestingV1", () => {
         await expectRevert(async () => insuredVesting.methods.emergencyReleaseVesting().send({ from: anyUser }), "Ownable: caller is not the owner");
       });
     });
+  });
+
+  describe("underfunded contract", () => {
+    it("TEMP: fails when not enough XCTD balance for deposited USDC", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+      await advanceToStartTime();
+      await advanceDays(30);
+      await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: anyUser }), "ERC20: transfer amount exceeds balance");
+    });
+  });
+
+  describe.only("activate", () => {
+    it("fails if there isn't enough XCTD allowance to cover funded USDC", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+      await advanceToStartTime();
+      await expectRevert(async () => insuredVesting.methods.activate().send({ from: deployer }), "ERC20: insufficient allowance");
+    });
+
+    it("fails if there isn't enough XCTD balance to cover funded USDC", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+      await advanceToStartTime();
+      await approveXctdToVesting();
+      // Get rid of all balance
+      await xctd.methods.transfer(anyUser, await xctd.amount(1e9)).send({ from: deployer });
+      await expectRevert(async () => insuredVesting.methods.activate().send({ from: deployer }), "ERC20: transfer amount exceeds balance");
+    });
+
+    it("should ensure there is enough XCTD balance to cover funded USDC", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER / 4);
+      await advanceToStartTime();
+
+      const requiredXctd = await xctd.amount((FUNDING_PER_USER / 4) * USDC_TO_XCTD_RATIO);
+
+      await approveXctdToVesting();
+
+      await insuredVesting.methods.activate().send({ from: deployer });
+
+      const contractXctdBalance = await xctd.methods.balanceOf(insuredVesting.options.address).call();
+
+      expect(contractXctdBalance).to.be.bignumber.eq(requiredXctd);
+    });
+
+    it("should ensure there is exact XCTD balance to cover funded USDC (overfunded)", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+      await advanceToStartTime();
+
+      await approveXctdToVesting();
+
+      await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(FUNDING_PER_USER * 10)).send({ from: deployer });
+
+      const initialContractXctdBalance = await xctd.methods.balanceOf(insuredVesting.options.address).call();
+      await insuredVesting.methods.activate().send({ from: deployer });
+      const contractXctdBalance = await xctd.methods.balanceOf(insuredVesting.options.address).call();
+
+      expect(initialContractXctdBalance).to.be.bignumber.eq(contractXctdBalance);
+    });
+
+    it("should ensure there is exact XCTD balance to cover funded USDC (underfunded)", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+      await advanceToStartTime();
+
+      const requiredXctd = await xctd.amount(FUNDING_PER_USER * USDC_TO_XCTD_RATIO);
+
+      await approveXctdToVesting();
+
+      await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(FUNDING_PER_USER / 3)).send({ from: deployer });
+
+      await insuredVesting.methods.activate().send({ from: deployer });
+
+      const contractXctdBalance = await xctd.methods.balanceOf(insuredVesting.options.address).call();
+
+      expect(contractXctdBalance).to.be.bignumber.eq(requiredXctd);
+    });
+
+    it("cannot activate if already activated", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+
+      await insuredVesting.methods.activate().send({ from: deployer });
+
+      await expectRevert(async () => insuredVesting.methods.activate().send({ from: deployer }), Error.VestingAlreadyStarted);
+    });
+
+    /*
+    - should result in exactly the same amount of XCTD and USDC in the contract, taken ratio into account
+    - should fail if already activated
+    - should fail if not owner
+    - allow for funding the contract externally and adding the delta
+    - check the case where there's more xctd than needed
+    - no usdc funded at all (should fail?)
+    - start time should be set
+    - should fail if sufficient allowance but not enough balance?
+    - multiple users scenario
+     */
   });
 
   describe("deployment", () => {

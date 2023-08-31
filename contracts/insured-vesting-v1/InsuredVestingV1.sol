@@ -34,7 +34,7 @@ contract InsuredVestingV1 is Ownable {
     // Changeable by owner until start time has arrived
     uint256 public startTime;
 
-    uint256 public totalXctdAllocated = 0;
+    uint256 public totalUsdcFunded = 0;
 
     mapping(address => UserVesting) public userVestings;
 
@@ -97,16 +97,6 @@ contract InsuredVestingV1 is Ownable {
         // Vesting must not have started
         if (block.timestamp > startTime) revert VestingAlreadyStarted();
 
-        // Get previous allocation for user
-        uint256 currentAllocationForUser = userVestings[target].usdcAllocation;
-
-        // Update totalXctdAllocated
-        if (_usdcAllocation > currentAllocationForUser) {
-            totalXctdAllocated += (_usdcAllocation - currentAllocationForUser) * usdcToXctdRate;
-        } else {
-            totalXctdAllocated -= (currentAllocationForUser - _usdcAllocation) * usdcToXctdRate;
-        }
-
         // Update user allocation
         userVestings[target].usdcAllocation = _usdcAllocation;
 
@@ -114,6 +104,7 @@ contract InsuredVestingV1 is Ownable {
         if (userVestings[target].usdcFunded > _usdcAllocation) {
             uint256 _usdcToRefund = userVestings[target].usdcFunded - _usdcAllocation;
             userVestings[target].usdcFunded = _usdcAllocation;
+            totalUsdcFunded -= _usdcToRefund;
             usdc.safeTransfer(target, _usdcToRefund);
         }
 
@@ -125,8 +116,9 @@ contract InsuredVestingV1 is Ownable {
         if ((userVestings[msg.sender].usdcAllocation - userVestings[msg.sender].usdcFunded) < amount) revert AllocationExceeded(amount);
         if (amount < MIN_USDC_TO_FUND) revert InsufficientFunds(amount, MIN_USDC_TO_FUND);
 
-        usdc.safeTransferFrom(msg.sender, address(this), amount);
         userVestings[msg.sender].usdcFunded += amount;
+        totalUsdcFunded += amount;
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
 
         emit FundsAdded(msg.sender, amount);
     }
@@ -174,6 +166,13 @@ contract InsuredVestingV1 is Ownable {
             emit UserClaimed(target, claimableUsdc, 0, false);
             emit ProjectClaimed(target, 0, claimableXctd, false);
         }
+    }
+
+    function activate() external onlyOwner {
+        // TODO msg.sender or project?
+        uint256 totalRequiredXctd = totalUsdcFunded * usdcToXctdRate;
+        uint256 delta = totalRequiredXctd - Math.min(xctd.balanceOf(address(this)), totalRequiredXctd);
+        xctd.safeTransferFrom(msg.sender, address(this), delta);
     }
 
     function setStartTime(uint256 newStartTime) public onlyOwner {
@@ -224,7 +223,7 @@ contract InsuredVestingV1 is Ownable {
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
         // // in case of XCTD, we also need to retain the total locked amount in the contract
         if (tokenAddress == address(xctd)) {
-            tokenBalanceToRecover -= totalXctdAllocated;
+            tokenBalanceToRecover -= Math.min(totalUsdcFunded * usdcToXctdRate, tokenBalanceToRecover);
         }
 
         IERC20(tokenAddress).safeTransfer(owner(), tokenBalanceToRecover);
