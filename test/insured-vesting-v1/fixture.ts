@@ -108,3 +108,19 @@ export function usdcToXctd(amountInUsdc: BN): BN {
   const multiplier = USDC_TO_XCTD_RATIO * 10 ** xctdDecimals;
   return amountInUsdc.multipliedBy(multiplier);
 }
+
+export async function addFundingFromUser1(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.addFunds(await mockUsdc.amount(amount)).send({ from: user1 });
+}
+
+export async function setAllocationForUser1(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(amount)).send({ from: deployer });
+}
+
+export async function addFundingFromUser2(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.addFunds(await mockUsdc.amount(amount)).send({ from: user2 });
+}
+
+export async function setAllocationForUser2(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(amount)).send({ from: deployer });
+}

@@ -27,9 +27,14 @@ import {
   VESTING_DURATION_DAYS,
   transferXctdToVesting,
   approveXctdToVesting,
+  addFundingFromUser1,
+  addFundingFromUser2,
+  setAllocationForUser1,
+  setAllocationForUser2,
 } from "./fixture";
 import { bn18, bn6, web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
+import { VESTING_PERIODS } from "../uninsured-vesting-v1/fixture";
 
 describe("InsuredVestingV1", () => {
   const balances = {
@@ -753,19 +758,3 @@ describe("InsuredVestingV1", () => {
     });
   });
 });
-
-async function addFundingFromUser1(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.addFunds(await mockUsdc.amount(amount)).send({ from: user1 });
-}
-
-async function setAllocationForUser1(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(amount)).send({ from: deployer });
-}
-
-async function addFundingFromUser2(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.addFunds(await mockUsdc.amount(amount)).send({ from: user2 });
-}
-
-async function setAllocationForUser2(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(amount)).send({ from: deployer });
-}
