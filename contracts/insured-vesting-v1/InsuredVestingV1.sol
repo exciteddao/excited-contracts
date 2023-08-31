@@ -90,7 +90,7 @@ contract InsuredVestingV1 is Ownable {
         if (userVestings[target].usdcFunded > _usdcAllocation) {
             uint256 _usdcToRefund = userVestings[target].usdcFunded - _usdcAllocation;
             userVestings[target].usdcFunded = _usdcAllocation;
-            // totalUsdcFunded -= _usdcToRefund;
+            totalUsdcFunded -= _usdcToRefund;
             usdc.safeTransfer(target, _usdcToRefund);
         }
 

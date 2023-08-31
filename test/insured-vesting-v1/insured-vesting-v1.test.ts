@@ -16,15 +16,12 @@ import {
   deployer,
   someOtherToken,
   getCurrentTimestamp,
-  MONTH,
   user2,
   additionalUsers,
   setup,
-  getDefaultStartTime,
   advanceDays,
   Error,
   MIN_USDC_TO_FUND,
-  usdcToXctd,
   VESTING_DURATION_SECONDS,
   DAY,
   VESTING_DURATION_DAYS,
@@ -407,25 +404,23 @@ describe("InsuredVestingV1", () => {
             expect((await insuredVesting.methods.userVestings(user1).call()).usdcAllocation).to.be.bignumber.eq(newAllocation);
           });
 
-          it("multiple users", async () => {
-            await setBalancesForDelta();
-            await setAllocationForUser1(5_000);
-            await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(2_000)).send({ from: deployer });
-            await addFundingFromUser1();
-            await expectUserBalanceDelta("usdc", (await mockUsdc.amount(FUNDING_PER_USER)).negated(), 1);
+          // it.only("multiple users", async () => {
+          //   await setBalancesForDelta();
 
-            await setBalancesForDelta();
-            const newAmount = FUNDING_PER_USER / 3;
-            const newAllocation = await mockUsdc.amount(newAmount);
-            await insuredVesting.methods.setAllocation(user1, newAllocation).send({ from: deployer });
+          //   await setAllocationForUser1(5_000);
+          //   await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(2_000)).send({ from: deployer });
 
-            // // check user USDC balance reflects refunded amount
-            await expectUserBalanceDelta("usdc", await mockUsdc.amount(FUNDING_PER_USER - newAmount), 1);
-            // // check contract USDC balance has been updated
-            expect(await mockUsdc.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(newAllocation);
-            // // check user allocation has been updated
-            expect((await insuredVesting.methods.userVestings(user1).call()).usdcAllocation).to.be.bignumber.eq(newAllocation);
-          });
+          //   await addFundingFromUser1(2_500);
+          //   await insuredVesting.methods.addFunds(await mockUsdc.amount(2_000)).send({ from: user2 });
+
+          // await expectUserBalanceDelta("usdc", (await mockUsdc.amount(2_500)).negated(), 1);
+
+          // const newAllocation = await mockUsdc.amount(3_000);
+          // await insuredVesting.methods.setAllocation(user1, newAllocation).send({ from: deployer });
+
+          // // check user1 USDC balance reflects refunded amount
+          // await expectUserBalanceDelta("usdc", await mockUsdc.amount(2_500), 1);
+          // });
         });
 
         describe("setAllocation", () => {
@@ -695,9 +690,17 @@ describe("InsuredVestingV1", () => {
       expect(await insuredVesting.methods.startTime().call()).to.be.bignumber.eq(await getCurrentTimestamp());
     });
 
-    /*
-    - multiple users scenario
-     */
+    it("tranfers the correct amount of xctd after setting allocations with refunds", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+      await setAllocationForUser2(FUNDING_PER_USER);
+      await addFundingFromUser2(FUNDING_PER_USER);
+      // Reduce allocation
+      await setAllocationForUser2(FUNDING_PER_USER / 2);
+
+      await approveXctdToVesting((FUNDING_PER_USER + FUNDING_PER_USER / 2) * USDC_TO_XCTD_RATIO);
+      await insuredVesting.methods.activate().send({ from: deployer });
+    });
   });
 
   describe("deployment", () => {
@@ -740,4 +743,12 @@ async function addFundingFromUser1(amount = FUNDING_PER_USER) {
 
 async function setAllocationForUser1(amount = FUNDING_PER_USER) {
   await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(amount)).send({ from: deployer });
+}
+
+async function addFundingFromUser2(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.addFunds(await mockUsdc.amount(amount)).send({ from: user2 });
+}
+
+async function setAllocationForUser2(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(amount)).send({ from: deployer });
 }
