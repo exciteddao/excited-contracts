@@ -1,0 +1,39 @@
+{
+  "name": "excited-contracts",
+  "version": "0.0.1",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:exciteddao/excited-contracts.git"
+  },
+  "dependencies": {
+    "@defi.org/web3-candies": "4.x",
+    "hardhat-watcher": "^2.5.0",
+    "solidity-coverage": "^0.8.4"
+  },
+  "scripts": {
+    "prettier": "prettier --write '{contracts,src,test}/**/*.{ts,js,json,sol}'",
+    "prebuild": "npm run prettier",
+    "build": "hardhat compile && hardhat typechain",
+    "test": "([ -z $CI ] && for t in eth bsc arb ftm avax poly; do npm run test:$t; done) || true",
+    "test:eth": "NETWORK=ETH BLOCK=17576915 hardhat test",
+    "test:ftm": "NETWORK=FTM hardhat test",
+    "test:avax": "NETWORK=AVAX hardhat test",
+    "test:poly": "NETWORK=POLY hardhat test",
+    "test:arb": "NETWORK=ARB hardhat test",
+    "test:bsc": "NETWORK=BSC hardhat test",
+    "prepare": "husky install",
+    "format": "pretty-quick --staged"
+  },
+  "prettier": {
+    "printWidth": 160
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-network-helpers": "^1.0.8",
+    "@types/mocha": "^10.0.1",
+    "husky": "^8.0.3",
+    "prettier": "2.8.8",
+    "pretty-quick": "^3.1.3"
+  }
+}
