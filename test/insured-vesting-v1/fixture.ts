@@ -78,8 +78,6 @@ export async function withFixture() {
     await mockUsdc.methods.transfer(target, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
     await mockUsdc.methods.approve(insuredVesting.options.address, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: target });
   }
-
-  await transferXctdToVesting();
 }
 
 export async function transferXctdToVesting() {

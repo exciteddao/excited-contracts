@@ -28,6 +28,7 @@ import {
   VESTING_DURATION_SECONDS,
   DAY,
   VESTING_DURATION_DAYS,
+  transferXctdToVesting,
 } from "./fixture";
 import { bn18, bn6, web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
@@ -86,9 +87,9 @@ describe("InsuredVestingV1", () => {
     await withFixture();
   });
 
-  describe("with lockup period set", () => {
+  describe("with xctd transferred to contract", () => {
     beforeEach(async () => {
-      await withFixture();
+      await transferXctdToVesting();
     });
 
     describe("claim", () => {
