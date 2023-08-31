@@ -538,9 +538,10 @@ describe("InsuredVestingV1", () => {
       });
 
       // TODO does retrieiving XCTD work only based off allocations or do we have the option to cancel before vesting started.
-      it("recovers unallocated xctd", async () => {
+      it("recovers unfunded xctd", async () => {
         await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
         await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+        await transferXctdToVesting();
         await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
         await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user2 });
         await insuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
@@ -579,11 +580,10 @@ describe("InsuredVestingV1", () => {
   //   });
   // });
 
-  describe.only("activate", () => {
+  describe("activate", () => {
     it("fails if there isn't enough XCTD allowance to cover funded USDC", async () => {
       await setAllocationForUser1(FUNDING_PER_USER);
       await addFundingFromUser1(FUNDING_PER_USER);
-      await insuredVesting.methods.activate().send({ from: deployer });
       await expectRevert(async () => insuredVesting.methods.activate().send({ from: deployer }), "ERC20: insufficient allowance");
     });
 
@@ -599,7 +599,6 @@ describe("InsuredVestingV1", () => {
     it("transfers XCTD required to back USDC funding", async () => {
       await setAllocationForUser1(FUNDING_PER_USER);
       await addFundingFromUser1(FUNDING_PER_USER / 4);
-      await insuredVesting.methods.activate().send({ from: deployer });
 
       const requiredXctd = await xctd.amount((FUNDING_PER_USER / 4) * USDC_TO_XCTD_RATIO);
 
@@ -615,7 +614,6 @@ describe("InsuredVestingV1", () => {
     it("does not transfer XCTD if already funded sufficiently", async () => {
       await setAllocationForUser1(FUNDING_PER_USER);
       await addFundingFromUser1(FUNDING_PER_USER);
-      await insuredVesting.methods.activate().send({ from: deployer });
 
       await approveXctdToVesting();
 
@@ -631,7 +629,6 @@ describe("InsuredVestingV1", () => {
     it("transfers XCTD required to back USDC funding (partially pre-funded)", async () => {
       await setAllocationForUser1(FUNDING_PER_USER);
       await addFundingFromUser1(FUNDING_PER_USER);
-      await insuredVesting.methods.activate().send({ from: deployer });
 
       const requiredXctd = await xctd.amount(FUNDING_PER_USER * USDC_TO_XCTD_RATIO);
 
@@ -688,30 +685,10 @@ describe("InsuredVestingV1", () => {
         const usdcToXctdRate = bn18(0.9).dividedBy(bn6(1));
         await expectRevert(
           async () =>
-            deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
-              mockUsdc.options.address,
-              xctd.options.address,
-              project,
-              usdcToXctdRate,
-              await getDefaultStartTime(),
-            ]),
+            deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [mockUsdc.options.address, xctd.options.address, project, usdcToXctdRate]),
           `${Error.UsdcToXctdRateTooLow}(${usdcToXctdRate})`
         );
       });
-    });
-
-    it("startTime must be more than 7 days from deployment time", async () => {
-      await expectRevert(
-        async () =>
-          deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
-            mockUsdc.options.address,
-            xctd.options.address,
-            project,
-            bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)),
-            await getCurrentTimestamp(),
-          ]),
-        Error.StartTimeTooSoon
-      );
     });
 
     describe("project address", () => {
@@ -723,7 +700,6 @@ describe("InsuredVestingV1", () => {
               xctd.options.address,
               zeroAddress,
               bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)),
-              await getDefaultStartTime(),
             ]),
           Error.ZeroAddress
         );
