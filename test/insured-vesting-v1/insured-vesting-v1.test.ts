@@ -404,23 +404,7 @@ describe("InsuredVestingV1", () => {
             expect((await insuredVesting.methods.userVestings(user1).call()).usdcAllocation).to.be.bignumber.eq(newAllocation);
           });
 
-          // it.only("multiple users", async () => {
-          //   await setBalancesForDelta();
-
-          //   await setAllocationForUser1(5_000);
-          //   await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(2_000)).send({ from: deployer });
-
-          //   await addFundingFromUser1(2_500);
-          //   await insuredVesting.methods.addFunds(await mockUsdc.amount(2_000)).send({ from: user2 });
-
-          // await expectUserBalanceDelta("usdc", (await mockUsdc.amount(2_500)).negated(), 1);
-
-          // const newAllocation = await mockUsdc.amount(3_000);
-          // await insuredVesting.methods.setAllocation(user1, newAllocation).send({ from: deployer });
-
-          // // check user1 USDC balance reflects refunded amount
-          // await expectUserBalanceDelta("usdc", await mockUsdc.amount(2_500), 1);
-          // });
+          // TODO: multiple user scenarios
         });
 
         describe("setAllocation", () => {
@@ -554,7 +538,7 @@ describe("InsuredVestingV1", () => {
       });
 
       // TODO does retrieiving XCTD work only based off allocations or do we have the option to cancel before vesting started.
-      it("recovers unfunded xctd", async () => {
+      it("recovers excess xctd (fully funded) ", async () => {
         await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
         await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
         await transferXctdToVesting();
@@ -565,6 +549,39 @@ describe("InsuredVestingV1", () => {
         expect(await xctd.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(
           (await xctd.amount(FUNDING_PER_USER * 2)).multipliedBy(USDC_TO_XCTD_RATIO)
         );
+      });
+
+      it("recovers excess xctd (underfunded)", async () => {
+        await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+        await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+        await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+        await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user2 });
+        await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(100)).send({ from: deployer });
+        await insuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
+        // Retains tokens in the contract, nothing to recover
+        expect(await xctd.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(await xctd.amount(100));
+      });
+
+      it("recovers by zeroing out allocations (pre-activation)", async () => {
+        await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+        await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+        await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
+        await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user2 });
+        await transferXctdToVesting();
+        await insuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
+        expect(await xctd.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(
+          (await xctd.amount(FUNDING_PER_USER * 2)).multipliedBy(USDC_TO_XCTD_RATIO)
+        );
+
+        const user1UsdcBalanceBefore = await mockUsdc.methods.balanceOf(user1).call();
+        const user2UsdcBalanceBefore = await mockUsdc.methods.balanceOf(user2).call();
+        await insuredVesting.methods.setAllocation(user1, 0).send({ from: deployer });
+        await insuredVesting.methods.setAllocation(user2, 0).send({ from: deployer });
+        expect(BN(await mockUsdc.methods.balanceOf(user1).call()).minus(user1UsdcBalanceBefore)).to.be.bignumber.eq(await mockUsdc.amount(FUNDING_PER_USER));
+        expect(BN(await mockUsdc.methods.balanceOf(user2).call()).minus(user2UsdcBalanceBefore)).to.be.bignumber.eq(await mockUsdc.amount(FUNDING_PER_USER));
+
+        await insuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
+        expect(await xctd.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(0);
       });
 
       // TODO ensure that once funds were added we can't recover XCTDs for them
