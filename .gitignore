@@ -104,7 +104,6 @@ fabric.properties
 # Icon must end with two \r
 Icon
 
-
 # Thumbnails
 ._*
 
@@ -425,3 +424,5 @@ zsdoc/data
 !/tests/_output/.gitkeep
 
 # End of https://www.toptal.com/developers/gitignore/api/zsh,node,macos,intellij+all,solidity,soliditytruffle,sublimetext
+
+coverage.json
