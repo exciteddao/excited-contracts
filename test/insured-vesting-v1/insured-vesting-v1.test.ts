@@ -607,17 +607,6 @@ describe("InsuredVestingV1", () => {
     });
   });
 
-  // TODO revisit this case -> in the context of letting users claim back USDC if start time has never been set for a long time?
-  // describe("underfunded contract", () => {
-  //   it("TEMP: fails when not enough XCTD balance for deposited USDC", async () => {
-  //     await setAllocationForUser1(FUNDING_PER_USER);
-  //     await addFundingFromUser1(FUNDING_PER_USER);
-  //     await insuredVesting.methods.activate().send({ from: deployer });
-  //     await advanceDays(30);
-  //     await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: anyUser }), "ERC20: transfer amount exceeds balance");
-  //   });
-  // });
-
   describe("activate", () => {
     it("fails if there isn't enough XCTD allowance to cover funded USDC", async () => {
       await setAllocationForUser1(FUNDING_PER_USER);
