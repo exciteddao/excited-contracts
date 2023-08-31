@@ -153,7 +153,7 @@ contract InsuredVestingV1 is Ownable {
         }
     }
 
-    // TODO: consider the case where this never gets locked, but USDC funds are locked in the contract
+    // TODO: consider the case where this never gets called, but USDC funds are locked in the contract
     function activate() external onlyOwner onlyBeforeVesting {
         if (totalUsdcFunded == 0) revert NoFundsAdded();
         startTime = block.timestamp;
