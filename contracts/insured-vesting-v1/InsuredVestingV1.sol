@@ -21,9 +21,7 @@ contract InsuredVestingV1 is Ownable {
     address public project;
 
     uint256 public startTime;
-    uint256 public totalUsdcFunded = 0;
-
-    mapping(address => UserVesting) public userVestings;
+    uint256 public totalUsdcFunded;
 
     enum ClaimDecision {
         TOKENS,
@@ -41,7 +39,9 @@ contract InsuredVestingV1 is Ownable {
         uint256 usdcClaimed;
     }
 
-    // Events
+    mapping(address => UserVesting) public userVestings;
+
+    // --- Events ---
     event UserClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount);
     event UserEmergencyClaimed(address indexed target, uint256 usdcAmount);
     event ProjectClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount);
@@ -52,7 +52,7 @@ contract InsuredVestingV1 is Ownable {
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
     event ProjectAddressChanged(address indexed oldAddress, address indexed newAddress);
 
-    // Errors
+    // --- Errors ---
     error ZeroAddress();
     error VestingAlreadyStarted();
     error VestingNotStarted();
@@ -65,6 +65,7 @@ contract InsuredVestingV1 is Ownable {
     error EmergencyNotReleased();
     error OnlyOwnerOrSender();
 
+    // --- Modifiers ---
     modifier onlyBeforeVesting() {
         if (startTime != 0 && block.timestamp > startTime) revert VestingAlreadyStarted();
         _;
@@ -94,7 +95,6 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // --- User functions ---
-
     function addFunds(uint256 amount) public onlyBeforeVesting onlyIfNotEmergencyReleased {
         if ((userVestings[msg.sender].usdcAllocation - userVestings[msg.sender].usdcFunded) < amount) revert AllocationExceeded(amount);
         if (amount < MIN_USDC_TO_FUND) revert InsufficientFunds(amount, MIN_USDC_TO_FUND);
@@ -141,7 +141,6 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // --- Owner functions ---
-
     function setAllocation(address target, uint256 _usdcAllocation) external onlyOwner onlyBeforeVesting onlyIfNotEmergencyReleased {
         // Update user allocation
         userVestings[target].usdcAllocation = _usdcAllocation;
@@ -221,7 +220,6 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // --- View functions ---
-
     function totalVestedFor(address target) public view returns (uint256) {
         if (startTime == 0 || block.timestamp < startTime) return 0;
         UserVesting storage targetStatus = userVestings[target];

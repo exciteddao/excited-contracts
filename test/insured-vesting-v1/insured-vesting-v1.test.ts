@@ -125,7 +125,7 @@ describe("InsuredVestingV1", () => {
         await expectUserBalanceDelta("usdc", 0);
       });
 
-      it.only("can claim tokens for multiple users, random amounts", async () => {
+      it("can claim tokens for multiple users, random amounts", async () => {
         const additionalUsersFunding = [];
 
         for (const user of additionalUsers) {

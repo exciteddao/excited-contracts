@@ -8,6 +8,13 @@ import "@openzeppelin/contracts/utils/math/Math.sol";
 contract UninsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
+    IERC20 immutable xctd;
+
+    uint256 constant DURATION = 2 * 365 days;
+
+    uint256 public startTime;
+    uint256 public totalAllocated;
+
     struct UserVesting {
         uint256 amount;
         uint256 totalClaimed;
@@ -15,21 +22,13 @@ contract UninsuredVestingV1 is Ownable {
 
     mapping(address => UserVesting) public userVestings;
 
-    IERC20 immutable xctd;
-
-    uint256 constant DURATION = 2 * 365 days;
-
-    uint256 public startTime;
-    // TODO: rename this / remove when we change recovery functionality
-    uint256 public totalAllocated;
-
-    // Events
+    // --- Events ---
     event Claimed(address indexed target, uint256 amount);
     event AmountSet(address indexed target, uint256 amount);
     event StartTimeSet(uint256 timestamp);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
-    // Errors
+    // --- Errors ---
     error ZeroAddress();
     error StartTimeTooSoon(uint256 startTime, uint256 minStartTime);
     error StartTimeNotInFuture(uint256 newStartTime);
@@ -39,6 +38,7 @@ contract UninsuredVestingV1 is Ownable {
     error NoAllocationsAdded();
     error OnlyOwnerOrSender();
 
+    // --- Modifiers ---
     modifier onlyBeforeVesting() {
         if (startTime != 0 && block.timestamp > startTime) revert VestingAlreadyStarted();
         _;
@@ -49,31 +49,7 @@ contract UninsuredVestingV1 is Ownable {
         xctd = IERC20(_xctd);
     }
 
-    function totalVestedFor(address target) public view returns (uint256) {
-        if (block.timestamp < startTime) return 0;
-        UserVesting storage targetStatus = userVestings[target];
-        return Math.min(targetStatus.amount, ((block.timestamp - startTime) * targetStatus.amount) / DURATION);
-    }
-
-    function claimableFor(address target) public view returns (uint256) {
-        uint256 totalClaimed = userVestings[target].totalClaimed;
-        uint256 totalVested = totalVestedFor(target);
-
-        if (totalClaimed >= totalVested) return 0;
-
-        return totalVested - totalClaimed;
-    }
-
-    function activate() external onlyOwner onlyBeforeVesting {
-        if (totalAllocated == 0) revert NoAllocationsAdded();
-
-        startTime = block.timestamp;
-        uint256 delta = totalAllocated - Math.min(xctd.balanceOf(address(this)), totalAllocated);
-        xctd.safeTransferFrom(msg.sender, address(this), delta);
-
-        emit StartTimeSet(startTime);
-    }
-
+    // --- User functions ---
     function claim(address target) public {
         if (!(msg.sender == owner() || msg.sender == target)) revert OnlyOwnerOrSender();
         if (startTime == 0 || block.timestamp < startTime) revert VestingNotStarted();
@@ -84,6 +60,17 @@ contract UninsuredVestingV1 is Ownable {
         xctd.safeTransfer(target, claimable);
 
         emit Claimed(target, claimable);
+    }
+
+    // --- Owner functions ---
+    function activate() external onlyOwner onlyBeforeVesting {
+        if (totalAllocated == 0) revert NoAllocationsAdded();
+
+        startTime = block.timestamp;
+        uint256 delta = totalAllocated - Math.min(xctd.balanceOf(address(this)), totalAllocated);
+        xctd.safeTransferFrom(msg.sender, address(this), delta);
+
+        emit StartTimeSet(startTime);
     }
 
     function setAmount(address target, uint256 amount) public onlyOwner onlyBeforeVesting {
@@ -100,6 +87,7 @@ contract UninsuredVestingV1 is Ownable {
         emit AmountSet(target, amount);
     }
 
+    // --- Emergency functions ---
     function recover(address tokenAddress) external onlyOwner {
         // Return any balance of the token that's not xctd
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
@@ -115,5 +103,21 @@ contract UninsuredVestingV1 is Ownable {
         Address.sendValue(payable(owner()), etherToRecover);
 
         emit AmountRecovered(tokenAddress, tokenBalanceToRecover, etherToRecover);
+    }
+
+    // --- View functions ---
+    function totalVestedFor(address target) public view returns (uint256) {
+        if (block.timestamp < startTime) return 0;
+        UserVesting storage targetStatus = userVestings[target];
+        return Math.min(targetStatus.amount, ((block.timestamp - startTime) * targetStatus.amount) / DURATION);
+    }
+
+    function claimableFor(address target) public view returns (uint256) {
+        uint256 totalClaimed = userVestings[target].totalClaimed;
+        uint256 totalVested = totalVestedFor(target);
+
+        if (totalClaimed >= totalVested) return 0;
+
+        return totalVested - totalClaimed;
     }
 }
