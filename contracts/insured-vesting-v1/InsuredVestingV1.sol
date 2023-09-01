@@ -126,6 +126,7 @@ contract InsuredVestingV1 is Ownable {
         uint256 totalClaimed = userVestings[target].usdcClaimed;
         uint256 totalVested = totalVestedFor(target);
 
+        // todo can this happen?
         if (totalClaimed >= totalVested) return 0;
 
         return totalVested - totalClaimed;
