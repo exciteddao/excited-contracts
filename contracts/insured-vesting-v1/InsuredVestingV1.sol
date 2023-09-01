@@ -112,7 +112,7 @@ contract InsuredVestingV1 is Ownable {
         UserVesting storage userStatus = userVestings[target];
         if (userStatus.usdcFunded == 0) revert NoFundsAdded();
 
-        uint256 claimableUsdc = uscClaimableFor(target);
+        uint256 claimableUsdc = usdcClaimableFor(target);
         if (claimableUsdc == 0) revert NothingToClaim();
 
         uint256 claimableXctd = claimableUsdc * usdcToXctdRate;
@@ -228,7 +228,7 @@ contract InsuredVestingV1 is Ownable {
         return Math.min(targetStatus.usdcFunded, ((block.timestamp - startTime) * targetStatus.usdcFunded) / DURATION);
     }
 
-    function uscClaimableFor(address target) public view returns (uint256) {
+    function usdcClaimableFor(address target) public view returns (uint256) {
         return usdcVestedFor(target) - userVestings[target].usdcClaimed;
     }
 }
