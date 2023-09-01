@@ -47,6 +47,7 @@ export enum Error {
   VestingAlreadyStarted = "VestingAlreadyStarted",
   NothingToClaim = "NothingToClaim",
   NoAllocationsAdded = "NoAllocationsAdded",
+  OnlyOwnerOrSender = "OnlyOwnerOrSender",
 }
 
 export async function transferXctdToVesting() {

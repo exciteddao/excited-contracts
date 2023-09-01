@@ -37,6 +37,7 @@ contract UninsuredVestingV1 is Ownable {
     error VestingAlreadyStarted();
     error NothingToClaim();
     error NoAllocationsAdded();
+    error OnlyOwnerOrSender();
 
     modifier onlyBeforeVesting() {
         if (startTime != 0 && block.timestamp > startTime) revert VestingAlreadyStarted();
@@ -67,19 +68,16 @@ contract UninsuredVestingV1 is Ownable {
         if (totalAllocated == 0) revert NoAllocationsAdded();
 
         startTime = block.timestamp;
-
         uint256 delta = totalAllocated - Math.min(xctd.balanceOf(address(this)), totalAllocated);
-
         xctd.safeTransferFrom(msg.sender, address(this), delta);
 
         emit StartTimeSet(startTime);
     }
 
     function claim(address target) public {
+        if (!(msg.sender == owner() || msg.sender == target)) revert OnlyOwnerOrSender();
         if (startTime == 0 || block.timestamp < startTime) revert VestingNotStarted();
-
         uint256 claimable = claimableFor(target);
-
         if (claimable == 0) revert NothingToClaim();
 
         userVestings[target].totalClaimed += claimable;

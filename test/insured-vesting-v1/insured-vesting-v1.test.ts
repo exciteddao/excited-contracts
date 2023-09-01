@@ -251,7 +251,7 @@ describe("InsuredVestingV1", () => {
         await expectProjectBalanceDelta("xctd", 0);
       });
 
-      it("project can claim on behalf of user", async () => {
+      it("owner can claim on behalf of user", async () => {
         await setBalancesForDelta();
         await setAllocationForUser1();
         await addFundingFromUser1();
