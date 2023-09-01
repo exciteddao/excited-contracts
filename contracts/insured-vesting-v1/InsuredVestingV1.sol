@@ -107,12 +107,12 @@ contract InsuredVestingV1 is Ownable {
     }
 
     function claim(address target) public onlyOwnerOrSender(target) onlyIfNotEmergencyReleased {
-        if (startTime == 0 || block.timestamp < startTime) revert VestingNotStarted();
+        if (startTime == 0) revert VestingNotStarted();
 
         UserVesting storage userStatus = userVestings[target];
         if (userStatus.usdcFunded == 0) revert NoFundsAdded();
 
-        uint256 claimableUsdc = claimableFor(target);
+        uint256 claimableUsdc = usdcClaimableFor(target);
         if (claimableUsdc == 0) revert NothingToClaim();
 
         uint256 claimableXctd = claimableUsdc * usdcToXctdRate;
@@ -220,19 +220,14 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // --- View functions ---
-    function totalVestedFor(address target) public view returns (uint256) {
-        if (startTime == 0 || block.timestamp < startTime) return 0;
+    function usdcVestedFor(address target) public view returns (uint256) {
+        if (startTime == 0) return 0;
+
         UserVesting storage targetStatus = userVestings[target];
         return Math.min(targetStatus.usdcFunded, ((block.timestamp - startTime) * targetStatus.usdcFunded) / DURATION);
     }
 
-    function claimableFor(address target) public view returns (uint256) {
-        uint256 totalClaimed = userVestings[target].usdcClaimed;
-        uint256 totalVested = totalVestedFor(target);
-
-        // todo can this happen?
-        if (totalClaimed >= totalVested) return 0;
-
-        return totalVested - totalClaimed;
+    function usdcClaimableFor(address target) public view returns (uint256) {
+        return usdcVestedFor(target) - userVestings[target].usdcClaimed;
     }
 }
