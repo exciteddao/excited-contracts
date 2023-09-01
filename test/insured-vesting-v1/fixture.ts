@@ -4,6 +4,7 @@ import BN from "bignumber.js";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { MockUSDC } from "../../typechain-hardhat/contracts/test/MockUSDC";
+import { expect } from "chai";
 
 useChaiBigNumber();
 
@@ -131,4 +132,47 @@ export async function addFundingFromUser2(amount = FUNDING_PER_USER) {
 
 export async function setAllocationForUser2(amount = FUNDING_PER_USER) {
   await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(amount)).send({ from: deployer });
+}
+
+export const balances = {
+  project: {
+    xctd: BN(-1),
+    usdc: BN(-1),
+  },
+  user1: {
+    xctd: BN(-1),
+    usdc: BN(-1),
+  },
+};
+
+export async function setBalancesForDelta() {
+  balances.user1.usdc = BN(await mockUsdc.methods.balanceOf(user1).call());
+  balances.user1.xctd = BN(await xctd.methods.balanceOf(user1).call());
+  balances.project.usdc = BN(await mockUsdc.methods.balanceOf(project).call());
+  balances.project.xctd = BN(await xctd.methods.balanceOf(project).call());
+}
+
+export async function vestedAmount(days: number, token: "usdc" | "xctd") {
+  let amount = BN(FUNDING_PER_USER)
+    .dividedBy(VESTING_DURATION_SECONDS)
+    .multipliedBy(DAY * days);
+  if (token === "xctd") {
+    return xctd.amount(amount.multipliedBy(USDC_TO_XCTD_RATIO));
+  } else {
+    return mockUsdc.amount(amount);
+  }
+}
+
+export async function expectBalanceDelta(target: "project" | "user1", token: "usdc" | "xctd", expectedDelta: BN | number, closeTo: number) {
+  const _token = token === "xctd" ? xctd : mockUsdc;
+  const amount = BN(await _token.methods.balanceOf(target === "user1" ? user1 : project).call());
+  return expect(amount.minus(balances[target][token])).to.bignumber.closeTo(expectedDelta, await _token.amount(closeTo));
+}
+
+export async function expectUserBalanceDelta(token: "usdc" | "xctd", expectedDelta: BN | number, closeTo: number = 0.1) {
+  return expectBalanceDelta("user1", token, expectedDelta, closeTo);
+}
+
+export async function expectProjectBalanceDelta(token: "usdc" | "xctd", expectedDelta: BN | number, closeTo: number = 0.1) {
+  return expectBalanceDelta("project", token, expectedDelta, closeTo);
 }

@@ -20,11 +20,15 @@ import {
   transferXctdToVesting,
   setAmountForUser1,
   setAmountForUser2,
+  setup,
+  vestedAmount,
 } from "./fixture";
 import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { UninsuredVestingV1 } from "../../typechain-hardhat/contracts/uninsured-vesting-v1/UninsuredVestingV1";
 
 describe("UninsuredVestingV1", () => {
+  before(async () => await setup());
+
   beforeEach(async () => withFixture());
 
   describe("with xctd approved to contract", () => {
@@ -32,86 +36,88 @@ describe("UninsuredVestingV1", () => {
       transferXctdToVesting();
     });
 
-    const testCases = [0, 1, 5, 10, 100, 200, 534];
+    describe("claim", () => {
+      const testCases = [0, 1, 5, 10, 100, 200, 534];
 
-    for (const days of testCases) {
-      it(`can claim tokens proportional to amount of seconds in ${days} days passed`, async () => {
+      for (const days of testCases) {
+        it(`can claim tokens proportional to amount of seconds in ${days} days passed`, async () => {
+          await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+          await uninsuredVesting.methods.activate().send({ from: deployer });
+          await advanceDays(days);
+          await uninsuredVesting.methods.claim(user1).send({ from: user1 });
+
+          expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
+            (await xctd.amount(TOKENS_PER_USER)).multipliedBy(days * DAY).dividedBy(VESTING_DURATION_SECONDS),
+            await xctd.amount(0.01)
+          );
+        });
+      }
+
+      it(`can claim tokens for the entire period`, async () => {
         await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
         await uninsuredVesting.methods.activate().send({ from: deployer });
-        await advanceDays(days);
+        await advanceDays(VESTING_DURATION_SECONDS);
         await uninsuredVesting.methods.claim(user1).send({ from: user1 });
 
+        expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(await xctd.amount(TOKENS_PER_USER), await xctd.amount(0.01));
+      });
+
+      it(`can claim tokens for the entire period, longer than vesting period has passed`, async () => {
+        await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+        await uninsuredVesting.methods.activate().send({ from: deployer });
+        await advanceDays(VESTING_DURATION_SECONDS * 2);
+        await uninsuredVesting.methods.claim(user1).send({ from: user1 });
+
+        expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(await xctd.amount(TOKENS_PER_USER), await xctd.amount(0.01));
+      });
+
+      it("cannot double-claim tokens for same period of time", async () => {
+        await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+        await uninsuredVesting.methods.activate().send({ from: deployer });
+        const daysToAdvance = 66;
+        await advanceDays(daysToAdvance);
+
+        await uninsuredVesting.methods.claim(user1).send({ from: user1 });
+        const balanceAfterFirstClaim = await xctd.methods.balanceOf(user1).call();
+        expect(balanceAfterFirstClaim).to.be.bignumber.closeTo(
+          (await xctd.amount(TOKENS_PER_USER)).multipliedBy(daysToAdvance * DAY).dividedBy(VESTING_DURATION_SECONDS),
+          await xctd.amount(0.01)
+        );
+
+        await uninsuredVesting.methods.claim(user1).send({ from: user1 });
+        expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(balanceAfterFirstClaim, await xctd.amount(0.01));
+      });
+
+      it("cannot claim tokens before starting period", async () => {
+        await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+        await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: user1 }), Error.VestingNotStarted);
+      });
+
+      it("cannot claim if there's no eligibility", async () => {
+        await uninsuredVesting.methods.setAmount(user2, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+        await uninsuredVesting.methods.activate().send({ from: deployer });
+        await advanceDays(1);
+        await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: user1 }), Error.NothingToClaim);
+      });
+
+      it("owner can claim on behalf of user", async () => {
+        await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+        await uninsuredVesting.methods.activate().send({ from: deployer });
+        await advanceDays(70);
+        await uninsuredVesting.methods.claim(user1).send({ from: deployer });
+
         expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
-          (await xctd.amount(TOKENS_PER_USER)).multipliedBy(days * DAY).dividedBy(VESTING_DURATION_SECONDS),
+          (await xctd.amount(TOKENS_PER_USER)).multipliedBy(70 * DAY).dividedBy(VESTING_DURATION_SECONDS),
           await xctd.amount(0.01)
         );
       });
-    }
 
-    it(`can claim tokens for the entire period`, async () => {
-      await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-      await uninsuredVesting.methods.activate().send({ from: deployer });
-      await advanceDays(VESTING_DURATION_SECONDS);
-      await uninsuredVesting.methods.claim(user1).send({ from: user1 });
-
-      expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(await xctd.amount(TOKENS_PER_USER), await xctd.amount(0.01));
-    });
-
-    it(`can claim tokens for the entire period, longer than vesting period has passed`, async () => {
-      await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-      await uninsuredVesting.methods.activate().send({ from: deployer });
-      await advanceDays(VESTING_DURATION_SECONDS * 2);
-      await uninsuredVesting.methods.claim(user1).send({ from: user1 });
-
-      expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(await xctd.amount(TOKENS_PER_USER), await xctd.amount(0.01));
-    });
-
-    it("cannot double-claim tokens for same period of time", async () => {
-      await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-      await uninsuredVesting.methods.activate().send({ from: deployer });
-      const daysToAdvance = 66;
-      await advanceDays(daysToAdvance);
-
-      await uninsuredVesting.methods.claim(user1).send({ from: user1 });
-      const balanceAfterFirstClaim = await xctd.methods.balanceOf(user1).call();
-      expect(balanceAfterFirstClaim).to.be.bignumber.closeTo(
-        (await xctd.amount(TOKENS_PER_USER)).multipliedBy(daysToAdvance * DAY).dividedBy(VESTING_DURATION_SECONDS),
-        await xctd.amount(0.01)
-      );
-
-      await uninsuredVesting.methods.claim(user1).send({ from: user1 });
-      expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(balanceAfterFirstClaim, await xctd.amount(0.01));
-    });
-
-    it("cannot claim tokens before starting period", async () => {
-      await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-      await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: user1 }), Error.VestingNotStarted);
-    });
-
-    it("cannot claim if there's no eligibility", async () => {
-      await uninsuredVesting.methods.setAmount(user2, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-      await uninsuredVesting.methods.activate().send({ from: deployer });
-      await advanceDays(1);
-      await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: user1 }), Error.NothingToClaim);
-    });
-
-    it("owner can claim on behalf of user", async () => {
-      await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-      await uninsuredVesting.methods.activate().send({ from: deployer });
-      await advanceDays(70);
-      await uninsuredVesting.methods.claim(user1).send({ from: deployer });
-
-      expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
-        (await xctd.amount(TOKENS_PER_USER)).multipliedBy(70 * DAY).dividedBy(VESTING_DURATION_SECONDS),
-        await xctd.amount(0.01)
-      );
-    });
-
-    it("cannot claim if not user or project", async () => {
-      await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
-      await uninsuredVesting.methods.activate().send({ from: deployer });
-      await advanceDays(70);
-      await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: anyUser }), Error.OnlyOwnerOrSender);
+      it("cannot claim if not user or project", async () => {
+        await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+        await uninsuredVesting.methods.activate().send({ from: deployer });
+        await advanceDays(70);
+        await expectRevert(() => uninsuredVesting.methods.claim(user1).send({ from: anyUser }), Error.OnlyOwnerOrSender);
+      });
     });
 
     describe("recovery", () => {
@@ -130,12 +136,49 @@ describe("UninsuredVestingV1", () => {
         expect(await someOtherToken.methods.balanceOf(uninsuredVesting.options.address).call()).to.be.bignumber.zero;
       });
 
-      it("recovers unallocated xctd", async () => {
+      it("recovers excess xctd, some allocations set", async () => {
         await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
         await uninsuredVesting.methods.setAmount(user2, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
         await uninsuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
         // Recover all but the tokens allocated to users
         expect(await xctd.methods.balanceOf(uninsuredVesting.options.address).call()).to.be.bignumber.eq(await xctd.amount(TOKENS_PER_USER * 2));
+      });
+
+      it("recovers excess xctd, no allocations set", async () => {
+        await uninsuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
+        expect(await xctd.methods.balanceOf(uninsuredVesting.options.address).call()).to.be.bignumber.eq(await xctd.amount(0));
+      });
+
+      it("recovers excess xctd, recovery called multiple times is idempotent", async () => {
+        await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER / 4)).send({ from: deployer });
+        await uninsuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
+        expect(await xctd.methods.balanceOf(uninsuredVesting.options.address).call()).to.be.bignumber.eq(await xctd.amount(TOKENS_PER_USER / 4));
+        await uninsuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
+        await uninsuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
+        expect(await xctd.methods.balanceOf(uninsuredVesting.options.address).call()).to.be.bignumber.eq(await xctd.amount(TOKENS_PER_USER / 4));
+      });
+
+      it("can still recover excess funds after some already claimed", async () => {
+        await uninsuredVesting.methods.setAmount(user1, await xctd.amount(TOKENS_PER_USER)).send({ from: deployer });
+        await uninsuredVesting.methods.activate().send({ from: deployer });
+
+        advanceDays(30);
+
+        const currentUserBalance = BN(await xctd.methods.balanceOf(user1).call());
+
+        await uninsuredVesting.methods.claim(user1).send({ from: user1 });
+
+        expect(await xctd.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(currentUserBalance.plus(await vestedAmount(30)), await xctd.amount(0.1));
+
+        await uninsuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
+        expect(await xctd.methods.balanceOf(uninsuredVesting.options.address).call()).to.be.bignumber.eq(await xctd.amount(TOKENS_PER_USER));
+      });
+
+      it("handles zero token balance gracefully", async () => {
+        const startingBalance = await someOtherToken.methods.balanceOf(uninsuredVesting.options.address).call();
+        expect(startingBalance).to.be.bignumber.zero;
+        await uninsuredVesting.methods.recover(someOtherToken.options.address).send({ from: deployer });
+        expect(await someOtherToken.methods.balanceOf(uninsuredVesting.options.address).call()).to.be.bignumber.zero;
       });
     });
 
@@ -209,12 +252,6 @@ describe("UninsuredVestingV1", () => {
     });
   });
 
-  describe("deployment", () => {
-    it("project address cannot be zero", async () => {
-      await expectRevert(async () => await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [zeroAddress]), Error.ZeroAddress);
-    });
-  });
-
   describe("activate", () => {
     it("fails if there isn't enough XCTD allowance to cover total allocated", async () => {
       await setAmountForUser1();
@@ -271,6 +308,12 @@ describe("UninsuredVestingV1", () => {
       await approveXctdToVesting();
       await uninsuredVesting.methods.activate().send({ from: deployer });
       expect(await uninsuredVesting.methods.startTime().call()).to.be.bignumber.eq(await getCurrentTimestamp());
+    });
+  });
+
+  describe("deployment", () => {
+    it("xctd address cannot be zero", async () => {
+      await expectRevert(async () => await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [zeroAddress]), Error.ZeroAddress);
     });
   });
 });

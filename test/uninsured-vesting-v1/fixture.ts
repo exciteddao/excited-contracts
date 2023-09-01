@@ -24,7 +24,7 @@ export const USDC_TO_XCTD_RATIO = 7;
 export const LOCKUP_MONTHS = 6;
 export const TOKENS_PER_USER = 10_000;
 
-export async function withFixture() {
+export async function setup() {
   deployer = await account(9);
   user1 = await account(0);
   user2 = await account(3);
@@ -33,7 +33,9 @@ export async function withFixture() {
   tag(user1, "user1");
   tag(user2, "user2");
   tag(anyUser, "anyUser");
+}
 
+export async function withFixture() {
   xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "XCTD"])).options.address);
   someOtherToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "SomeOtherToken"])).options.address);
   uninsuredVesting = await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [xctd.options.address]);
@@ -80,4 +82,11 @@ export async function setAmountForUser1(amount = TOKENS_PER_USER) {
 
 export async function setAmountForUser2(amount = TOKENS_PER_USER) {
   await uninsuredVesting.methods.setAmount(user2, await xctd.amount(amount)).send({ from: deployer });
+}
+
+export async function vestedAmount(days: number) {
+  let amount = BN(TOKENS_PER_USER)
+    .dividedBy(VESTING_DURATION_SECONDS)
+    .multipliedBy(DAY * days);
+  return xctd.amount(amount);
 }
