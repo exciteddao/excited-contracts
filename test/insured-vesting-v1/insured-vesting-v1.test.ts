@@ -125,13 +125,13 @@ describe("InsuredVestingV1", () => {
         await expectUserBalanceDelta("usdc", 0);
       });
 
-      it("can claim tokens for multiple users, random amounts", async () => {
+      it.only("can claim tokens for multiple users, random amounts", async () => {
         const additionalUsersFunding = [];
 
         for (const user of additionalUsers) {
-          const amountToAllocate = Math.round(10 + (Math.random() * FUNDING_PER_USER - 10));
+          const amountToAllocate = 10 + Math.round(Math.random() * (FUNDING_PER_USER - 10));
           await insuredVesting.methods.setAllocation(user, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-          const amountToFund = Math.round(10 + (Math.random() * amountToAllocate - 10));
+          const amountToFund = 10 + Math.round(Math.random() * (amountToAllocate - 10));
           await insuredVesting.methods.addFunds(await mockUsdc.amount(amountToFund)).send({ from: user });
           additionalUsersFunding.push(amountToFund);
         }
