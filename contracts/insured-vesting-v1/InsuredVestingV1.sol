@@ -208,7 +208,6 @@ contract InsuredVestingV1 is Ownable {
         emit UserEmergencyClaimed(target, toClaim);
     }
 
-    // TODO shouldnt be able to claim usdc
     function recover(address tokenAddress) external onlyOwner {
         // Return any balance of the token that's not xctd
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
@@ -216,6 +215,10 @@ contract InsuredVestingV1 is Ownable {
 
         if (tokenAddress == address(xctd) && !emergencyReleased) {
             tokenBalanceToRecover -= Math.min(totalUsdcFunded * usdcToXctdRate, tokenBalanceToRecover);
+        }
+
+        if (tokenAddress == address(usdc)) {
+            tokenBalanceToRecover -= Math.min(totalUsdcFunded, tokenBalanceToRecover);
         }
 
         IERC20(tokenAddress).safeTransfer(project, tokenBalanceToRecover);
