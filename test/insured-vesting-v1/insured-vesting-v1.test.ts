@@ -699,6 +699,25 @@ describe("InsuredVestingV1", () => {
           BN(initiaProjectBalance).plus((await xctd.amount(FUNDING_PER_USER * 2)).multipliedBy(USDC_TO_XCTD_RATIO))
         );
       });
+
+      [
+        ["underfunded", 1, 1],
+        ["overfunded", FUNDING_PER_USER * 3, FUNDING_PER_USER * 3],
+        ["exactly funded", 0, 0],
+      ].forEach(([scenario, extraFundingToPass, expectedBalanceAfterRecover]) => {
+        it.only(`does not recover funded usdc (${scenario})`, async () => {
+          await setAllocationForUser1();
+          await setAllocationForUser2();
+          await addFundingFromUser1();
+          await addFundingFromUser2();
+
+          await mockUsdc.methods.transfer(insuredVesting.options.address, await mockUsdc.amount(extraFundingToPass)).send({ from: deployer });
+          await setBalancesForDelta();
+          await insuredVesting.methods.recover(mockUsdc.options.address).send({ from: deployer });
+          await expectProjectBalanceDelta("xctd", 0);
+          await expectProjectBalanceDelta("usdc", await mockUsdc.amount(expectedBalanceAfterRecover));
+        });
+      });
     });
 
     describe("access control", () => {
