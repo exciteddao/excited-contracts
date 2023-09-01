@@ -20,7 +20,7 @@ contract InsuredVestingV1 is Ownable {
     uint256 constant DURATION = 2 * 365 days;
 
     // Changeable by owner
-    bool public emergencyRelease = false;
+    bool public emergencyReleased = false;
 
     uint256 public startTime;
     uint256 public totalUsdcFunded = 0;
@@ -44,8 +44,9 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // Events
-    event UserClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount, bool isEmergency);
-    event ProjectClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount, bool isEmergency);
+    event UserClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount);
+    event UserEmergencyClaimed(address indexed target, uint256 usdcAmount);
+    event ProjectClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount);
     event AllocationSet(address indexed target, uint256 amount);
     event FundsAdded(address indexed target, uint256 amount);
     event EmergencyRelease();
@@ -63,9 +64,16 @@ contract InsuredVestingV1 is Ownable {
     error NoFundsAdded();
     error EmergencyReleased();
     error EmergencyNotReleased();
+    error AlreadyEmergencyReleased();
+    error OnlyOwnerOrSender();
 
     modifier onlyBeforeVesting() {
         if (startTime != 0 && block.timestamp > startTime) revert VestingAlreadyStarted();
+        _;
+    }
+
+    modifier onlyOwnerOrSender(address target) {
+        if (!(msg.sender == owner() || msg.sender == target)) revert OnlyOwnerOrSender();
         _;
     }
 
@@ -131,7 +139,7 @@ contract InsuredVestingV1 is Ownable {
 
         uint256 claimableUsdc = claimableFor(target);
 
-        if (emergencyRelease) revert EmergencyReleased();
+        if (emergencyReleased) revert EmergencyReleased();
         if (claimableUsdc == 0) revert NothingToClaim();
 
         uint256 claimableXctd = claimableUsdc * usdcToXctdRate;
@@ -142,18 +150,17 @@ contract InsuredVestingV1 is Ownable {
             xctd.safeTransfer(target, claimableXctd);
             usdc.safeTransfer(project, claimableUsdc);
 
-            emit UserClaimed(target, 0, claimableXctd, false);
-            emit ProjectClaimed(target, claimableUsdc, 0, false);
+            emit UserClaimed(target, 0, claimableXctd);
+            emit ProjectClaimed(target, claimableUsdc, 0);
         } else {
             xctd.safeTransfer(project, claimableXctd);
             usdc.safeTransfer(target, claimableUsdc);
 
-            emit UserClaimed(target, claimableUsdc, 0, false);
-            emit ProjectClaimed(target, 0, claimableXctd, false);
+            emit UserClaimed(target, claimableUsdc, 0);
+            emit ProjectClaimed(target, 0, claimableXctd);
         }
     }
 
-    // TODO: consider the case where this never gets called, but USDC funds are locked in the contract
     function activate() external onlyOwner onlyBeforeVesting {
         if (totalUsdcFunded == 0) revert NoFundsAdded();
         startTime = block.timestamp;
@@ -170,31 +177,23 @@ contract InsuredVestingV1 is Ownable {
         emit DecisionChanged(msg.sender, userVestings[msg.sender].claimDecision);
     }
 
-    // TODO: freeze/unfreeze by owner?
-
     // Used to allow users to claim back USDC if anything goes wrong
-    function emergencyReleaseVesting() public onlyOwner {
-        emergencyRelease = true;
-
+    function emergencyRelease() public onlyOwner {
+        if (emergencyReleased) revert AlreadyEmergencyReleased();
+        emergencyReleased = true;
         emit EmergencyRelease();
     }
 
-    // TODO does this give too much power to the owner - being able to effectively cancel the agreement?
-    function emergencyClaim(address target) public {
-        // UserVesting storage userStatus = userVestings[target];
-        // if (!emergencyRelease) revert EmergencyNotReleased();
-        // if (userStatus.usdcFunded == 0) revert NoFundsAdded();
-        // // check that lastperiodclaimed!=periodcount
-        // uint256 periodsClaimed = PERIOD_COUNT - userStatus.lastPeriodClaimed;
-        // userStatus.lastPeriodClaimed = PERIOD_COUNT;
-        // uint256 usdcToTransfer = (userStatus.usdcFunded - userStatus.usdcClaimed);
-        // uint256 xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate - userStatus.xctdClaimed);
-        // userStatus.usdcClaimed += usdcToTransfer;
-        // userStatus.xctdClaimed += xctdToTransfer;
-        // xctd.safeTransfer(project, xctdToTransfer);
-        // usdc.safeTransfer(target, usdcToTransfer);
-        // emit UserClaimed(target, PERIOD_COUNT, periodsClaimed, usdcToTransfer, 0, true);
-        // emit ProjectClaimed(target, PERIOD_COUNT, periodsClaimed, 0, xctdToTransfer, true);
+    function emergencyClaim(address target) public onlyOwnerOrSender(target) {
+        UserVesting storage userStatus = userVestings[target];
+        if (!emergencyReleased) revert EmergencyNotReleased();
+        if (userStatus.usdcFunded == 0) revert NoFundsAdded();
+
+        uint256 toClaim = userStatus.usdcFunded - userStatus.usdcClaimed;
+        userStatus.usdcClaimed += toClaim;
+        usdc.safeTransfer(target, toClaim);
+
+        emit UserEmergencyClaimed(target, toClaim);
     }
 
     // TODO shouldnt be able to claim usdc
@@ -202,17 +201,19 @@ contract InsuredVestingV1 is Ownable {
         // Return any balance of the token that's not xctd
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
         // // in case of XCTD, we also need to retain the total locked amount in the contract
-        if (tokenAddress == address(xctd)) {
+
+        if (tokenAddress == address(xctd) && !emergencyReleased) {
             tokenBalanceToRecover -= Math.min(totalUsdcFunded * usdcToXctdRate, tokenBalanceToRecover);
         }
 
-        IERC20(tokenAddress).safeTransfer(owner(), tokenBalanceToRecover);
+        IERC20(tokenAddress).safeTransfer(project, tokenBalanceToRecover);
 
         // in case of ETH, transfer the balance as well
-        Address.sendValue(payable(owner()), address(this).balance);
+        Address.sendValue(payable(project), address(this).balance);
 
+        // TODO why twice..?
         uint256 etherToRecover = address(this).balance;
-        Address.sendValue(payable(owner()), etherToRecover);
+        Address.sendValue(payable(project), etherToRecover);
 
         emit AmountRecovered(tokenAddress, tokenBalanceToRecover, etherToRecover);
     }

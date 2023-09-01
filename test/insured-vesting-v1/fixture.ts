@@ -60,6 +60,8 @@ export enum Error {
   NoFundsAdded = "NoFundsAdded",
   EmergencyReleased = "EmergencyReleased",
   EmergencyNotReleased = "EmergencyNotReleased",
+  OnlyOwnerOrSender = "OnlyOwnerOrSender",
+  AlreadyEmergencyReleased = "AlreadyEmergencyReleased",
 }
 
 export async function withFixture() {
@@ -79,8 +81,8 @@ export async function withFixture() {
   }
 }
 
-export async function transferXctdToVesting() {
-  await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(XCTD_TOKENS_ON_SALE)).send({ from: deployer });
+export async function transferXctdToVesting(amount = XCTD_TOKENS_ON_SALE) {
+  await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(amount)).send({ from: deployer });
 }
 
 export async function approveXctdToVesting(amount = XCTD_TOKENS_ON_SALE) {
