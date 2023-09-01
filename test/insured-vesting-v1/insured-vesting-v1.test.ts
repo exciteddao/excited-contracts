@@ -252,10 +252,10 @@ describe("InsuredVestingV1", () => {
       });
 
       it("owner can claim on behalf of user", async () => {
-        await setBalancesForDelta();
         await setAllocationForUser1();
         await addFundingFromUser1();
         await insuredVesting.methods.activate().send({ from: deployer });
+        await setBalancesForDelta();
         await advanceDays(77);
         await insuredVesting.methods.claim(user1).send({ from: deployer });
         await expectProjectBalanceDelta("usdc", await vestedAmount(77, "usdc"));
