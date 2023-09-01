@@ -10,6 +10,7 @@ import "hardhat/console.sol";
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
+    uint256 constant XCTD_USDC_DECIMAL_DIFFERENCE = 12;
     uint256 constant MIN_USDC_TO_FUND = 10 * 1e6; // 10 USDC
 
     IERC20 public immutable usdc;
@@ -67,6 +68,7 @@ contract InsuredVestingV1 is Ownable {
     error EmergencyNotReleased();
     error AlreadyEmergencyReleased();
     error OnlyOwnerOrSender();
+    error OnlyEthereum(uint256 chainId);
 
     modifier onlyBeforeVesting() {
         if (startTime != 0 && block.timestamp > startTime) revert VestingAlreadyStarted();
@@ -79,12 +81,13 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // in real life: 80*1e12 = $0.0125 XCTD
-    // TODO - do not use decimals()
     constructor(address _usdc, address _xctd, address _project, uint256 _usdcToXctdRate) {
+        if (!(block.chainid == 1 || block.chainid == 31337)) revert OnlyEthereum(block.chainid);
+
         usdc = IERC20(_usdc);
         xctd = IERC20(_xctd);
 
-        if (_usdcToXctdRate < 10 ** (ERC20(_xctd).decimals() - ERC20(_usdc).decimals())) revert UsdcToXctdRateTooLow(_usdcToXctdRate);
+        if (_usdcToXctdRate < 10 ** XCTD_USDC_DECIMAL_DIFFERENCE) revert UsdcToXctdRateTooLow(_usdcToXctdRate);
         if (_project == address(0)) revert ZeroAddress();
 
         usdcToXctdRate = _usdcToXctdRate;
