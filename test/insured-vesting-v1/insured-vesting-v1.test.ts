@@ -701,21 +701,22 @@ describe("InsuredVestingV1", () => {
       });
 
       [
-        ["underfunded", 1, 1],
-        ["overfunded", FUNDING_PER_USER * 3, FUNDING_PER_USER * 3],
-        ["exactly funded", 0, 0],
-      ].forEach(([scenario, extraFundingToPass, expectedBalanceAfterRecover]) => {
-        it.only(`does not recover funded usdc (${scenario})`, async () => {
+        ["minimally overfunded", 1],
+        ["overfunded", FUNDING_PER_USER * 3],
+        ["exactly funded", 0],
+      ].forEach(([scenario, extraFundingToPass]) => {
+        it(`does not recover funded usdc (${scenario})`, async () => {
           await setAllocationForUser1();
           await setAllocationForUser2();
           await addFundingFromUser1();
           await addFundingFromUser2();
 
           await mockUsdc.methods.transfer(insuredVesting.options.address, await mockUsdc.amount(extraFundingToPass)).send({ from: deployer });
+
           await setBalancesForDelta();
           await insuredVesting.methods.recover(mockUsdc.options.address).send({ from: deployer });
           await expectProjectBalanceDelta("xctd", 0);
-          await expectProjectBalanceDelta("usdc", await mockUsdc.amount(expectedBalanceAfterRecover));
+          await expectProjectBalanceDelta("usdc", await mockUsdc.amount(extraFundingToPass));
         });
       });
     });
