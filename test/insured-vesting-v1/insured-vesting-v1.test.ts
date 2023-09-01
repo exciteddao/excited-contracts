@@ -396,6 +396,13 @@ describe("InsuredVestingV1", () => {
         await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), Error.VestingAlreadyStarted);
       });
 
+      it("cannot add funds if emergency released", async () => {
+        await setAllocationForUser1();
+        await addFundingFromUser1(FUNDING_PER_USER / 2);
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
+        await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), Error.EmergencyReleased);
+      });
+
       it("not enough XCTD balance for deposited USDC", async () => {
         const amount = 100_000_000;
         await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(amount)).send({ from: deployer });
@@ -494,6 +501,13 @@ describe("InsuredVestingV1", () => {
           });
         });
       });
+
+      it("cannot set allocation if emergency released", async () => {
+        await setAllocationForUser1();
+        await addFundingFromUser1();
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
+        await expectRevert(() => insuredVesting.methods.setAllocation(user1, 1).send({ from: deployer }), Error.EmergencyReleased);
+      });
     });
 
     describe("emergency release", () => {
@@ -575,7 +589,7 @@ describe("InsuredVestingV1", () => {
 
       it("cannot emergency release twice", async () => {
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
-        await expectRevert(() => insuredVesting.methods.emergencyRelease().send({ from: deployer }), Error.AlreadyEmergencyReleased);
+        await expectRevert(() => insuredVesting.methods.emergencyRelease().send({ from: deployer }), Error.EmergencyReleased);
       });
 
       it("recovers all remaining xctd balance if emergency released", async () => {
