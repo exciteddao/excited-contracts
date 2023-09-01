@@ -4,7 +4,6 @@ pragma solidity 0.8.19;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/math/Math.sol";
-import "hardhat/console.sol";
 
 contract UninsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
@@ -22,7 +21,7 @@ contract UninsuredVestingV1 is Ownable {
 
     uint256 public startTime;
     // TODO: rename this / remove when we change recovery functionality
-    uint256 public amountAssigned = 0;
+    uint256 public totalAllocated;
 
     // Events
     event Claimed(address indexed target, uint256 amount);
@@ -31,31 +30,22 @@ contract UninsuredVestingV1 is Ownable {
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
     // Errors
+    error ZeroAddress();
     error StartTimeTooSoon(uint256 startTime, uint256 minStartTime);
     error StartTimeNotInFuture(uint256 newStartTime);
     error VestingNotStarted();
     error VestingAlreadyStarted();
     error NothingToClaim();
+    error NoAllocationsAdded();
 
-    constructor(address _xctd, uint256 _startTime) {
-        xctd = IERC20(_xctd);
-
-        if (_startTime < block.timestamp + 7 days) revert StartTimeTooSoon(_startTime, block.timestamp + 7 days);
-
-        startTime = _startTime;
+    modifier onlyBeforeVesting() {
+        if (startTime != 0 && block.timestamp > startTime) revert VestingAlreadyStarted();
+        _;
     }
 
-    // Read functions
-
-    // TODO - should be removed unless explicitly asked by product. introduces a problem,
-    // because owner can delay indefinitely.
-    function setStartTime(uint256 newStartTime) public onlyOwner {
-        if (block.timestamp > startTime) revert VestingAlreadyStarted();
-        if (newStartTime < block.timestamp) revert StartTimeNotInFuture(newStartTime);
-
-        startTime = newStartTime;
-
-        emit StartTimeSet(newStartTime);
+    constructor(address _xctd) {
+        if (_xctd == address(0)) revert ZeroAddress();
+        xctd = IERC20(_xctd);
     }
 
     function totalVestedFor(address target) public view returns (uint256) {
@@ -73,8 +63,20 @@ contract UninsuredVestingV1 is Ownable {
         return totalVested - totalClaimed;
     }
 
+    function activate() external onlyOwner onlyBeforeVesting {
+        if (totalAllocated == 0) revert NoAllocationsAdded();
+
+        startTime = block.timestamp;
+
+        uint256 delta = totalAllocated - Math.min(xctd.balanceOf(address(this)), totalAllocated);
+
+        xctd.safeTransferFrom(msg.sender, address(this), delta);
+
+        emit StartTimeSet(startTime);
+    }
+
     function claim(address target) public {
-        if (block.timestamp < startTime) revert VestingNotStarted();
+        if (startTime == 0 || block.timestamp < startTime) revert VestingNotStarted();
 
         uint256 claimable = claimableFor(target);
 
@@ -86,15 +88,13 @@ contract UninsuredVestingV1 is Ownable {
         emit Claimed(target, claimable);
     }
 
-    function setAmount(address target, uint256 amount) public onlyOwner {
-        if (block.timestamp > startTime) revert VestingAlreadyStarted();
-
+    function setAmount(address target, uint256 amount) public onlyOwner onlyBeforeVesting {
         uint256 currentAmountForUser = userVestings[target].amount;
 
         if (amount > currentAmountForUser) {
-            amountAssigned += amount - currentAmountForUser;
+            totalAllocated += amount - currentAmountForUser;
         } else {
-            amountAssigned -= currentAmountForUser - amount;
+            totalAllocated -= currentAmountForUser - amount;
         }
 
         userVestings[target].amount = amount;
@@ -107,7 +107,7 @@ contract UninsuredVestingV1 is Ownable {
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
         // // in case of XCTD, we also need to retain the total locked amount in the contract
         if (tokenAddress == address(xctd)) {
-            tokenBalanceToRecover -= amountAssigned;
+            tokenBalanceToRecover -= totalAllocated;
         }
 
         IERC20(tokenAddress).safeTransfer(owner(), tokenBalanceToRecover);
