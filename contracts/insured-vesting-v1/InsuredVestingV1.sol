@@ -44,8 +44,9 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // Events
-    event UserClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount, bool isEmergency);
-    event ProjectClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount, bool isEmergency);
+    event UserClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount);
+    event UserEmergencyClaimed(address indexed target, uint256 usdcAmount);
+    event ProjectClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount);
     event AllocationSet(address indexed target, uint256 amount);
     event FundsAdded(address indexed target, uint256 amount);
     event EmergencyRelease();
@@ -63,6 +64,7 @@ contract InsuredVestingV1 is Ownable {
     error NoFundsAdded();
     error EmergencyReleased();
     error EmergencyNotReleased();
+    error AlreadyEmergencyReleased();
     error OnlyOwnerOrSender();
 
     modifier onlyBeforeVesting() {
@@ -148,18 +150,17 @@ contract InsuredVestingV1 is Ownable {
             xctd.safeTransfer(target, claimableXctd);
             usdc.safeTransfer(project, claimableUsdc);
 
-            emit UserClaimed(target, 0, claimableXctd, false);
-            emit ProjectClaimed(target, claimableUsdc, 0, false);
+            emit UserClaimed(target, 0, claimableXctd);
+            emit ProjectClaimed(target, claimableUsdc, 0);
         } else {
             xctd.safeTransfer(project, claimableXctd);
             usdc.safeTransfer(target, claimableUsdc);
 
-            emit UserClaimed(target, claimableUsdc, 0, false);
-            emit ProjectClaimed(target, 0, claimableXctd, false);
+            emit UserClaimed(target, claimableUsdc, 0);
+            emit ProjectClaimed(target, 0, claimableXctd);
         }
     }
 
-    // TODO: consider the case where this never gets called, but USDC funds are locked in the contract
     function activate() external onlyOwner onlyBeforeVesting {
         if (totalUsdcFunded == 0) revert NoFundsAdded();
         startTime = block.timestamp;
@@ -178,34 +179,24 @@ contract InsuredVestingV1 is Ownable {
 
     // Used to allow users to claim back USDC if anything goes wrong
     function emergencyRelease() public onlyOwner {
+        if (emergencyReleased) revert AlreadyEmergencyReleased();
         emergencyReleased = true;
-
         emit EmergencyRelease();
     }
 
-    // TODO does this give too much power to the owner - being able to effectively cancel the agreement?
-    // TODO owner or investor only
     function emergencyClaim(address target) public onlyOwnerOrSender(target) {
         UserVesting storage userStatus = userVestings[target];
         if (!emergencyReleased) revert EmergencyNotReleased();
         if (userStatus.usdcFunded == 0) revert NoFundsAdded();
+
         uint256 toClaim = userStatus.usdcFunded - userStatus.usdcClaimed;
         userStatus.usdcClaimed += toClaim;
         usdc.safeTransfer(target, toClaim);
-        // uint256 periodsClaimed = PERIOD_COUNT - userStatus.lastPeriodClaimed;
-        // userStatus.lastPeriodClaimed = PERIOD_COUNT;
-        // uint256 usdcToTransfer = (userStatus.usdcFunded - userStatus.usdcClaimed);
-        // uint256 xctdToTransfer = (userStatus.usdcFunded * usdcToXctdRate - userStatus.xctdClaimed);
-        // userStatus.usdcClaimed += usdcToTransfer;
-        // userStatus.xctdClaimed += xctdToTransfer;
-        // xctd.safeTransfer(project, xctdToTransfer);
-        // usdc.safeTransfer(target, usdcToTransfer);
-        // emit UserClaimed(target, PERIOD_COUNT, periodsClaimed, usdcToTransfer, 0, true);
-        // emit ProjectClaimed(target, PERIOD_COUNT, periodsClaimed, 0, xctdToTransfer, true);
+
+        emit UserEmergencyClaimed(target, toClaim);
     }
 
     // TODO shouldnt be able to claim usdc
-    // TODO should this recover to owner or project?
     function recover(address tokenAddress) external onlyOwner {
         // Return any balance of the token that's not xctd
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));

@@ -36,7 +36,6 @@ import {
 import { bn18, bn6, web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 import { VESTING_PERIODS } from "../uninsured-vesting-v1/fixture";
-import exp from "constants";
 
 describe("InsuredVestingV1", () => {
   const balances = {
@@ -546,6 +545,11 @@ describe("InsuredVestingV1", () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
         await expectRevert(() => insuredVesting.methods.emergencyRelease().send({ from: user1 }), "Ownable: caller is not the owner");
+      });
+
+      it("cannot emergency release twice", async () => {
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
+        await expectRevert(() => insuredVesting.methods.emergencyRelease().send({ from: deployer }), Error.AlreadyEmergencyReleased);
       });
 
       it("recovers all remaining xctd balance if emergency released", async () => {

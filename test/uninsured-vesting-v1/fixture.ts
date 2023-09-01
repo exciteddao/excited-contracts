@@ -21,7 +21,6 @@ export const VESTING_DURATION_SECONDS = DAY * 730;
 
 export const XCTD_TOKENS_ON_SALE = 1_000_000;
 export const USDC_TO_XCTD_RATIO = 7;
-export const VESTING_PERIODS = 24;
 export const LOCKUP_MONTHS = 6;
 export const TOKENS_PER_USER = 10_000;
 

@@ -61,6 +61,7 @@ export enum Error {
   EmergencyReleased = "EmergencyReleased",
   EmergencyNotReleased = "EmergencyNotReleased",
   OnlyOwnerOrSender = "OnlyOwnerOrSender",
+  AlreadyEmergencyReleased = "AlreadyEmergencyReleased",
 }
 
 export async function withFixture() {
