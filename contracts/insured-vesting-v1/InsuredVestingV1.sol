@@ -127,12 +127,13 @@ contract InsuredVestingV1 is Ownable {
         uint256 totalClaimed = userVestings[target].usdcClaimed;
         uint256 totalVested = totalVestedFor(target);
 
+        // todo can this happen?
         if (totalClaimed >= totalVested) return 0;
 
         return totalVested - totalClaimed;
     }
 
-    function claim(address target) public {
+    function claim(address target) public onlyOwnerOrSender(target) {
         if (startTime == 0 || block.timestamp < startTime) revert VestingNotStarted();
 
         UserVesting storage userStatus = userVestings[target];
@@ -172,6 +173,7 @@ contract InsuredVestingV1 is Ownable {
         xctd.safeTransferFrom(project, address(this), delta);
     }
 
+    // TODO only be able to toggle if you have an allocation
     function toggleDecision() public {
         userVestings[msg.sender].claimDecision = userVestings[msg.sender].claimDecision == ClaimDecision.TOKENS ? ClaimDecision.USDC : ClaimDecision.TOKENS;
 
