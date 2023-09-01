@@ -73,7 +73,7 @@ contract InsuredVestingV1 is Ownable {
     }
 
     modifier onlyOwnerOrSender(address target) {
-        if (msg.sender != owner() && msg.sender != target) revert OnlyOwnerOrSender();
+        if (!(msg.sender == owner() || msg.sender == target)) revert OnlyOwnerOrSender();
         _;
     }
 
