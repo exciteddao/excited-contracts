@@ -23,7 +23,6 @@ import {
 } from "./fixture";
 import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { UninsuredVestingV1 } from "../../typechain-hardhat/contracts/uninsured-vesting-v1/UninsuredVestingV1";
-import { FUNDING_PER_USER, addFundingFromUser1 } from "../insured-vesting-v1/fixture";
 
 describe("UninsuredVestingV1", () => {
   beforeEach(async () => withFixture());
