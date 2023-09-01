@@ -10,18 +10,16 @@ import "hardhat/console.sol";
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
-    uint256 constant MIN_USDC_TO_FUND = 10 * 1e6; // 10 USDC
+    uint256 constant MIN_USDC_TO_FUND = 10 * 1e6; // 10 USDC - todo - related to decimals
+    uint256 constant DURATION = 2 * 365 days;
 
     IERC20 public immutable usdc;
     IERC20 public immutable xctd;
     uint256 public immutable usdcToXctdRate;
 
-    uint256 constant DURATION = 2 * 365 days;
-
-    // Changeable by owner
     bool public emergencyReleased = false;
-
     address public project;
+
     uint256 public startTime;
     uint256 public totalUsdcFunded = 0;
 
@@ -65,7 +63,6 @@ contract InsuredVestingV1 is Ownable {
     error NoFundsAdded();
     error EmergencyReleased();
     error EmergencyNotReleased();
-    error AlreadyEmergencyReleased();
     error OnlyOwnerOrSender();
 
     modifier onlyBeforeVesting() {
@@ -75,6 +72,11 @@ contract InsuredVestingV1 is Ownable {
 
     modifier onlyOwnerOrSender(address target) {
         if (!(msg.sender == owner() || msg.sender == target)) revert OnlyOwnerOrSender();
+        _;
+    }
+
+    modifier onlyIfNotEmergencyReleased() {
+        if (emergencyReleased) revert EmergencyReleased();
         _;
     }
 
@@ -91,22 +93,9 @@ contract InsuredVestingV1 is Ownable {
         project = _project;
     }
 
-    function setAllocation(address target, uint256 _usdcAllocation) external onlyOwner onlyBeforeVesting {
-        // Update user allocation
-        userVestings[target].usdcAllocation = _usdcAllocation;
+    // --- User functions ---
 
-        // Refund user if they have funded more than the new allocation
-        if (userVestings[target].usdcFunded > _usdcAllocation) {
-            uint256 _usdcToRefund = userVestings[target].usdcFunded - _usdcAllocation;
-            userVestings[target].usdcFunded = _usdcAllocation;
-            totalUsdcFunded -= _usdcToRefund;
-            usdc.safeTransfer(target, _usdcToRefund);
-        }
-
-        emit AllocationSet(target, _usdcAllocation);
-    }
-
-    function addFunds(uint256 amount) public onlyBeforeVesting {
+    function addFunds(uint256 amount) public onlyBeforeVesting onlyIfNotEmergencyReleased {
         if ((userVestings[msg.sender].usdcAllocation - userVestings[msg.sender].usdcFunded) < amount) revert AllocationExceeded(amount);
         if (amount < MIN_USDC_TO_FUND) revert InsufficientFunds(amount, MIN_USDC_TO_FUND);
 
@@ -117,35 +106,16 @@ contract InsuredVestingV1 is Ownable {
         emit FundsAdded(msg.sender, amount);
     }
 
-    function totalVestedFor(address target) public view returns (uint256) {
-        if (startTime == 0 || block.timestamp < startTime) return 0;
-        UserVesting storage targetStatus = userVestings[target];
-        return Math.min(targetStatus.usdcFunded, ((block.timestamp - startTime) * targetStatus.usdcFunded) / DURATION);
-    }
-
-    function claimableFor(address target) public view returns (uint256) {
-        uint256 totalClaimed = userVestings[target].usdcClaimed;
-        uint256 totalVested = totalVestedFor(target);
-
-        // todo can this happen?
-        if (totalClaimed >= totalVested) return 0;
-
-        return totalVested - totalClaimed;
-    }
-
-    function claim(address target) public onlyOwnerOrSender(target) {
+    function claim(address target) public onlyOwnerOrSender(target) onlyIfNotEmergencyReleased {
         if (startTime == 0 || block.timestamp < startTime) revert VestingNotStarted();
 
         UserVesting storage userStatus = userVestings[target];
         if (userStatus.usdcFunded == 0) revert NoFundsAdded();
 
         uint256 claimableUsdc = claimableFor(target);
-
-        if (emergencyReleased) revert EmergencyReleased();
         if (claimableUsdc == 0) revert NothingToClaim();
 
         uint256 claimableXctd = claimableUsdc * usdcToXctdRate;
-
         userStatus.usdcClaimed += claimableUsdc;
 
         if (userStatus.claimDecision == ClaimDecision.TOKENS) {
@@ -163,6 +133,30 @@ contract InsuredVestingV1 is Ownable {
         }
     }
 
+    // TODO only be able to toggle if you have an allocation
+    function toggleDecision() public {
+        userVestings[msg.sender].claimDecision = userVestings[msg.sender].claimDecision == ClaimDecision.TOKENS ? ClaimDecision.USDC : ClaimDecision.TOKENS;
+
+        emit DecisionChanged(msg.sender, userVestings[msg.sender].claimDecision);
+    }
+
+    // --- Owner functions ---
+
+    function setAllocation(address target, uint256 _usdcAllocation) external onlyOwner onlyBeforeVesting onlyIfNotEmergencyReleased {
+        // Update user allocation
+        userVestings[target].usdcAllocation = _usdcAllocation;
+
+        // Refund user if they have funded more than the new allocation
+        if (userVestings[target].usdcFunded > _usdcAllocation) {
+            uint256 _usdcToRefund = userVestings[target].usdcFunded - _usdcAllocation;
+            userVestings[target].usdcFunded = _usdcAllocation;
+            totalUsdcFunded -= _usdcToRefund;
+            usdc.safeTransfer(target, _usdcToRefund);
+        }
+
+        emit AllocationSet(target, _usdcAllocation);
+    }
+
     function activate() external onlyOwner onlyBeforeVesting {
         if (totalUsdcFunded == 0) revert NoFundsAdded();
         startTime = block.timestamp;
@@ -171,13 +165,6 @@ contract InsuredVestingV1 is Ownable {
         uint256 delta = totalRequiredXctd - Math.min(xctd.balanceOf(address(this)), totalRequiredXctd);
 
         xctd.safeTransferFrom(project, address(this), delta);
-    }
-
-    // TODO only be able to toggle if you have an allocation
-    function toggleDecision() public {
-        userVestings[msg.sender].claimDecision = userVestings[msg.sender].claimDecision == ClaimDecision.TOKENS ? ClaimDecision.USDC : ClaimDecision.TOKENS;
-
-        emit DecisionChanged(msg.sender, userVestings[msg.sender].claimDecision);
     }
 
     function setProjectAddress(address newProject) external onlyOwner {
@@ -189,9 +176,9 @@ contract InsuredVestingV1 is Ownable {
         emit ProjectAddressChanged(oldProjectAddress, newProject);
     }
 
+    // --- Emergency functions ---
     // Used to allow users to claim back USDC if anything goes wrong
-    function emergencyRelease() public onlyOwner {
-        if (emergencyReleased) revert AlreadyEmergencyReleased();
+    function emergencyRelease() public onlyOwner onlyIfNotEmergencyReleased {
         emergencyReleased = true;
         emit EmergencyRelease();
     }
@@ -231,5 +218,23 @@ contract InsuredVestingV1 is Ownable {
         Address.sendValue(payable(project), etherToRecover);
 
         emit AmountRecovered(tokenAddress, tokenBalanceToRecover, etherToRecover);
+    }
+
+    // --- View functions ---
+
+    function totalVestedFor(address target) public view returns (uint256) {
+        if (startTime == 0 || block.timestamp < startTime) return 0;
+        UserVesting storage targetStatus = userVestings[target];
+        return Math.min(targetStatus.usdcFunded, ((block.timestamp - startTime) * targetStatus.usdcFunded) / DURATION);
+    }
+
+    function claimableFor(address target) public view returns (uint256) {
+        uint256 totalClaimed = userVestings[target].usdcClaimed;
+        uint256 totalVested = totalVestedFor(target);
+
+        // todo can this happen?
+        if (totalClaimed >= totalVested) return 0;
+
+        return totalVested - totalClaimed;
     }
 }
