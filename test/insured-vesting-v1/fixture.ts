@@ -47,6 +47,10 @@ export async function setup() {
   }
 }
 
+export enum Event {
+  ProjectAddressChanged = "ProjectAddressChanged",
+}
+
 export enum Error {
   ZeroAddress = "ZeroAddress",
   VestingAlreadyStarted = "VestingAlreadyStarted",

@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import BN, { BigNumber } from "bignumber.js";
+import BN from "bignumber.js";
 import { deployArtifact, expectRevert, setBalance } from "@defi.org/web3-candies/dist/hardhat";
 import {
   FUNDING_PER_USER,
@@ -32,10 +32,10 @@ import {
   setAllocationForUser1,
   setAllocationForUser2,
   XCTD_TOKENS_ON_SALE,
+  Event,
 } from "./fixture";
 import { bn18, bn6, web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
-import { VESTING_PERIODS } from "../uninsured-vesting-v1/fixture";
 
 describe("InsuredVestingV1", () => {
   const balances = {
@@ -566,6 +566,32 @@ describe("InsuredVestingV1", () => {
         expect(await xctd.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(0);
         await expectProjectBalanceDelta("xctd", (await xctd.amount(FUNDING_PER_USER * 2)).multipliedBy(USDC_TO_XCTD_RATIO));
         await expectProjectBalanceDelta("usdc", 0);
+      });
+    });
+
+    describe("update project address", () => {
+      it("should only be updatable by owner", async () => {
+        expect(await insuredVesting.methods.project().call()).to.be.eq(project);
+        const newProjectAddress = "0x148A0353F50Ba5683Ab0513CF6bda4E4fD43d7D4";
+        await insuredVesting.methods.setProjectAddress(newProjectAddress).send({ from: deployer });
+        expect(await insuredVesting.methods.project().call()).to.be.eq(newProjectAddress);
+      });
+
+      it("should not be updatable by non-owner", async () => {
+        const newProjectAddress = "0x148A0353F50Ba5683Ab0513CF6bda4E4fD43d7D4";
+        await expectRevert(() => insuredVesting.methods.setProjectAddress(newProjectAddress).send({ from: user1 }), "Ownable: caller is not the owner");
+      });
+
+      it("should not be updatable to zero address", async () => {
+        await expectRevert(() => insuredVesting.methods.setProjectAddress(zeroAddress).send({ from: deployer }), Error.ZeroAddress);
+      });
+
+      it(`should emit '${Event.ProjectAddressChanged}' event upon updating`, async () => {
+        const newProjectAddress = "0x148A0353F50Ba5683Ab0513CF6bda4E4fD43d7D4";
+        await insuredVesting.methods.setProjectAddress(newProjectAddress).send({ from: deployer });
+        const events = await insuredVesting.getPastEvents(Event.ProjectAddressChanged);
+        expect(events[0].returnValues.oldAddress).to.be.eq(project);
+        expect(events[0].returnValues.newAddress).to.be.eq(newProjectAddress);
       });
     });
 
