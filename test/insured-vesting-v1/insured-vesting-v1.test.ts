@@ -159,6 +159,16 @@ describe("InsuredVestingV1", () => {
         }
       });
 
+      // TODO figure out a way to send both claims in the same block
+      it.skip("cannot claim if there's nothing to claim", async () => {
+        await setAllocationForUser1();
+        await addFundingFromUser1();
+        await insuredVesting.methods.activate().send({ from: deployer });
+        insuredVesting.methods.claim(user1).send({ from: user1 });
+
+        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.NothingToClaim);
+      });
+
       it("can fund a partial allocation and claim tokens", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1(FUNDING_PER_USER / 3);
@@ -374,7 +384,7 @@ describe("InsuredVestingV1", () => {
 
       it("cannot add funds less than minimum required", async () => {
         await setAllocationForUser1();
-        `${Error.InsufficientFunds}(${await mockUsdc.amount(1)}, ${await mockUsdc.amount(MIN_USDC_TO_FUND)})`;
+        await expectRevert(async () => insuredVesting.methods.addFunds(await mockUsdc.amount(1)).send({ from: user1 }), Error.InsufficientFunds);
       });
 
       it("user cannot fund if does not have allocation", async () => {
@@ -752,6 +762,29 @@ describe("InsuredVestingV1", () => {
 
       it("cannot trigger emergency release if not owner", async () => {
         await expectRevert(async () => insuredVesting.methods.emergencyRelease().send({ from: anyUser }), "Ownable: caller is not the owner");
+      });
+    });
+
+    describe("view functions", () => {
+      it("returns 0 vested when not activated", async () => {
+        await setAllocationForUser1(FUNDING_PER_USER);
+        await addFundingFromUser1(FUNDING_PER_USER);
+        expect(await insuredVesting.methods.usdcVestedFor(user1).call()).to.be.bignumber.eq(0);
+      });
+
+      it("returns correct vested amount - immediately after activation", async () => {
+        await setAllocationForUser1(FUNDING_PER_USER);
+        await addFundingFromUser1(FUNDING_PER_USER);
+        await insuredVesting.methods.activate().send({ from: deployer });
+        expect(await insuredVesting.methods.usdcVestedFor(user1).call()).to.be.bignumber.eq(0);
+      });
+
+      it("returns correct vested amount - 30 days", async () => {
+        await setAllocationForUser1(FUNDING_PER_USER);
+        await addFundingFromUser1(FUNDING_PER_USER);
+        await insuredVesting.methods.activate().send({ from: deployer });
+        await advanceDays(30);
+        expect(await insuredVesting.methods.usdcVestedFor(user1).call()).to.be.bignumber.eq(await vestedAmount(30, "usdc"));
       });
     });
   });
