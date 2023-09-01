@@ -356,6 +356,12 @@ describe("InsuredVestingV1", () => {
           (await xctd.amount(FUNDING_PER_USER)).multipliedBy(USDC_TO_XCTD_RATIO).plus(currentProjectXctdBalance)
         );
       });
+
+      it("cannot toggle decision if has not funded", async () => {
+        await setAllocationForUser1();
+
+        await expectRevert(() => insuredVesting.methods.toggleDecision().send({ from: user1 }), Error.NoFundsAdded);
+      });
     });
 
     describe("add funds", () => {

@@ -133,8 +133,8 @@ contract InsuredVestingV1 is Ownable {
         }
     }
 
-    // TODO only be able to toggle if you have an allocation
     function toggleDecision() public {
+        if (userVestings[msg.sender].usdcFunded == 0) revert NoFundsAdded();
         userVestings[msg.sender].claimDecision = userVestings[msg.sender].claimDecision == ClaimDecision.TOKENS ? ClaimDecision.USDC : ClaimDecision.TOKENS;
 
         emit DecisionChanged(msg.sender, userVestings[msg.sender].claimDecision);
