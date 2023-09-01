@@ -125,7 +125,7 @@ describe("InsuredVestingV1", () => {
         await expectUserBalanceDelta("usdc", 0);
       });
 
-      it.only("can claim tokens for multiple users, random amounts", async () => {
+      it("can claim tokens for multiple users, random amounts", async () => {
         const additionalUsersFunding = [];
 
         for (const user of additionalUsers) {
@@ -355,6 +355,12 @@ describe("InsuredVestingV1", () => {
         expect(balances.project.xctd.plus(balances.user1.xctd)).to.be.bignumber.eq(
           (await xctd.amount(FUNDING_PER_USER)).multipliedBy(USDC_TO_XCTD_RATIO).plus(currentProjectXctdBalance)
         );
+      });
+
+      it("cannot toggle decision if has not funded", async () => {
+        await setAllocationForUser1();
+
+        await expectRevert(() => insuredVesting.methods.toggleDecision().send({ from: user1 }), Error.NoFundsAdded);
       });
     });
 
