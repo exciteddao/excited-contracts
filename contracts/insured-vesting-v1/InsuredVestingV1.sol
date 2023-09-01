@@ -15,13 +15,13 @@ contract InsuredVestingV1 is Ownable {
     IERC20 public immutable usdc;
     IERC20 public immutable xctd;
     uint256 public immutable usdcToXctdRate;
-    address public immutable project;
 
     uint256 constant DURATION = 2 * 365 days;
 
     // Changeable by owner
     bool public emergencyReleased = false;
 
+    address public project;
     uint256 public startTime;
     uint256 public totalUsdcFunded = 0;
 
@@ -52,6 +52,7 @@ contract InsuredVestingV1 is Ownable {
     event EmergencyRelease();
     event DecisionChanged(address indexed target, ClaimDecision decision);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
+    event ProjectAddressChanged(address indexed oldAddress, address indexed newAddress);
 
     // Errors
     error ZeroAddress();
@@ -165,16 +166,25 @@ contract InsuredVestingV1 is Ownable {
         if (totalUsdcFunded == 0) revert NoFundsAdded();
         startTime = block.timestamp;
 
-        // TODO msg.sender or project?
         uint256 totalRequiredXctd = totalUsdcFunded * usdcToXctdRate;
         uint256 delta = totalRequiredXctd - Math.min(xctd.balanceOf(address(this)), totalRequiredXctd);
-        xctd.safeTransferFrom(msg.sender, address(this), delta);
+
+        xctd.safeTransferFrom(project, address(this), delta);
     }
 
     function toggleDecision() public {
         userVestings[msg.sender].claimDecision = userVestings[msg.sender].claimDecision == ClaimDecision.TOKENS ? ClaimDecision.USDC : ClaimDecision.TOKENS;
 
         emit DecisionChanged(msg.sender, userVestings[msg.sender].claimDecision);
+    }
+
+    function setProjectAddress(address newProject) external onlyOwner {
+        if (newProject == address(0)) revert ZeroAddress();
+
+        address oldProjectAddress = project;
+        project = newProject;
+
+        emit ProjectAddressChanged(oldProjectAddress, newProject);
     }
 
     // Used to allow users to claim back USDC if anything goes wrong

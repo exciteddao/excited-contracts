@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import BN, { BigNumber } from "bignumber.js";
+import BN from "bignumber.js";
 import { deployArtifact, expectRevert, setBalance } from "@defi.org/web3-candies/dist/hardhat";
 import {
   FUNDING_PER_USER,
@@ -32,10 +32,10 @@ import {
   setAllocationForUser1,
   setAllocationForUser2,
   XCTD_TOKENS_ON_SALE,
+  Event,
 } from "./fixture";
 import { bn18, bn6, web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
-import { VESTING_PERIODS } from "../uninsured-vesting-v1/fixture";
 
 describe("InsuredVestingV1", () => {
   const balances = {
@@ -241,10 +241,10 @@ describe("InsuredVestingV1", () => {
       });
 
       it("project receives funding when claim is made", async () => {
-        await setBalancesForDelta();
         await setAllocationForUser1();
         await addFundingFromUser1();
         await insuredVesting.methods.activate().send({ from: deployer });
+        await setBalancesForDelta();
         await advanceDays(77);
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
         await expectProjectBalanceDelta("usdc", await vestedAmount(77, "usdc"));
@@ -256,9 +256,10 @@ describe("InsuredVestingV1", () => {
       it("can toggle decision and claim usdc back (toggle after vesting)", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
-        await setBalancesForDelta();
 
         await insuredVesting.methods.activate().send({ from: deployer });
+        await setBalancesForDelta();
+
         await advanceDays(30);
 
         await insuredVesting.methods.toggleDecision().send({ from: user1 });
@@ -273,11 +274,12 @@ describe("InsuredVestingV1", () => {
       it("can toggle decision and claim usdc back (toggle before vesting)", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
-        await setBalancesForDelta();
 
         await insuredVesting.methods.toggleDecision().send({ from: user1 });
 
         await insuredVesting.methods.activate().send({ from: deployer });
+        await setBalancesForDelta();
+
         await advanceDays(30);
 
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
@@ -291,10 +293,12 @@ describe("InsuredVestingV1", () => {
       it("can claim some tokens, some usdc for entire vesting period, use toggle multiple times", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
-        await setBalancesForDelta();
 
         // Claim for 11 months
         await insuredVesting.methods.activate().send({ from: deployer });
+        await setBalancesForDelta();
+        const currentProjectXctdBalance = balances.project.xctd;
+
         await advanceDays(11 * 30);
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
         await expectUserBalanceDelta("xctd", await vestedAmount(11 * 30, "xctd"));
@@ -328,7 +332,9 @@ describe("InsuredVestingV1", () => {
         // Update balances and verify no remainders
         await setBalancesForDelta();
         expect(balances.project.usdc.plus(balances.user1.usdc)).to.be.bignumber.eq(await mockUsdc.amount(FUNDING_PER_USER));
-        expect(balances.project.xctd.plus(balances.user1.xctd)).to.be.bignumber.eq((await xctd.amount(FUNDING_PER_USER)).multipliedBy(USDC_TO_XCTD_RATIO));
+        expect(balances.project.xctd.plus(balances.user1.xctd)).to.be.bignumber.eq(
+          (await xctd.amount(FUNDING_PER_USER)).multipliedBy(USDC_TO_XCTD_RATIO).plus(currentProjectXctdBalance)
+        );
       });
     });
 
@@ -569,6 +575,32 @@ describe("InsuredVestingV1", () => {
       });
     });
 
+    describe("update project address", () => {
+      it("should only be updatable by owner", async () => {
+        expect(await insuredVesting.methods.project().call()).to.be.eq(project);
+        const newProjectAddress = "0x148A0353F50Ba5683Ab0513CF6bda4E4fD43d7D4";
+        await insuredVesting.methods.setProjectAddress(newProjectAddress).send({ from: deployer });
+        expect(await insuredVesting.methods.project().call()).to.be.eq(newProjectAddress);
+      });
+
+      it("should not be updatable by non-owner", async () => {
+        const newProjectAddress = "0x148A0353F50Ba5683Ab0513CF6bda4E4fD43d7D4";
+        await expectRevert(() => insuredVesting.methods.setProjectAddress(newProjectAddress).send({ from: user1 }), "Ownable: caller is not the owner");
+      });
+
+      it("should not be updatable to zero address", async () => {
+        await expectRevert(() => insuredVesting.methods.setProjectAddress(zeroAddress).send({ from: deployer }), Error.ZeroAddress);
+      });
+
+      it(`should emit '${Event.ProjectAddressChanged}' event upon updating`, async () => {
+        const newProjectAddress = "0x148A0353F50Ba5683Ab0513CF6bda4E4fD43d7D4";
+        await insuredVesting.methods.setProjectAddress(newProjectAddress).send({ from: deployer });
+        const events = await insuredVesting.getPastEvents(Event.ProjectAddressChanged);
+        expect(events[0].returnValues.oldAddress).to.be.eq(project);
+        expect(events[0].returnValues.newAddress).to.be.eq(newProjectAddress);
+      });
+    });
+
     // TODO add expectations for project balances
     describe("recovery", () => {
       it("recovers ether", async () => {
@@ -605,7 +637,7 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
         await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
         await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user2 });
-        await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(100)).send({ from: deployer });
+        await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(100)).send({ from: project });
         await insuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
         // Retains tokens in the contract, nothing to recover
         expect(await xctd.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(await xctd.amount(100));
@@ -676,7 +708,7 @@ describe("InsuredVestingV1", () => {
       await addFundingFromUser1(FUNDING_PER_USER);
       await approveXctdToVesting();
       // Get rid of all balance
-      await xctd.methods.transfer(anyUser, await xctd.amount(1e9)).send({ from: deployer });
+      await xctd.methods.transfer(anyUser, await xctd.amount(1e9)).send({ from: project });
       await expectRevert(async () => insuredVesting.methods.activate().send({ from: deployer }), "ERC20: transfer amount exceeds balance");
     });
 
@@ -701,7 +733,7 @@ describe("InsuredVestingV1", () => {
 
       await approveXctdToVesting();
 
-      await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(FUNDING_PER_USER * 10)).send({ from: deployer });
+      await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(FUNDING_PER_USER * 10)).send({ from: project });
 
       const initialContractXctdBalance = await xctd.methods.balanceOf(insuredVesting.options.address).call();
       await insuredVesting.methods.activate().send({ from: deployer });
@@ -718,7 +750,7 @@ describe("InsuredVestingV1", () => {
 
       await approveXctdToVesting();
 
-      await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(FUNDING_PER_USER / 3)).send({ from: deployer });
+      await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(FUNDING_PER_USER / 3)).send({ from: project });
 
       await insuredVesting.methods.activate().send({ from: deployer });
 
