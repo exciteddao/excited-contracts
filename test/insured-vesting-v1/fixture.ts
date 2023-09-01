@@ -83,14 +83,17 @@ export async function withFixture() {
     await mockUsdc.methods.transfer(target, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
     await mockUsdc.methods.approve(insuredVesting.options.address, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: target });
   }
+
+  await xctd.methods.transfer(project, bn18(1e9)).send({ from: deployer });
+  await xctd.methods.approve(project, bn18(1e9)).send({ from: deployer });
 }
 
 export async function transferXctdToVesting(amount = XCTD_TOKENS_ON_SALE) {
-  await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(amount)).send({ from: deployer });
+  await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(amount)).send({ from: project });
 }
 
 export async function approveXctdToVesting(amount = XCTD_TOKENS_ON_SALE) {
-  await xctd.methods.approve(insuredVesting.options.address, await xctd.amount(amount)).send({ from: deployer });
+  await xctd.methods.approve(insuredVesting.options.address, await xctd.amount(amount)).send({ from: project });
 }
 
 export function advanceDays(days: number): Promise<BlockInfo> {

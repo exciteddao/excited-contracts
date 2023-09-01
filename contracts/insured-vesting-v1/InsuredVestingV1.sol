@@ -166,10 +166,10 @@ contract InsuredVestingV1 is Ownable {
         if (totalUsdcFunded == 0) revert NoFundsAdded();
         startTime = block.timestamp;
 
-        // TODO msg.sender or project?
         uint256 totalRequiredXctd = totalUsdcFunded * usdcToXctdRate;
         uint256 delta = totalRequiredXctd - Math.min(xctd.balanceOf(address(this)), totalRequiredXctd);
-        xctd.safeTransferFrom(msg.sender, address(this), delta);
+
+        xctd.safeTransferFrom(project, address(this), delta);
     }
 
     function toggleDecision() public {

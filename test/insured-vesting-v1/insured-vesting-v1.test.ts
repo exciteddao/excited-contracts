@@ -241,10 +241,10 @@ describe("InsuredVestingV1", () => {
       });
 
       it("project receives funding when claim is made", async () => {
-        await setBalancesForDelta();
         await setAllocationForUser1();
         await addFundingFromUser1();
         await insuredVesting.methods.activate().send({ from: deployer });
+        await setBalancesForDelta();
         await advanceDays(77);
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
         await expectProjectBalanceDelta("usdc", await vestedAmount(77, "usdc"));
@@ -256,9 +256,10 @@ describe("InsuredVestingV1", () => {
       it("can toggle decision and claim usdc back (toggle after vesting)", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
-        await setBalancesForDelta();
 
         await insuredVesting.methods.activate().send({ from: deployer });
+        await setBalancesForDelta();
+
         await advanceDays(30);
 
         await insuredVesting.methods.toggleDecision().send({ from: user1 });
@@ -273,11 +274,12 @@ describe("InsuredVestingV1", () => {
       it("can toggle decision and claim usdc back (toggle before vesting)", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
-        await setBalancesForDelta();
 
         await insuredVesting.methods.toggleDecision().send({ from: user1 });
 
         await insuredVesting.methods.activate().send({ from: deployer });
+        await setBalancesForDelta();
+
         await advanceDays(30);
 
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
@@ -291,10 +293,12 @@ describe("InsuredVestingV1", () => {
       it("can claim some tokens, some usdc for entire vesting period, use toggle multiple times", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
-        await setBalancesForDelta();
 
         // Claim for 11 months
         await insuredVesting.methods.activate().send({ from: deployer });
+        await setBalancesForDelta();
+        const currentProjectXctdBalance = balances.project.xctd;
+
         await advanceDays(11 * 30);
         await insuredVesting.methods.claim(user1).send({ from: anyUser });
         await expectUserBalanceDelta("xctd", await vestedAmount(11 * 30, "xctd"));
@@ -328,7 +332,9 @@ describe("InsuredVestingV1", () => {
         // Update balances and verify no remainders
         await setBalancesForDelta();
         expect(balances.project.usdc.plus(balances.user1.usdc)).to.be.bignumber.eq(await mockUsdc.amount(FUNDING_PER_USER));
-        expect(balances.project.xctd.plus(balances.user1.xctd)).to.be.bignumber.eq((await xctd.amount(FUNDING_PER_USER)).multipliedBy(USDC_TO_XCTD_RATIO));
+        expect(balances.project.xctd.plus(balances.user1.xctd)).to.be.bignumber.eq(
+          (await xctd.amount(FUNDING_PER_USER)).multipliedBy(USDC_TO_XCTD_RATIO).plus(currentProjectXctdBalance)
+        );
       });
     });
 
@@ -631,7 +637,7 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
         await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user1 });
         await insuredVesting.methods.addFunds(await mockUsdc.amount(FUNDING_PER_USER)).send({ from: user2 });
-        await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(100)).send({ from: deployer });
+        await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(100)).send({ from: project });
         await insuredVesting.methods.recover(xctd.options.address).send({ from: deployer });
         // Retains tokens in the contract, nothing to recover
         expect(await xctd.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(await xctd.amount(100));
@@ -702,7 +708,7 @@ describe("InsuredVestingV1", () => {
       await addFundingFromUser1(FUNDING_PER_USER);
       await approveXctdToVesting();
       // Get rid of all balance
-      await xctd.methods.transfer(anyUser, await xctd.amount(1e9)).send({ from: deployer });
+      await xctd.methods.transfer(anyUser, await xctd.amount(1e9)).send({ from: project });
       await expectRevert(async () => insuredVesting.methods.activate().send({ from: deployer }), "ERC20: transfer amount exceeds balance");
     });
 
@@ -727,7 +733,7 @@ describe("InsuredVestingV1", () => {
 
       await approveXctdToVesting();
 
-      await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(FUNDING_PER_USER * 10)).send({ from: deployer });
+      await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(FUNDING_PER_USER * 10)).send({ from: project });
 
       const initialContractXctdBalance = await xctd.methods.balanceOf(insuredVesting.options.address).call();
       await insuredVesting.methods.activate().send({ from: deployer });
@@ -744,7 +750,7 @@ describe("InsuredVestingV1", () => {
 
       await approveXctdToVesting();
 
-      await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(FUNDING_PER_USER / 3)).send({ from: deployer });
+      await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(FUNDING_PER_USER / 3)).send({ from: project });
 
       await insuredVesting.methods.activate().send({ from: deployer });
 
