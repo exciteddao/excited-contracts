@@ -100,7 +100,7 @@ describe("InsuredVestingV1", () => {
           await addFundingFromUser1();
           await insuredVesting.methods.activate().send({ from: deployer });
           await advanceDays(days);
-          await insuredVesting.methods.claim(user1).send({ from: anyUser });
+          await insuredVesting.methods.claim(user1).send({ from: user1 });
 
           await expectUserBalanceDelta("xctd", await vestedAmount(days, "xctd"));
           await expectUserBalanceDelta("usdc", 0);
@@ -120,7 +120,7 @@ describe("InsuredVestingV1", () => {
         await advanceMonths(LOCKUP_MONTHS - 3);
         await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(6);
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("xctd", await vestedAmount(6, "xctd"));
         await expectUserBalanceDelta("usdc", 0);
       });
@@ -141,14 +141,14 @@ describe("InsuredVestingV1", () => {
         await setBalancesForDelta();
         await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(30);
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("xctd", await vestedAmount(30, "xctd"));
         await expectUserBalanceDelta("usdc", 0);
 
         for (const [index, user] of additionalUsers.entries()) {
           const funding = additionalUsersFunding[index];
           expect(await xctd.methods.balanceOf(user).call()).to.be.bignumber.zero;
-          await insuredVesting.methods.claim(user).send({ from: anyUser });
+          await insuredVesting.methods.claim(user).send({ from: user });
           expect(await xctd.methods.balanceOf(user).call()).to.be.bignumber.closeTo(
             (await xctd.amount(funding))
               .multipliedBy(USDC_TO_XCTD_RATIO)
@@ -165,7 +165,7 @@ describe("InsuredVestingV1", () => {
         await setBalancesForDelta();
         await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(20);
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("xctd", (await vestedAmount(20, "xctd")).dividedBy(3));
         await expectUserBalanceDelta("usdc", 0);
       });
@@ -179,7 +179,7 @@ describe("InsuredVestingV1", () => {
         await advanceMonths(LOCKUP_MONTHS - 2);
         await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(20);
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("xctd", (await vestedAmount(20, "xctd")).dividedBy(2));
         await expectUserBalanceDelta("usdc", 0);
       });
@@ -190,24 +190,24 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(45);
 
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
 
         await setBalancesForDelta();
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("xctd", 0);
       });
 
       it("cannot claim tokens before starting period, zero time", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
-        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), Error.VestingNotStarted);
+        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.VestingNotStarted);
       });
 
       it("cannot claim tokens before starting period, some time has passed", async () => {
         await advanceMonths(LOCKUP_MONTHS / 2);
         await setAllocationForUser1();
         await addFundingFromUser1();
-        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), Error.VestingNotStarted);
+        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.VestingNotStarted);
       });
 
       it("cannot claim if not funded", async () => {
@@ -215,7 +215,7 @@ describe("InsuredVestingV1", () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
         await insuredVesting.methods.activate().send({ from: deployer });
-        await expectRevert(async () => insuredVesting.methods.claim(user2).send({ from: anyUser }), Error.NoFundsAdded);
+        await expectRevert(async () => insuredVesting.methods.claim(user2).send({ from: user2 }), Error.NoFundsAdded);
       });
 
       it("can claim tokens for the entire vesting period", async () => {
@@ -224,7 +224,7 @@ describe("InsuredVestingV1", () => {
         await setBalancesForDelta();
         await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(VESTING_DURATION_DAYS);
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("xctd", await xctd.amount(FUNDING_PER_USER * USDC_TO_XCTD_RATIO));
         await expectUserBalanceDelta("usdc", 0);
       });
@@ -235,7 +235,7 @@ describe("InsuredVestingV1", () => {
         await setBalancesForDelta();
         await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(VESTING_DURATION_DAYS * 3);
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("xctd", await xctd.amount(FUNDING_PER_USER * USDC_TO_XCTD_RATIO));
         await expectUserBalanceDelta("usdc", 0);
       });
@@ -246,9 +246,29 @@ describe("InsuredVestingV1", () => {
         await addFundingFromUser1();
         await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(77);
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectProjectBalanceDelta("usdc", await vestedAmount(77, "usdc"));
         await expectProjectBalanceDelta("xctd", 0);
+      });
+
+      it("project can claim on behalf of user", async () => {
+        await setBalancesForDelta();
+        await setAllocationForUser1();
+        await addFundingFromUser1();
+        await insuredVesting.methods.activate().send({ from: deployer });
+        await advanceDays(77);
+        await insuredVesting.methods.claim(user1).send({ from: deployer });
+        await expectProjectBalanceDelta("usdc", await vestedAmount(77, "usdc"));
+        await expectProjectBalanceDelta("xctd", 0);
+      });
+
+      it("cannot claim if not user or project", async () => {
+        await setBalancesForDelta();
+        await setAllocationForUser1();
+        await addFundingFromUser1();
+        await insuredVesting.methods.activate().send({ from: deployer });
+        await advanceDays(77);
+        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), Error.OnlyOwnerOrSender);
       });
     });
 
@@ -262,7 +282,7 @@ describe("InsuredVestingV1", () => {
         await advanceDays(30);
 
         await insuredVesting.methods.toggleDecision().send({ from: user1 });
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
 
         await expectUserBalanceDelta("xctd", 0);
         await expectProjectBalanceDelta("xctd", await vestedAmount(30, "xctd"));
@@ -280,7 +300,7 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(30);
 
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
 
         await expectUserBalanceDelta("xctd", 0);
         await expectProjectBalanceDelta("xctd", await vestedAmount(30, "xctd"));
@@ -296,7 +316,7 @@ describe("InsuredVestingV1", () => {
         // Claim for 11 months
         await insuredVesting.methods.activate().send({ from: deployer });
         await advanceDays(11 * 30);
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("xctd", await vestedAmount(11 * 30, "xctd"));
         await expectUserBalanceDelta("usdc", 0);
         await expectProjectBalanceDelta("xctd", 0);
@@ -305,7 +325,7 @@ describe("InsuredVestingV1", () => {
         // Toggle, let 3 months pass and claim USDC (we're at month 14)
         await insuredVesting.methods.toggleDecision().send({ from: user1 });
         await advanceDays(3 * 30);
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("xctd", await vestedAmount(11 * 30, "xctd"));
         await expectUserBalanceDelta("usdc", await vestedAmount(3 * 30, "usdc"));
         await expectProjectBalanceDelta("xctd", await vestedAmount(3 * 30, "xctd"));
@@ -314,7 +334,7 @@ describe("InsuredVestingV1", () => {
         // Let another 3 months pass, toggle again to token and claim (we're at month 17)
         await advanceDays(3 * 30);
         await insuredVesting.methods.toggleDecision().send({ from: user1 });
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("xctd", await vestedAmount(14 * 30, "xctd"));
         await expectUserBalanceDelta("usdc", await vestedAmount(3 * 30, "usdc"));
         await expectProjectBalanceDelta("xctd", await vestedAmount(3 * 30, "xctd"));
@@ -323,7 +343,7 @@ describe("InsuredVestingV1", () => {
         // Toggle again and claim USDC for remaining periods (we're at month 24 - finished)
         await insuredVesting.methods.toggleDecision().send({ from: user1 });
         await advanceDays(220);
-        await insuredVesting.methods.claim(user1).send({ from: anyUser });
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
 
         // Update balances and verify no remainders
         await setBalancesForDelta();
