@@ -10,6 +10,9 @@ import "hardhat-watcher";
 import "solidity-coverage";
 import { config } from "./deployment/insured-vesting-v1/config";
 
+// TODO: confirm name
+const insuredContractDeployedName = "InsuredVesting";
+
 task("deploy-insured", "Deploy InsuredVesting contract")
   .addOptionalParam("dry", "dry run", true, types.boolean)
   .setAction(async (args, hre) => {
@@ -29,7 +32,7 @@ task("deploy-insured", "Deploy InsuredVesting contract")
 
     if (!args.dry) {
       console.log("Deploying...");
-      await deploy({ contractName: "InsuredVesting", args: config, maxFeePerGas: max, maxPriorityFeePerGas: tip });
+      await deploy({ contractName: insuredContractDeployedName, args: config, maxFeePerGas: max, maxPriorityFeePerGas: tip });
     }
   });
 
