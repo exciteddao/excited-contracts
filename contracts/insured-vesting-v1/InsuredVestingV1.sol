@@ -9,7 +9,9 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
+    // TODO: remove this and add a test for 1 wei
     uint256 public constant MIN_USDC_FUND_AMOUNT = 10 * 1e6; // 10 USDC - todo - related to decimals
+    // TODO: move to deployscrip
     uint256 public constant DURATION = 2 * 365 days;
 
     IERC20 public immutable USDC;
@@ -87,6 +89,7 @@ contract InsuredVestingV1 is Ownable {
         USDC = IERC20(_usdc);
         XCTD = IERC20(_xctd);
 
+        // TODO: do these checks in deploy script rather than here
         if (_usdcToXctdRate < 10 ** (ERC20(_xctd).decimals() - ERC20(_usdc).decimals())) revert UsdcToXctdRateTooLow(_usdcToXctdRate);
         if (_project == address(0)) revert ZeroAddress();
 
@@ -95,9 +98,9 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // --- User functions ---
-    function addFunds(uint256 amount) public onlyBeforeVesting onlyIfNotEmergencyReleased {
+    function addFunds(uint256 amount) external onlyBeforeVesting onlyIfNotEmergencyReleased {
         if ((userVestings[msg.sender].usdcAllocation - userVestings[msg.sender].usdcFunded) < amount) revert AllocationExceeded(amount);
-        if (amount < MIN_USDC_FUND_AMOUNT) revert BelowMinFundingAmount(amount);
+        if (amount < MIN_USDC_FUND_AMOUNT) revert BelowMinFundingAmount(amount); // TODO remove
 
         userVestings[msg.sender].usdcFunded += amount;
         totalUsdcFunded += amount;
@@ -106,7 +109,7 @@ contract InsuredVestingV1 is Ownable {
         emit FundsAdded(msg.sender, amount);
     }
 
-    function claim(address target) public onlyOwnerOrSender(target) onlyIfNotEmergencyReleased {
+    function claim(address target) external onlyOwnerOrSender(target) onlyIfNotEmergencyReleased {
         if (startTime == 0) revert VestingNotStarted();
 
         UserVesting storage userStatus = userVestings[target];
@@ -134,7 +137,7 @@ contract InsuredVestingV1 is Ownable {
         }
     }
 
-    function toggleDecision() public {
+    function toggleDecision() external {
         if (userVestings[msg.sender].usdcFunded == 0) revert NoFundsAdded();
         userVestings[msg.sender].claimDecision = userVestings[msg.sender].claimDecision == ClaimDecision.TOKENS ? ClaimDecision.USDC : ClaimDecision.TOKENS;
 
@@ -169,6 +172,7 @@ contract InsuredVestingV1 is Ownable {
         emit VestingStarted(delta);
     }
 
+    // TODO - revisit this with Tal
     function setProjectAddress(address newProject) external onlyOwner {
         if (newProject == address(0)) revert ZeroAddress();
 
@@ -180,12 +184,12 @@ contract InsuredVestingV1 is Ownable {
 
     // --- Emergency functions ---
     // Used to allow users to claim back USDC if anything goes wrong
-    function emergencyRelease() public onlyOwner onlyIfNotEmergencyReleased {
+    function emergencyRelease() external onlyOwner onlyIfNotEmergencyReleased {
         emergencyReleased = true;
         emit EmergencyRelease();
     }
 
-    function emergencyClaim(address target) public onlyOwnerOrSender(target) {
+    function emergencyClaim(address target) external onlyOwnerOrSender(target) {
         UserVesting storage userStatus = userVestings[target];
         if (!emergencyReleased) revert EmergencyNotReleased();
         if (userStatus.usdcFunded == 0) revert NoFundsAdded();
@@ -212,10 +216,6 @@ contract InsuredVestingV1 is Ownable {
 
         IERC20(tokenAddress).safeTransfer(project, tokenBalanceToRecover);
 
-        // in case of ETH, transfer the balance as well
-        Address.sendValue(payable(project), address(this).balance);
-
-        // TODO why twice..?
         uint256 etherToRecover = address(this).balance;
         Address.sendValue(payable(project), etherToRecover);
 
