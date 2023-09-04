@@ -10,6 +10,7 @@ contract UninsuredVestingV1 is Ownable {
 
     IERC20 public immutable XCTD;
 
+    // TODO - move to deployscript
     uint256 public constant DURATION = 2 * 365 days;
 
     uint256 public startTime;
@@ -40,17 +41,19 @@ contract UninsuredVestingV1 is Ownable {
 
     // --- Modifiers ---
     modifier onlyBeforeVesting() {
-        if (startTime != 0 && block.timestamp > startTime) revert VestingAlreadyStarted();
+        if (startTime != 0) revert VestingAlreadyStarted();
         _;
     }
 
     constructor(address _xctd) {
+        // TODO: move to deployscript
         if (_xctd == address(0)) revert ZeroAddress();
         XCTD = IERC20(_xctd);
     }
 
     // --- User functions ---
-    function claim(address target) public {
+    function claim(address target) external {
+        // TODO ensure that we indeed want to apply this restriction (to enable vaults / auto-compounding)
         if (!(msg.sender == owner() || msg.sender == target)) revert OnlyOwnerOrSender();
         if (startTime == 0) revert VestingNotStarted();
         uint256 claimable = claimableFor(target);
@@ -73,13 +76,13 @@ contract UninsuredVestingV1 is Ownable {
         emit StartTimeSet(startTime);
     }
 
-    function setAmount(address target, uint256 amount) public onlyOwner onlyBeforeVesting {
+    function setAmount(address target, uint256 amount) external onlyOwner onlyBeforeVesting {
         uint256 currentAmountForUser = userVestings[target].amount;
 
         if (amount > currentAmountForUser) {
-            totalAllocated += amount - currentAmountForUser;
+            totalAllocated += (amount - currentAmountForUser);
         } else {
-            totalAllocated -= currentAmountForUser - amount;
+            totalAllocated -= (currentAmountForUser - amount);
         }
 
         userVestings[target].amount = amount;
@@ -115,8 +118,6 @@ contract UninsuredVestingV1 is Ownable {
     function claimableFor(address target) public view returns (uint256) {
         uint256 totalClaimed = userVestings[target].totalClaimed;
         uint256 totalVested = totalVestedFor(target);
-
-        if (totalClaimed >= totalVested) return 0;
 
         return totalVested - totalClaimed;
     }
