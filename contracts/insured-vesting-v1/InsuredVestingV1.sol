@@ -9,7 +9,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
-    uint256 public constant MIN_USDC_TO_FUND = 10 * 1e6; // 10 USDC - todo - related to decimals
+    uint256 public constant MIN_USDC_FUND_AMOUNT = 10 * 1e6; // 10 USDC - todo - related to decimals
     uint256 public constant DURATION = 2 * 365 days;
 
     IERC20 public immutable USDC;
@@ -50,6 +50,7 @@ contract InsuredVestingV1 is Ownable {
     event DecisionChanged(address indexed target, ClaimDecision decision);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
     event ProjectAddressChanged(address indexed oldAddress, address indexed newAddress);
+    event VestingStarted(uint256 xctdTransferredToContract);
 
     // --- Errors ---
     error ZeroAddress();
@@ -57,7 +58,7 @@ contract InsuredVestingV1 is Ownable {
     error VestingNotStarted();
     error UsdcToXctdRateTooLow(uint256 usdcToXctdRate);
     error AllocationExceeded(uint256 amount);
-    error InsufficientFunds(uint256 amount, uint256 minAmount);
+    error BelowMinFundingAmount(uint256 amount);
     error NothingToClaim();
     error NoFundsAdded();
     error EmergencyReleased();
@@ -66,7 +67,7 @@ contract InsuredVestingV1 is Ownable {
 
     // --- Modifiers ---
     modifier onlyBeforeVesting() {
-        if (startTime != 0 && block.timestamp > startTime) revert VestingAlreadyStarted();
+        if (startTime != 0) revert VestingAlreadyStarted();
         _;
     }
 
@@ -96,7 +97,7 @@ contract InsuredVestingV1 is Ownable {
     // --- User functions ---
     function addFunds(uint256 amount) public onlyBeforeVesting onlyIfNotEmergencyReleased {
         if ((userVestings[msg.sender].usdcAllocation - userVestings[msg.sender].usdcFunded) < amount) revert AllocationExceeded(amount);
-        if (amount < MIN_USDC_TO_FUND) revert InsufficientFunds(amount, MIN_USDC_TO_FUND);
+        if (amount < MIN_USDC_FUND_AMOUNT) revert BelowMinFundingAmount(amount);
 
         userVestings[msg.sender].usdcFunded += amount;
         totalUsdcFunded += amount;
@@ -113,10 +114,11 @@ contract InsuredVestingV1 is Ownable {
 
         uint256 claimableUsdc = usdcClaimableFor(target);
         if (claimableUsdc == 0) revert NothingToClaim();
-
-        uint256 claimableXctd = claimableUsdc * USDC_TO_XCTD_RATE;
         userStatus.usdcClaimed += claimableUsdc;
 
+        uint256 claimableXctd = claimableUsdc * USDC_TO_XCTD_RATE;
+
+        // TODO consider using ternary conditions for readability
         if (userStatus.claimDecision == ClaimDecision.TOKENS) {
             XCTD.safeTransfer(target, claimableXctd);
             USDC.safeTransfer(project, claimableUsdc);
@@ -163,6 +165,8 @@ contract InsuredVestingV1 is Ownable {
         uint256 delta = totalRequiredXctd - Math.min(XCTD.balanceOf(address(this)), totalRequiredXctd);
 
         XCTD.safeTransferFrom(project, address(this), delta);
+
+        emit VestingStarted(delta);
     }
 
     function setProjectAddress(address newProject) external onlyOwner {

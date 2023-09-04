@@ -241,6 +241,17 @@ describe("InsuredVestingV1", () => {
         await advanceDays(77);
         await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), Error.OnlyOwnerOrSender);
       });
+
+      it("claim according to updated funding if allocation was updated", async () => {
+        await setAllocationForUser1();
+        await addFundingFromUser1();
+        await setAllocationForUser1(FUNDING_PER_USER / 4);
+        await insuredVesting.methods.activate().send({ from: deployer });
+        await advanceDays(77);
+        await setBalancesForDelta();
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
+        await expectUserBalanceDelta("xctd", (await vestedAmount(77, "xctd")).dividedBy(4));
+      });
     });
 
     describe("toggle decision", () => {
@@ -345,7 +356,7 @@ describe("InsuredVestingV1", () => {
 
       it("cannot add funds less than minimum required", async () => {
         await setAllocationForUser1();
-        await expectRevert(async () => insuredVesting.methods.addFunds(await mockUsdc.amount(1)).send({ from: user1 }), Error.InsufficientFunds);
+        await expectRevert(async () => insuredVesting.methods.addFunds(await mockUsdc.amount(1)).send({ from: user1 }), Error.BelowMinFundingAmount);
       });
 
       it("user cannot fund if does not have allocation", async () => {
