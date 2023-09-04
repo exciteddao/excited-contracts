@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/math/Math.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract UninsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
-    IERC20 immutable xctd;
+    IERC20 public immutable XCTD;
 
-    uint256 constant DURATION = 2 * 365 days;
+    uint256 public constant DURATION = 2 * 365 days;
 
     uint256 public startTime;
     uint256 public totalAllocated;
@@ -46,7 +46,7 @@ contract UninsuredVestingV1 is Ownable {
 
     constructor(address _xctd) {
         if (_xctd == address(0)) revert ZeroAddress();
-        xctd = IERC20(_xctd);
+        XCTD = IERC20(_xctd);
     }
 
     // --- User functions ---
@@ -57,7 +57,7 @@ contract UninsuredVestingV1 is Ownable {
         if (claimable == 0) revert NothingToClaim();
 
         userVestings[target].totalClaimed += claimable;
-        xctd.safeTransfer(target, claimable);
+        XCTD.safeTransfer(target, claimable);
 
         emit Claimed(target, claimable);
     }
@@ -67,8 +67,8 @@ contract UninsuredVestingV1 is Ownable {
         if (totalAllocated == 0) revert NoAllocationsAdded();
 
         startTime = block.timestamp;
-        uint256 delta = totalAllocated - Math.min(xctd.balanceOf(address(this)), totalAllocated);
-        xctd.safeTransferFrom(msg.sender, address(this), delta);
+        uint256 delta = totalAllocated - Math.min(XCTD.balanceOf(address(this)), totalAllocated);
+        XCTD.safeTransferFrom(msg.sender, address(this), delta);
 
         emit StartTimeSet(startTime);
     }
@@ -89,10 +89,10 @@ contract UninsuredVestingV1 is Ownable {
 
     // --- Emergency functions ---
     function recover(address tokenAddress) external onlyOwner {
-        // Return any balance of the token that's not xctd
+        // Return any balance of the token that's not XCTD
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
         // // in case of XCTD, we also need to retain the total locked amount in the contract
-        if (tokenAddress == address(xctd)) {
+        if (tokenAddress == address(XCTD)) {
             tokenBalanceToRecover -= Math.min(totalAllocated, tokenBalanceToRecover);
         }
 
