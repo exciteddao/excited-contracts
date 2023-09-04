@@ -4,7 +4,7 @@ pragma solidity 0.8.19;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
