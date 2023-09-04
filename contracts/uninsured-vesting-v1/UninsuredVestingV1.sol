@@ -52,7 +52,7 @@ contract UninsuredVestingV1 is Ownable {
     // --- User functions ---
     function claim(address target) public {
         if (!(msg.sender == owner() || msg.sender == target)) revert OnlyOwnerOrSender();
-        if (startTime == 0 || block.timestamp < startTime) revert VestingNotStarted();
+        if (startTime == 0) revert VestingNotStarted();
         uint256 claimable = claimableFor(target);
         if (claimable == 0) revert NothingToClaim();
 
@@ -93,7 +93,7 @@ contract UninsuredVestingV1 is Ownable {
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
         // // in case of XCTD, we also need to retain the total locked amount in the contract
         if (tokenAddress == address(xctd)) {
-            tokenBalanceToRecover -= totalAllocated;
+            tokenBalanceToRecover -= Math.min(totalAllocated, tokenBalanceToRecover);
         }
 
         IERC20(tokenAddress).safeTransfer(owner(), tokenBalanceToRecover);
@@ -107,7 +107,7 @@ contract UninsuredVestingV1 is Ownable {
 
     // --- View functions ---
     function totalVestedFor(address target) public view returns (uint256) {
-        if (block.timestamp < startTime) return 0;
+        if (startTime == 0) return 0;
         UserVesting storage targetStatus = userVestings[target];
         return Math.min(targetStatus.amount, ((block.timestamp - startTime) * targetStatus.amount) / DURATION);
     }
