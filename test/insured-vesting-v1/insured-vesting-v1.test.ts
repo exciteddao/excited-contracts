@@ -41,6 +41,7 @@ import {
 } from "./fixture";
 import { bn18, bn6, web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
+import { config } from "../../deployment/insured-vesting-v1/config";
 
 describe("InsuredVestingV1", () => {
   before(async () => await setup());
@@ -872,9 +873,13 @@ describe("InsuredVestingV1", () => {
     describe("exchange rate", () => {
       it("cannot deploy with USDC_TO_XCTD below 1:1 ratio", async () => {
         const usdcToXctdRate = bn18(0.9).dividedBy(bn6(1));
+        // TODO TEMPORARY: until having production XCTD & project addresses
+        const testConfig = [...config];
+        testConfig[1] = xctd.options.address;
+        testConfig[3] = usdcToXctdRate;
+        // END TEMPORARY
         await expectRevert(
-          async () =>
-            deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [mockUsdc.options.address, xctd.options.address, project, usdcToXctdRate]),
+          async () => deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig),
           `${Error.UsdcToXctdRateTooLow}(${usdcToXctdRate})`
         );
       });
@@ -882,16 +887,12 @@ describe("InsuredVestingV1", () => {
 
     describe("project address", () => {
       it("project address cannot be zero", async () => {
-        await expectRevert(
-          async () =>
-            deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
-              mockUsdc.options.address,
-              xctd.options.address,
-              zeroAddress,
-              bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)),
-            ]),
-          Error.ZeroAddress
-        );
+        // TODO TEMPORARY: until having production XCTD & project addresses
+        const testConfig = [...config];
+        testConfig[1] = xctd.options.address;
+        testConfig[2] = zeroAddress;
+        // END TEMPORARY
+        await expectRevert(async () => deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig), Error.ZeroAddress);
       });
 
       it("project address should be set correctly", async () => {
