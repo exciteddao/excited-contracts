@@ -1,20 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/utils/math/Math.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
-    uint256 constant MIN_USDC_TO_FUND = 10 * 1e6; // 10 USDC - todo - related to decimals
-    uint256 constant DURATION = 2 * 365 days;
+    uint256 public constant MIN_USDC_TO_FUND = 10 * 1e6; // 10 USDC - todo - related to decimals
+    uint256 public constant DURATION = 2 * 365 days;
 
-    IERC20 public immutable usdc;
-    IERC20 public immutable xctd;
-    uint256 public immutable usdcToXctdRate;
+    IERC20 public immutable USDC;
+    IERC20 public immutable XCTD;
+    uint256 public immutable USDC_TO_XCTD_RATE;
 
     bool public emergencyReleased = false;
     address public project;
@@ -83,13 +83,13 @@ contract InsuredVestingV1 is Ownable {
     // in real life: 80*1e12 = $0.0125 XCTD
     // TODO - do not use decimals()
     constructor(address _usdc, address _xctd, address _project, uint256 _usdcToXctdRate) {
-        usdc = IERC20(_usdc);
-        xctd = IERC20(_xctd);
+        USDC = IERC20(_usdc);
+        XCTD = IERC20(_xctd);
 
         if (_usdcToXctdRate < 10 ** (ERC20(_xctd).decimals() - ERC20(_usdc).decimals())) revert UsdcToXctdRateTooLow(_usdcToXctdRate);
         if (_project == address(0)) revert ZeroAddress();
 
-        usdcToXctdRate = _usdcToXctdRate;
+        USDC_TO_XCTD_RATE = _usdcToXctdRate;
         project = _project;
     }
 
@@ -100,7 +100,7 @@ contract InsuredVestingV1 is Ownable {
 
         userVestings[msg.sender].usdcFunded += amount;
         totalUsdcFunded += amount;
-        usdc.safeTransferFrom(msg.sender, address(this), amount);
+        USDC.safeTransferFrom(msg.sender, address(this), amount);
 
         emit FundsAdded(msg.sender, amount);
     }
@@ -114,18 +114,18 @@ contract InsuredVestingV1 is Ownable {
         uint256 claimableUsdc = usdcClaimableFor(target);
         if (claimableUsdc == 0) revert NothingToClaim();
 
-        uint256 claimableXctd = claimableUsdc * usdcToXctdRate;
+        uint256 claimableXctd = claimableUsdc * USDC_TO_XCTD_RATE;
         userStatus.usdcClaimed += claimableUsdc;
 
         if (userStatus.claimDecision == ClaimDecision.TOKENS) {
-            xctd.safeTransfer(target, claimableXctd);
-            usdc.safeTransfer(project, claimableUsdc);
+            XCTD.safeTransfer(target, claimableXctd);
+            USDC.safeTransfer(project, claimableUsdc);
 
             emit UserClaimed(target, 0, claimableXctd);
             emit ProjectClaimed(target, claimableUsdc, 0);
         } else {
-            xctd.safeTransfer(project, claimableXctd);
-            usdc.safeTransfer(target, claimableUsdc);
+            XCTD.safeTransfer(project, claimableXctd);
+            USDC.safeTransfer(target, claimableUsdc);
 
             emit UserClaimed(target, claimableUsdc, 0);
             emit ProjectClaimed(target, 0, claimableXctd);
@@ -149,7 +149,7 @@ contract InsuredVestingV1 is Ownable {
             uint256 _usdcToRefund = userVestings[target].usdcFunded - _usdcAllocation;
             userVestings[target].usdcFunded = _usdcAllocation;
             totalUsdcFunded -= _usdcToRefund;
-            usdc.safeTransfer(target, _usdcToRefund);
+            USDC.safeTransfer(target, _usdcToRefund);
         }
 
         emit AllocationSet(target, _usdcAllocation);
@@ -159,10 +159,10 @@ contract InsuredVestingV1 is Ownable {
         if (totalUsdcFunded == 0) revert NoFundsAdded();
         startTime = block.timestamp;
 
-        uint256 totalRequiredXctd = totalUsdcFunded * usdcToXctdRate;
-        uint256 delta = totalRequiredXctd - Math.min(xctd.balanceOf(address(this)), totalRequiredXctd);
+        uint256 totalRequiredXctd = totalUsdcFunded * USDC_TO_XCTD_RATE;
+        uint256 delta = totalRequiredXctd - Math.min(XCTD.balanceOf(address(this)), totalRequiredXctd);
 
-        xctd.safeTransferFrom(project, address(this), delta);
+        XCTD.safeTransferFrom(project, address(this), delta);
     }
 
     function setProjectAddress(address newProject) external onlyOwner {
@@ -188,7 +188,7 @@ contract InsuredVestingV1 is Ownable {
 
         uint256 toClaim = userStatus.usdcFunded - userStatus.usdcClaimed;
         userStatus.usdcClaimed += toClaim;
-        usdc.safeTransfer(target, toClaim);
+        USDC.safeTransfer(target, toClaim);
 
         emit UserEmergencyClaimed(target, toClaim);
     }
@@ -198,11 +198,11 @@ contract InsuredVestingV1 is Ownable {
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
         // // in case of XCTD, we also need to retain the total locked amount in the contract
 
-        if (tokenAddress == address(xctd) && !emergencyReleased) {
-            tokenBalanceToRecover -= Math.min(totalUsdcFunded * usdcToXctdRate, tokenBalanceToRecover);
+        if (tokenAddress == address(XCTD) && !emergencyReleased) {
+            tokenBalanceToRecover -= Math.min(totalUsdcFunded * USDC_TO_XCTD_RATE, tokenBalanceToRecover);
         }
 
-        if (tokenAddress == address(usdc)) {
+        if (tokenAddress == address(USDC)) {
             tokenBalanceToRecover -= Math.min(totalUsdcFunded, tokenBalanceToRecover);
         }
 

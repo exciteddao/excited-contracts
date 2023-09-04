@@ -1,0 +1,12 @@
+{
+  "extends": ["solhint:default", "solhint:recommended"],
+  "rules": {
+    "max-line-length": ["warn", 160],
+    "func-visibility": [
+      "warn",
+      {
+        "ignoreConstructors": true
+      }
+    ]
+  }
+}
