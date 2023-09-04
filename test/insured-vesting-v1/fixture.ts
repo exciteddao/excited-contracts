@@ -6,6 +6,8 @@ import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { MockUSDC } from "../../typechain-hardhat/contracts/test/MockUSDC";
 import { expect } from "chai";
 
+import { config } from "../../deployment/insured-vesting-v1/config";
+
 useChaiBigNumber();
 
 export let deployer: string;
@@ -72,12 +74,15 @@ export async function withFixture() {
   someOtherToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "SomeOtherToken"])).options.address);
   mockUsdc = erc20("MockERC20", (await deployArtifact<MockUSDC>("MockUSDC", { from: deployer }, [bn6(1e9), "MockUSDC"])).options.address);
   xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "XCTD"])).options.address);
-  insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, [
-    mockUsdc.options.address,
-    xctd.options.address,
-    project,
-    bn18(USDC_TO_XCTD_RATIO).dividedBy(bn6(1)), // 7*10^18 / 1,000,000 (7XCTD per USDC)
-  ]);
+
+  // TODO TEMPORARY: until having production XCTD & project addresses
+  const testConfig = [...config];
+  testConfig[0] = mockUsdc.options.address;
+  testConfig[1] = xctd.options.address;
+  testConfig[2] = project;
+  // END TEMPORARY
+
+  insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
 
   for (const target of [user1, user2].concat(additionalUsers)) {
     await mockUsdc.methods.transfer(target, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
