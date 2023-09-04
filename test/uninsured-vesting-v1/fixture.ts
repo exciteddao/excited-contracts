@@ -3,6 +3,7 @@ import { deployArtifact, mineBlock, tag, useChaiBigNumber } from "@defi.org/web3
 import BN from "bignumber.js";
 import { UninsuredVestingV1 } from "../../typechain-hardhat/contracts/uninsured-vesting-v1/UninsuredVestingV1";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
+import { config } from "../../deployment/uninsured-vesting-v1/config";
 
 useChaiBigNumber();
 
@@ -38,7 +39,13 @@ export async function setup() {
 export async function withFixture() {
   xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "XCTD"])).options.address);
   someOtherToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "SomeOtherToken"])).options.address);
-  uninsuredVesting = await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [xctd.options.address]);
+
+  // TODO TEMPORARY: until having production XCTD address
+  const testConfig = [...config];
+  testConfig[0] = xctd.options.address;
+  // END TEMPORARY
+
+  uninsuredVesting = await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, testConfig);
 }
 
 export enum Error {
