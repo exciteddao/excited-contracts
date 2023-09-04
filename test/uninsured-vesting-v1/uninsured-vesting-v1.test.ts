@@ -23,8 +23,9 @@ import {
   setup,
   vestedAmount,
 } from "./fixture";
-import { web3, zeroAddress } from "@defi.org/web3-candies";
+import { web3 } from "@defi.org/web3-candies";
 import { UninsuredVestingV1 } from "../../typechain-hardhat/contracts/uninsured-vesting-v1/UninsuredVestingV1";
+import { config } from "../../deployment/uninsured-vesting-v1/config";
 
 describe("UninsuredVestingV1", () => {
   before(async () => await setup());
@@ -313,7 +314,7 @@ describe("UninsuredVestingV1", () => {
 
   describe("deployment", () => {
     it("xctd address cannot be zero", async () => {
-      await expectRevert(async () => await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, [zeroAddress]), Error.ZeroAddress);
+      await expectRevert(async () => await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, config), Error.ZeroAddress);
     });
   });
 });
