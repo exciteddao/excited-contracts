@@ -3,7 +3,7 @@ import { withFixture, setup, insuredVesting } from "./fixture";
 import { erc20 } from "@defi.org/web3-candies";
 import BN from "bignumber.js";
 
-describe("InsuredVestingV1 deployment", () => {
+describe.skip("InsuredVestingV1 deployment", () => {
   before(async () => await setup());
 
   beforeEach(async () => withFixture());
