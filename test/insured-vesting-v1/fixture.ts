@@ -43,11 +43,6 @@ export async function setup() {
   tag(user1, "user1");
   tag(user2, "user2");
   tag(anyUser, "anyUser");
-
-  for (let i = 1; i <= 6; i++) {
-    additionalUsers.push(await account(i + 10));
-    tag(additionalUsers[i], "additionalUser" + i);
-  }
 }
 
 export enum Event {
