@@ -17,7 +17,6 @@ export let anyUser: string;
 export let project: string;
 
 export let xctd: Token;
-// export let mockUsdc: MockERC20 & Token;
 export let usdc: Token;
 export let someOtherToken: MockERC20 & Token;
 export let insuredVesting: InsuredVestingV1;
@@ -64,7 +63,6 @@ export enum Error {
 
 export async function withFixture() {
   someOtherToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "SomeOtherToken"])).options.address);
-  // mockUsdc = erc20("MockERC20", (await deployArtifact<MockUSDC>("MockUSDC", { from: deployer }, [bn6(1e9), "MockUSDC"])).options.address);
   xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "XCTD"])).options.address);
 
   // TODO TEMPORARY: until having production XCTD & project addresses
@@ -183,9 +181,8 @@ export async function fundUsdcFromWhale(amount: BN, users: string[] = [user1, us
 
   expect(await usdc.methods.balanceOf(whale).call()).bignumber.gte(await usdc.amount(amount));
 
-  // TODO refactor
   for (const target of [user1, user2].concat(additionalUsers)) {
     await usdc.methods.transfer(target, await usdc.amount(FUNDING_PER_USER)).send({ from: whale });
-    // expect(await usdc.methods.balanceOf(target).call()).bignumber.eq(await usdc.amount(FUNDING_PER_USER));
+    expect(await usdc.methods.balanceOf(target).call()).bignumber.eq(await usdc.amount(FUNDING_PER_USER));
   }
 }

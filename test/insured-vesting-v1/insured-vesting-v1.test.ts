@@ -45,43 +45,16 @@ import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vest
 import { config } from "../../deployment/insured-vesting-v1/config";
 
 describe("InsuredVestingV1", () => {
-  // before(async () => {
-  //   await setup();
-
-  // for (let i = 1; i <= 6; i++) {
-  //   additionalUsers.push(await account(i + 10));
-  //   tag(additionalUsers[i], "additionalUser" + i);
-  // }
-
-  // for (const target of additionalUsers) {
-  //   await mockUsdc.methods.transfer(target, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-  //   await mockUsdc.methods.approve(insuredVesting.options.address, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: target });
-  // }
-  // });
-
-  // beforeEach(async () => await withFixture());
-
-  let snapshotId: number;
-
-  before(async () => {
-    // await setup();
-    // snapshotId = await network.provider.send("evm_snapshot");
-  });
-
   let snap: SnapshotRestorer;
 
   beforeEach(async () => {
-    // await network.provider.send("hardhat_reset", []);
     snap = await takeSnapshot();
     await setup();
     await withFixture();
-    // console.log(BN(await xctd.methods.balanceOf(user1).call()).toString());
   });
 
   afterEach(async () => {
     await snap.restore();
-    // await network.provider.send("evm_revert", [snapshotId]);
-    // await network.provider.send("hardhat_reset");
   });
 
   describe("with xctd approved to contract", () => {
@@ -923,7 +896,6 @@ describe("InsuredVestingV1", () => {
       });
 
       it("project address should be set correctly", async () => {
-        await withFixture();
         expect(await insuredVesting.methods.project().call()).to.be.eq(project);
       });
     });
