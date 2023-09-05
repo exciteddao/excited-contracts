@@ -62,7 +62,6 @@ export enum Error {
   StartTimeTooSoon = "StartTimeTooSoon",
   StartTimeNotInFuture = "StartTimeNotInFuture",
   AllocationExceeded = "AllocationExceeded",
-  BelowMinFundingAmount = "BelowMinFundingAmount",
   NothingToClaim = "NothingToClaim",
   NoFundsAdded = "NoFundsAdded",
   EmergencyReleased = "EmergencyReleased",

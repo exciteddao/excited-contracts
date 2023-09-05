@@ -9,8 +9,6 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
-    // TODO: remove this and add a test for 1 wei
-    uint256 public constant MIN_USDC_FUND_AMOUNT = 10 * 1e6; // 10 USDC - todo - related to decimals
     // TODO: move to deployscrip
     uint256 public constant DURATION = 2 * 365 days;
 
@@ -60,7 +58,6 @@ contract InsuredVestingV1 is Ownable {
     error VestingNotStarted();
     error UsdcToXctdRateTooLow(uint256 usdcToXctdRate);
     error AllocationExceeded(uint256 amount);
-    error BelowMinFundingAmount(uint256 amount);
     error NothingToClaim();
     error NoFundsAdded();
     error EmergencyReleased();
@@ -100,7 +97,6 @@ contract InsuredVestingV1 is Ownable {
     // --- User functions ---
     function addFunds(uint256 amount) external onlyBeforeVesting onlyIfNotEmergencyReleased {
         if ((userVestings[msg.sender].usdcAllocation - userVestings[msg.sender].usdcFunded) < amount) revert AllocationExceeded(amount);
-        if (amount < MIN_USDC_FUND_AMOUNT) revert BelowMinFundingAmount(amount); // TODO remove
 
         userVestings[msg.sender].usdcFunded += amount;
         totalUsdcFunded += amount;
