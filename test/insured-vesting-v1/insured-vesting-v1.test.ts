@@ -37,10 +37,10 @@ import {
   setBalancesForDelta,
   vestedAmount,
   balances,
+  config,
 } from "./fixture";
 import { account, bn18, bn6, web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
-import { config } from "../../deployment/insured-vesting-v1/config";
 
 describe("InsuredVestingV1", () => {
   before(async () => {

@@ -6,7 +6,7 @@ import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { MockUSDC } from "../../typechain-hardhat/contracts/test/MockUSDC";
 import { expect } from "chai";
 
-import { config } from "../../deployment/insured-vesting-v1/config";
+import { ConfigTuple, _config } from "../../deployment/insured-vesting-v1/config";
 
 useChaiBigNumber();
 
@@ -31,6 +31,8 @@ export const VESTING_DURATION_DAYS = 730;
 export const VESTING_DURATION_SECONDS = DAY * VESTING_DURATION_DAYS;
 export const LOCKUP_MONTHS = 6;
 export const FUNDING_PER_USER = 10_000;
+
+export const config: ConfigTuple = [_config.usdcAddress, _config.xctdAddress, _config.projectAddress, _config.usdcToXctdRate, _config.durationSeconds];
 
 export async function setup() {
   deployer = await account(9);

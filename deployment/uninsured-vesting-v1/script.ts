@@ -1,19 +1,9 @@
-import { deploy } from "@defi.org/web3-candies/dist/hardhat";
-import { config } from "./config";
+import { ConfigTuple, _config } from "./config";
 import BN from "bignumber.js";
+import { DeployParams } from "@defi.org/web3-candies/dist/hardhat";
 
-export const deployUninsuredVestingV1 = async (maxFeePerGas: BN, maxPriorityFeePerGas: BN) => {
-  if (config[0].match(/^0x0+$/)) {
-    throw new Error("XCTD address cannot be zero");
-  }
-
-  if (config[1] !== 63_072_000) {
-    throw new Error("Duration must be 2 years");
-  }
-
-  if (config.length > 2) {
-    throw new Error("Too many arguments");
-  }
+export const deployUninsuredVestingV1 = async (deploy: (params: DeployParams) => Promise<string>, maxFeePerGas: BN, maxPriorityFeePerGas: BN) => {
+  const config: ConfigTuple = [_config.xctdAddress, _config.durationSeconds];
 
   await deploy({
     contractName: "UninsuredVestingV1",

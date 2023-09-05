@@ -3,7 +3,7 @@ import { deployArtifact, mineBlock, tag, useChaiBigNumber } from "@defi.org/web3
 import BN from "bignumber.js";
 import { UninsuredVestingV1 } from "../../typechain-hardhat/contracts/uninsured-vesting-v1/UninsuredVestingV1";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
-import { config } from "../../deployment/uninsured-vesting-v1/config";
+import { ConfigTuple, _config } from "../../deployment/uninsured-vesting-v1";
 
 useChaiBigNumber();
 
@@ -24,6 +24,8 @@ export const XCTD_TOKENS_ON_SALE = 1_000_000;
 export const USDC_TO_XCTD_RATIO = 7;
 export const LOCKUP_MONTHS = 6;
 export const TOKENS_PER_USER = 10_000;
+
+export const config: ConfigTuple = [_config.xctdAddress, _config.durationSeconds];
 
 export async function setup() {
   deployer = await account(9);

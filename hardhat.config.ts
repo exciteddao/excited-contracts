@@ -8,34 +8,31 @@ import { askDeployer, askFees, hardhatDefaultConfig, deploy } from "@defi.org/we
 import _ from "lodash";
 import "hardhat-watcher";
 import "solidity-coverage";
-import BigNumber from "bignumber.js";
 
 import { deployUninsuredVestingV1 } from "./deployment/uninsured-vesting-v1";
+import { deployInsuredVestingV1 } from "./deployment/insured-vesting-v1";
 
 type Contract = "Insured" | "Uninsured";
 
 task("deploy-contract", "Deploy Excited contract")
   .addParam<Contract>("contract", "Contract name")
+  .addParam("dry", "Dry run", true, types.boolean)
   .setAction(async (args, hre) => {
     let contractName: string;
-    let config: any[];
 
     switch (args.contract) {
       case "Insured":
         // TODO: confirm name
         contractName = "InsuredVesting";
-        config = require("./deployment/insured-vesting-v1/config").config;
         break;
       case "Uninsured":
         contractName = "UninsuredVesting";
-        config = require("./deployment/uninsured-vesting-v1/config").config;
         break;
       default:
         console.error("Invalid contract name");
         return;
     }
 
-    console.log("config :", config);
     console.log(`Running deployment script for ${contractName} contract...`);
 
     console.log("--------------------------------------");
@@ -47,10 +44,8 @@ task("deploy-contract", "Deploy Excited contract")
       return;
     }
 
-    const deployer = process.env.DEPLOYER || (await askDeployer());
     const { max, tip } = await askFees();
 
-    console.log("Deployer: ", deployer);
     console.log("Max fee: ", Number(max));
     console.log("Tip: ", Number(tip));
 
@@ -59,9 +54,11 @@ task("deploy-contract", "Deploy Excited contract")
 
       switch (args.contract) {
         case "Insured":
-          await deploy({ contractName: contractName, args: config, maxFeePerGas: max, maxPriorityFeePerGas: tip });
+          await deployInsuredVestingV1(deploy, max, tip);
+          return;
         case "Uninsured":
-          await deployUninsuredVestingV1(max, tip);
+          await deployUninsuredVestingV1(deploy, max, tip);
+          return;
       }
     }
   });

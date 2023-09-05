@@ -1,9 +1,11 @@
-import { expect } from "chai";
+import { assert, expect } from "chai";
 import { withFixture, setup, insuredVesting } from "./fixture";
-import { erc20 } from "@defi.org/web3-candies";
+import { bn18, bn6, erc20, zero, zeroAddress } from "@defi.org/web3-candies";
 import BN from "bignumber.js";
+import { deployInsuredVestingV1, _config } from "../../deployment/insured-vesting-v1";
+import sinon from "sinon";
 
-describe("InsuredVestingV1 deployment", () => {
+describe("InsuredVestingV1 deployment config", () => {
   before(async () => await setup());
 
   beforeEach(async () => withFixture());
@@ -47,5 +49,22 @@ describe("InsuredVestingV1 deployment", () => {
 
   it("duration is 2 years", async () => {
     expect(await insuredVesting.methods.VESTING_DURATION().call()).to.equal(String(60 * 60 * 24 * 365 * 2));
+  });
+});
+
+describe("InsuredVestingV1 deployment script", () => {
+  const web3CandiesStub = {
+    deploy: sinon.stub(),
+  };
+
+  it("should deploy with correct contract name and arguments", async () => {
+    await deployInsuredVestingV1(web3CandiesStub.deploy, new BN(10), new BN(10));
+    expect(web3CandiesStub.deploy.calledOnce).to.be.true;
+    expect(web3CandiesStub.deploy.firstCall.args[0]).to.deep.equal({
+      contractName: "InsuredVestingV1",
+      args: [_config.usdcAddress, _config.xctdAddress, _config.projectAddress, _config.usdcToXctdRate, _config.durationSeconds],
+      maxFeePerGas: new BN(10),
+      maxPriorityFeePerGas: new BN(10),
+    });
   });
 });
