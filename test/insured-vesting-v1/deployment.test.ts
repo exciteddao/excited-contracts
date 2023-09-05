@@ -46,6 +46,6 @@ describe("InsuredVestingV1 deployment", () => {
   });
 
   it("duration is 2 years", async () => {
-    expect(await insuredVesting.methods.DURATION().call()).to.equal(String(60 * 60 * 24 * 365 * 2));
+    expect(await insuredVesting.methods.VESTING_DURATION().call()).to.equal(String(60 * 60 * 24 * 365 * 2));
   });
 });
