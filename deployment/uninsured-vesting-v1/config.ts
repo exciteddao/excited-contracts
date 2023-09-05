@@ -11,4 +11,6 @@ export const _config: Config = {
   durationSeconds: 60 * 60 * 24 * 365 * 2,
 };
 
-export const config: [string, number] = [_config.xctdAddress, _config.durationSeconds];
+export type ConfigTuple = [string, number];
+
+export const config: ConfigTuple = [_config.xctdAddress, _config.durationSeconds];
