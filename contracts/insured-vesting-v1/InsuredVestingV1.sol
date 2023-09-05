@@ -59,7 +59,6 @@ contract InsuredVestingV1 is Ownable {
     error VestingNotStarted();
     error UsdcToXctdRateTooLow(uint256 usdcToXctdRate);
     error AllocationExceeded(uint256 amount);
-    error BelowMinFundingAmount(uint256 amount);
     error NothingToClaim();
     error NoFundsAdded();
     error EmergencyReleased();
@@ -100,7 +99,6 @@ contract InsuredVestingV1 is Ownable {
     // --- User functions ---
     function addFunds(uint256 amount) external onlyBeforeVesting onlyIfNotEmergencyReleased {
         if ((userVestings[msg.sender].usdcAllocation - userVestings[msg.sender].usdcFunded) < amount) revert AllocationExceeded(amount);
-        if (amount < MIN_USDC_FUND_AMOUNT) revert BelowMinFundingAmount(amount); // TODO remove
 
         userVestings[msg.sender].usdcFunded += amount;
         totalUsdcFunded += amount;

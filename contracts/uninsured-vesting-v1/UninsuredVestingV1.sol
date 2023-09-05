@@ -9,7 +9,7 @@ contract UninsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable XCTD;
-    uint256 public immutable VESTING_DURATION;
+    uint256 public immutable DURATION;
 
     uint256 public startTime;
     uint256 public totalAllocated;
@@ -28,7 +28,6 @@ contract UninsuredVestingV1 is Ownable {
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
     // --- Errors ---
-    error ZeroAddress();
     error StartTimeTooSoon(uint256 startTime, uint256 minStartTime);
     error StartTimeNotInFuture(uint256 newStartTime);
     error VestingNotStarted();
@@ -43,11 +42,9 @@ contract UninsuredVestingV1 is Ownable {
         _;
     }
 
-    constructor(address _xctd, uint256 _vestingDuration) {
-        // TODO: move to deployscript
-        if (_xctd == address(0)) revert ZeroAddress();
+    constructor(address _xctd, uint256 durationSeconds) {
         XCTD = IERC20(_xctd);
-        VESTING_DURATION = _vestingDuration;
+        DURATION = durationSeconds;
     }
 
     // --- User functions ---
