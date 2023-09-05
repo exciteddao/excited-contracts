@@ -17,6 +17,7 @@
     "prebuild": "npm run prettier",
     "build": "hardhat compile && hardhat typechain",
     "test": "([ -z $CI ] && for t in eth bsc arb ftm avax poly; do npm run test:$t; done) || true",
+    "coverage:eth": "NETWORK=ETH BLOCK=17576915 hardhat coverage",
     "test:eth": "NETWORK=ETH BLOCK=17576915 hardhat test",
     "test:ftm": "NETWORK=FTM hardhat test",
     "test:avax": "NETWORK=AVAX hardhat test",
