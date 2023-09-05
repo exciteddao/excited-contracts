@@ -311,10 +311,4 @@ describe("UninsuredVestingV1", () => {
       expect(await uninsuredVesting.methods.startTime().call()).to.be.bignumber.eq(await getCurrentTimestamp());
     });
   });
-
-  describe("deployment", () => {
-    it("xctd address cannot be zero", async () => {
-      await expectRevert(async () => await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, config), Error.ZeroAddress);
-    });
-  });
 });

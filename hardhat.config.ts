@@ -8,6 +8,9 @@ import { askDeployer, askFees, hardhatDefaultConfig, deploy } from "@defi.org/we
 import _ from "lodash";
 import "hardhat-watcher";
 import "solidity-coverage";
+import BigNumber from "bignumber.js";
+
+import { deployUninsuredVestingV1 } from "./deployment/uninsured-vesting-v1";
 
 type Contract = "Insured" | "Uninsured";
 
@@ -53,7 +56,13 @@ task("deploy-contract", "Deploy Excited contract")
 
     if (!args.dry) {
       console.log("Deploying...");
-      await deploy({ contractName: contractName, args: config, maxFeePerGas: max, maxPriorityFeePerGas: tip });
+
+      switch (args.contract) {
+        case "Insured":
+          await deploy({ contractName: contractName, args: config, maxFeePerGas: max, maxPriorityFeePerGas: tip });
+        case "Uninsured":
+          await deployUninsuredVestingV1(max, tip);
+      }
     }
   });
 
