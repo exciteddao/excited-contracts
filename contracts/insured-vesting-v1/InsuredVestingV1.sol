@@ -9,9 +9,6 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
-    // TODO: remove this and add a test for 1 wei
-    uint256 public constant MIN_USDC_FUND_AMOUNT = 10 * 1e6; // 10 USDC - todo - related to decimals
-
     IERC20 public immutable USDC;
     IERC20 public immutable XCTD;
     uint256 public immutable USDC_TO_XCTD_RATE;
