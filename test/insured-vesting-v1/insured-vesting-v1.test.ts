@@ -44,7 +44,19 @@ import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vest
 import { config } from "../../deployment/insured-vesting-v1/config";
 
 describe("InsuredVestingV1", () => {
-  before(async () => await setup());
+  before(async () => {
+    await setup();
+
+    for (let i = 1; i <= 6; i++) {
+      additionalUsers.push(await account(i + 10));
+      tag(additionalUsers[i], "additionalUser" + i);
+    }
+
+    for (const target of additionalUsers) {
+      await mockUsdc.methods.transfer(target, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+      await mockUsdc.methods.approve(insuredVesting.options.address, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: target });
+    }
+  });
 
   beforeEach(async () => await withFixture());
 
@@ -88,16 +100,6 @@ describe("InsuredVestingV1", () => {
       });
 
       it("can claim tokens for multiple users, random amounts", async () => {
-        for (let i = 1; i <= 6; i++) {
-          additionalUsers.push(await account(i + 10));
-          tag(additionalUsers[i], "additionalUser" + i);
-        }
-
-        for (const target of additionalUsers) {
-          await mockUsdc.methods.transfer(target, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-          await mockUsdc.methods.approve(insuredVesting.options.address, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: target });
-        }
-
         const additionalUsersFunding = [];
 
         for (const user of additionalUsers) {
