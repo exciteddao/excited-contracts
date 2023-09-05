@@ -19,11 +19,10 @@ export const _config: Config = {
   durationSeconds: 60 * 60 * 24 * 365 * 2,
 };
 
-export const config: [string, string, string, BN] = [
+export const config: [string, string, string, BN, number] = [
   _config.usdcAddress,
   _config.xctdAddress,
   _config.projectAddress,
   _config.usdcToXctdRate,
-  // TODO: pass durationSeconds as constructor arg
-  // _config.durationSeconds,
+  _config.durationSeconds,
 ];
