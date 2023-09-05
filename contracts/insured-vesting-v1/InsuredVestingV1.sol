@@ -58,7 +58,6 @@ contract InsuredVestingV1 is Ownable {
     error VestingNotStarted();
     error UsdcToXctdRateTooLow(uint256 usdcToXctdRate);
     error AllocationExceeded(uint256 amount);
-    error BelowMinFundingAmount(uint256 amount);
     error NothingToClaim();
     error NoFundsAdded();
     error EmergencyReleased();
