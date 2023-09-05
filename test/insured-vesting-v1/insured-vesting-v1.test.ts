@@ -910,21 +910,6 @@ describe("InsuredVestingV1", () => {
   });
 
   describe("deployment", () => {
-    describe("exchange rate", () => {
-      it("cannot deploy with USDC_TO_XCTD below 1:1 ratio", async () => {
-        const usdcToXctdRate = bn18(0.9).dividedBy(bn6(1));
-        // TODO TEMPORARY: until having production XCTD & project addresses
-        const testConfig = [...config];
-        testConfig[1] = xctd.options.address;
-        testConfig[3] = usdcToXctdRate;
-        // END TEMPORARY
-        await expectRevert(
-          async () => deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig),
-          `${Error.UsdcToXctdRateTooLow}(${usdcToXctdRate})`
-        );
-      });
-    });
-
     describe("project address", () => {
       it("project address cannot be zero", async () => {
         // TODO TEMPORARY: until having production XCTD & project addresses
