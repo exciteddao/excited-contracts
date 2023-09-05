@@ -1,12 +1,29 @@
 import { expect } from "chai";
-import { withFixture, setup, insuredVesting } from "./fixture";
-import { erc20 } from "@defi.org/web3-candies";
+import { withFixture, setup, deployer, project } from "./fixture";
+import { erc20, bn18, Token, account } from "@defi.org/web3-candies";
 import BN from "bignumber.js";
+import { config } from "../../deployment/insured-vesting-v1";
+import { deployArtifact, impersonate, mineBlock, setBalance, tag, useChaiBigNumber } from "@defi.org/web3-candies/dist/hardhat";
+import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
+import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
+
+let insuredVesting: InsuredVestingV1;
+let xctd: Token;
+let deployer: string;
 
 describe("InsuredVestingV1 deployment", () => {
-  before(async () => await setup());
+  before(async () => {
+    deployer = await account(9);
+    xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "XCTD"])).options.address);
 
-  beforeEach(async () => withFixture());
+    // TODO TEMPORARY: until having production XCTD & project addresses
+    const testConfig = [...config];
+    testConfig[1] = xctd.options.address;
+    testConfig[2] = await account(4);
+    // END TEMPORARY
+
+    insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
+  });
 
   it("xctd address cannot be zero", async () => {
     const xctd = await insuredVesting.methods.XCTD().call();
@@ -34,7 +51,7 @@ describe("InsuredVestingV1 deployment", () => {
   });
 
   // TODO define this amount
-  it("project xctd balance must be over [TODO]", async () => {
+  it.skip("project xctd balance must be over [TODO]", async () => {
     const project = await insuredVesting.methods.project().call();
     const xctd = erc20("XCTD", await insuredVesting.methods.XCTD().call());
     expect(await xctd.methods.balanceOf(project).call()).to.be.bignumber.greaterThan(await xctd.amount(999_999_999));
