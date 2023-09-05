@@ -1,12 +1,11 @@
-import { Token, account, bn18, erc20, BlockInfo, Receipt, web3, bn6 } from "@defi.org/web3-candies";
-import { deployArtifact, mineBlock, tag, useChaiBigNumber } from "@defi.org/web3-candies/dist/hardhat";
+import { Token, account, bn18, erc20, BlockInfo, Receipt, web3, bn6, ether } from "@defi.org/web3-candies";
+import { deployArtifact, impersonate, mineBlock, setBalance, tag, useChaiBigNumber } from "@defi.org/web3-candies/dist/hardhat";
 import BN from "bignumber.js";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
-import { MockUSDC } from "../../typechain-hardhat/contracts/test/MockUSDC";
 import { expect } from "chai";
 
-import { config } from "../../deployment/insured-vesting-v1/config";
+import { config } from "../../deployment/insured-vesting-v1";
 
 useChaiBigNumber();
 
@@ -17,8 +16,8 @@ export let additionalUsers: string[] = [];
 export let anyUser: string;
 export let project: string;
 
-export let xctd: MockERC20 & Token;
-export let mockUsdc: MockERC20 & Token;
+export let xctd: Token;
+export let usdc: Token;
 export let someOtherToken: MockERC20 & Token;
 export let insuredVesting: InsuredVestingV1;
 
@@ -64,21 +63,27 @@ export enum Error {
 
 export async function withFixture() {
   someOtherToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "SomeOtherToken"])).options.address);
-  mockUsdc = erc20("MockERC20", (await deployArtifact<MockUSDC>("MockUSDC", { from: deployer }, [bn6(1e9), "MockUSDC"])).options.address);
   xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "XCTD"])).options.address);
 
   // TODO TEMPORARY: until having production XCTD & project addresses
   const testConfig = [...config];
-  testConfig[0] = mockUsdc.options.address;
   testConfig[1] = xctd.options.address;
   testConfig[2] = project;
   // END TEMPORARY
 
   insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
+  usdc = erc20("USDC", await insuredVesting.methods.USDC().call());
+
+  additionalUsers = [];
+  for (let i = 1; i <= 6; i++) {
+    additionalUsers.push(await account(i + 10));
+    tag(additionalUsers[i], "additionalUser" + i);
+  }
+
+  await fundUsdcFromWhale(BN(FUNDING_PER_USER), [user1, user2].concat(additionalUsers));
 
   for (const target of [user1, user2].concat(additionalUsers)) {
-    await mockUsdc.methods.transfer(target, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-    await mockUsdc.methods.approve(insuredVesting.options.address, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: target });
+    await usdc.methods.approve(insuredVesting.options.address, await usdc.amount(FUNDING_PER_USER)).send({ from: target });
   }
 
   await xctd.methods.transfer(project, bn18(1e9)).send({ from: deployer });
@@ -116,19 +121,19 @@ export function usdcToXctd(amountInUsdc: BN): BN {
 }
 
 export async function addFundingFromUser1(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.addFunds(await mockUsdc.amount(amount)).send({ from: user1 });
+  await insuredVesting.methods.addFunds(await usdc.amount(amount)).send({ from: user1 });
 }
 
 export async function setAllocationForUser1(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.setAllocation(user1, await mockUsdc.amount(amount)).send({ from: deployer });
+  await insuredVesting.methods.setAllocation(user1, await usdc.amount(amount)).send({ from: deployer });
 }
 
 export async function addFundingFromUser2(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.addFunds(await mockUsdc.amount(amount)).send({ from: user2 });
+  await insuredVesting.methods.addFunds(await usdc.amount(amount)).send({ from: user2 });
 }
 
 export async function setAllocationForUser2(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.setAllocation(user2, await mockUsdc.amount(amount)).send({ from: deployer });
+  await insuredVesting.methods.setAllocation(user2, await usdc.amount(amount)).send({ from: deployer });
 }
 
 export const balances = {
@@ -143,9 +148,9 @@ export const balances = {
 };
 
 export async function setBalancesForDelta() {
-  balances.user1.usdc = BN(await mockUsdc.methods.balanceOf(user1).call());
+  balances.user1.usdc = BN(await usdc.methods.balanceOf(user1).call());
   balances.user1.xctd = BN(await xctd.methods.balanceOf(user1).call());
-  balances.project.usdc = BN(await mockUsdc.methods.balanceOf(project).call());
+  balances.project.usdc = BN(await usdc.methods.balanceOf(project).call());
   balances.project.xctd = BN(await xctd.methods.balanceOf(project).call());
 }
 
@@ -156,12 +161,12 @@ export async function vestedAmount(days: number, token: "usdc" | "xctd") {
   if (token === "xctd") {
     return xctd.amount(amount.multipliedBy(USDC_TO_XCTD_RATIO));
   } else {
-    return mockUsdc.amount(amount);
+    return usdc.amount(amount);
   }
 }
 
 export async function expectBalanceDelta(target: "project" | "user1", token: "usdc" | "xctd", expectedDelta: BN | number, closeTo: number) {
-  const _token = token === "xctd" ? xctd : mockUsdc;
+  const _token = token === "xctd" ? xctd : usdc;
   const amount = BN(await _token.methods.balanceOf(target === "user1" ? user1 : project).call());
   return expect(amount.minus(balances[target][token])).to.bignumber.closeTo(expectedDelta, await _token.amount(closeTo));
 }
@@ -172,4 +177,19 @@ export async function expectUserBalanceDelta(token: "usdc" | "xctd", expectedDel
 
 export async function expectProjectBalanceDelta(token: "usdc" | "xctd", expectedDelta: BN | number, closeTo: number = 0.1) {
   return expectBalanceDelta("project", token, expectedDelta, closeTo);
+}
+
+export async function fundUsdcFromWhale(amount: BN, targets: string[]) {
+  const whale = "0x0a59649758aa4d66e25f08dd01271e891fe52199";
+  tag(whale, "usdcTokenWhale");
+  await impersonate(whale);
+  await setBalance(whale, ether.times(100));
+
+  expect(await usdc.methods.balanceOf(whale).call()).bignumber.gte(await usdc.amount(amount.multipliedBy(targets.length)));
+
+  for (const target of targets) {
+    const initialBalance = await usdc.methods.balanceOf(target).call();
+    await usdc.methods.transfer(target, await usdc.amount(amount)).send({ from: whale });
+    expect(BN(await usdc.methods.balanceOf(target).call()).minus(initialBalance)).bignumber.eq(await usdc.amount(amount));
+  }
 }
