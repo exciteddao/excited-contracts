@@ -1,9 +1,11 @@
-import { expect } from "chai";
+import { assert, expect } from "chai";
 import { withFixture, setup, insuredVesting } from "./fixture";
-import { erc20 } from "@defi.org/web3-candies";
+import { bn18, bn6, erc20, zero, zeroAddress } from "@defi.org/web3-candies";
 import BN from "bignumber.js";
+import { deployInsuredVestingV1, ConfigTuple } from "../../deployment/insured-vesting-v1";
+import sinon from "sinon";
 
-describe("InsuredVestingV1 deployment", () => {
+describe("InsuredVestingV1 deployment config", () => {
   before(async () => await setup());
 
   beforeEach(async () => withFixture());
@@ -47,5 +49,59 @@ describe("InsuredVestingV1 deployment", () => {
 
   it("duration is 2 years", async () => {
     expect(await insuredVesting.methods.VESTING_DURATION().call()).to.equal(String(60 * 60 * 24 * 365 * 2));
+  });
+});
+
+describe("InsuredVestingV1 deployment script", () => {
+  const web3CandiesStub = {
+    deploy: sinon.stub(),
+  };
+
+  beforeEach(() => {
+    web3CandiesStub.deploy.reset();
+  });
+
+  const usdcAddress = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+  const randomEthAddress = "0xc0ffee254729296a45a3885639AC7E10F9d54979";
+  const usdcToXctdRate = bn18(7).dividedBy(bn6(1));
+  const durationSeconds = 60 * 60 * 24 * 365 * 2;
+
+  describe("Error handling", () => {
+    const testCases: { config: ConfigTuple; errorMessage: string }[] = [
+      { config: [randomEthAddress, randomEthAddress, randomEthAddress, usdcToXctdRate, durationSeconds], errorMessage: "Wrong USDC address" },
+      { config: [usdcAddress, zeroAddress, randomEthAddress, usdcToXctdRate, durationSeconds], errorMessage: "XCTD address cannot be zero" },
+      { config: [usdcAddress, randomEthAddress, zeroAddress, usdcToXctdRate, durationSeconds], errorMessage: "Project address cannot be zero" },
+      { config: [usdcAddress, randomEthAddress, randomEthAddress, bn18(), durationSeconds], errorMessage: "Wrong USDC to XCTD rate" },
+      { config: [usdcAddress, randomEthAddress, randomEthAddress, usdcToXctdRate, 10000], errorMessage: "Wrong vesting duration" },
+    ];
+
+    for (const { config, errorMessage } of testCases) {
+      it(errorMessage, async () => {
+        try {
+          await deployInsuredVestingV1(web3CandiesStub.deploy, config, new BN(10), new BN(10));
+          assert.fail("should have thrown error");
+        } catch (error: any) {
+          expect(error.message).to.equal(errorMessage);
+        }
+      });
+    }
+  });
+
+  describe("Success", () => {
+    it("should deploy", async () => {
+      await deployInsuredVestingV1(
+        web3CandiesStub.deploy,
+        [usdcAddress, randomEthAddress, randomEthAddress, usdcToXctdRate, durationSeconds],
+        new BN(10),
+        new BN(10)
+      );
+      expect(web3CandiesStub.deploy.calledOnce).to.be.true;
+      expect(web3CandiesStub.deploy.firstCall.args[0]).to.deep.equal({
+        contractName: "InsuredVestingV1",
+        args: [usdcAddress, randomEthAddress, randomEthAddress, usdcToXctdRate, durationSeconds],
+        maxFeePerGas: new BN(10),
+        maxPriorityFeePerGas: new BN(10),
+      });
+    });
   });
 });

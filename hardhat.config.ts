@@ -8,9 +8,9 @@ import { askDeployer, askFees, hardhatDefaultConfig, deploy } from "@defi.org/we
 import _ from "lodash";
 import "hardhat-watcher";
 import "solidity-coverage";
-import BigNumber from "bignumber.js";
 
-import { deployUninsuredVestingV1 } from "./deployment/uninsured-vesting-v1";
+import { deployUninsuredVestingV1, ConfigTuple as UninsuredConfig } from "./deployment/uninsured-vesting-v1";
+import { deployInsuredVestingV1, ConfigTuple as InsuredConfig } from "./deployment/insured-vesting-v1";
 
 type Contract = "Insured" | "Uninsured";
 
@@ -18,7 +18,7 @@ task("deploy-contract", "Deploy Excited contract")
   .addParam<Contract>("contract", "Contract name")
   .setAction(async (args, hre) => {
     let contractName: string;
-    let config: any[];
+    let config: InsuredConfig | UninsuredConfig;
 
     switch (args.contract) {
       case "Insured":
@@ -29,7 +29,6 @@ task("deploy-contract", "Deploy Excited contract")
       case "Uninsured":
         contractName = "UninsuredVesting";
         config = require("./deployment/uninsured-vesting-v1/config").config;
-        break;
       default:
         console.error("Invalid contract name");
         return;
@@ -59,9 +58,9 @@ task("deploy-contract", "Deploy Excited contract")
 
       switch (args.contract) {
         case "Insured":
-          await deploy({ contractName: contractName, args: config, maxFeePerGas: max, maxPriorityFeePerGas: tip });
+          await deployInsuredVestingV1(deploy, config as InsuredConfig, max, tip);
         case "Uninsured":
-          await deployUninsuredVestingV1(max, tip);
+          await deployUninsuredVestingV1(deploy, config as UninsuredConfig, max, tip);
       }
     }
   });
