@@ -9,9 +9,7 @@ contract UninsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable XCTD;
-
-    // TODO - move to deployscript
-    uint256 public constant DURATION = 2 * 365 days;
+    uint256 public immutable VESTING_DURATION;
 
     uint256 public startTime;
     uint256 public totalAllocated;
@@ -45,10 +43,11 @@ contract UninsuredVestingV1 is Ownable {
         _;
     }
 
-    constructor(address _xctd) {
+    constructor(address _xctd, uint256 _vestingDuration) {
         // TODO: move to deployscript
         if (_xctd == address(0)) revert ZeroAddress();
         XCTD = IERC20(_xctd);
+        VESTING_DURATION = _vestingDuration;
     }
 
     // --- User functions ---
@@ -112,7 +111,7 @@ contract UninsuredVestingV1 is Ownable {
     function totalVestedFor(address target) public view returns (uint256) {
         if (startTime == 0) return 0;
         UserVesting storage targetStatus = userVestings[target];
-        return Math.min(targetStatus.amount, ((block.timestamp - startTime) * targetStatus.amount) / DURATION);
+        return Math.min(targetStatus.amount, ((block.timestamp - startTime) * targetStatus.amount) / VESTING_DURATION);
     }
 
     function claimableFor(address target) public view returns (uint256) {

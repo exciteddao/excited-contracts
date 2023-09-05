@@ -11,12 +11,11 @@ contract InsuredVestingV1 is Ownable {
 
     // TODO: remove this and add a test for 1 wei
     uint256 public constant MIN_USDC_FUND_AMOUNT = 10 * 1e6; // 10 USDC - todo - related to decimals
-    // TODO: move to deployscrip
-    uint256 public constant DURATION = 2 * 365 days;
 
     IERC20 public immutable USDC;
     IERC20 public immutable XCTD;
     uint256 public immutable USDC_TO_XCTD_RATE;
+    uint256 public immutable VESTING_DURATION;
 
     bool public emergencyReleased = false;
     address public project;
@@ -85,7 +84,7 @@ contract InsuredVestingV1 is Ownable {
 
     // in real life: 80*1e12 = $0.0125 XCTD
     // TODO - do not use decimals()
-    constructor(address _usdc, address _xctd, address _project, uint256 _usdcToXctdRate) {
+    constructor(address _usdc, address _xctd, address _project, uint256 _usdcToXctdRate, uint256 _vestingDuration) {
         USDC = IERC20(_usdc);
         XCTD = IERC20(_xctd);
 
@@ -93,6 +92,7 @@ contract InsuredVestingV1 is Ownable {
         if (_usdcToXctdRate < 10 ** (ERC20(_xctd).decimals() - ERC20(_usdc).decimals())) revert UsdcToXctdRateTooLow(_usdcToXctdRate);
         if (_project == address(0)) revert ZeroAddress();
 
+        VESTING_DURATION = _vestingDuration;
         USDC_TO_XCTD_RATE = _usdcToXctdRate;
         project = _project;
     }
@@ -227,7 +227,7 @@ contract InsuredVestingV1 is Ownable {
         if (startTime == 0) return 0;
 
         UserVesting storage targetStatus = userVestings[target];
-        return Math.min(targetStatus.usdcFunded, ((block.timestamp - startTime) * targetStatus.usdcFunded) / DURATION);
+        return Math.min(targetStatus.usdcFunded, ((block.timestamp - startTime) * targetStatus.usdcFunded) / VESTING_DURATION);
     }
 
     function usdcClaimableFor(address target) public view returns (uint256) {

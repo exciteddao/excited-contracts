@@ -21,7 +21,6 @@ import {
   setup,
   advanceDays,
   Error,
-  MIN_USDC_TO_FUND,
   VESTING_DURATION_SECONDS,
   DAY,
   VESTING_DURATION_DAYS,

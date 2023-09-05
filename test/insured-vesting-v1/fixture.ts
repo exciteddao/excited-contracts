@@ -31,7 +31,6 @@ export const VESTING_DURATION_DAYS = 730;
 export const VESTING_DURATION_SECONDS = DAY * VESTING_DURATION_DAYS;
 export const LOCKUP_MONTHS = 6;
 export const FUNDING_PER_USER = 10_000;
-export const MIN_USDC_TO_FUND = 10;
 
 export async function setup() {
   deployer = await account(9);
