@@ -9,8 +9,6 @@ contract UninsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable XCTD;
-
-    // TODO - move to deployscript
     uint256 public immutable DURATION;
 
     uint256 public startTime;

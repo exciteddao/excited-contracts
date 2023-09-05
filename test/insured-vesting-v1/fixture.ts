@@ -31,7 +31,6 @@ export const VESTING_DURATION_DAYS = 730;
 export const VESTING_DURATION_SECONDS = DAY * VESTING_DURATION_DAYS;
 export const LOCKUP_MONTHS = 6;
 export const FUNDING_PER_USER = 10_000;
-export const MIN_USDC_TO_FUND = 10;
 
 export async function setup() {
   deployer = await account(9);
@@ -43,11 +42,6 @@ export async function setup() {
   tag(user1, "user1");
   tag(user2, "user2");
   tag(anyUser, "anyUser");
-
-  for (let i = 1; i <= 6; i++) {
-    additionalUsers.push(await account(i + 10));
-    tag(additionalUsers[i], "additionalUser" + i);
-  }
 }
 
 export enum Event {

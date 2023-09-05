@@ -9,12 +9,10 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
-    // TODO: move to deployscrip
-    uint256 public constant DURATION = 2 * 365 days;
-
     IERC20 public immutable USDC;
     IERC20 public immutable XCTD;
     uint256 public immutable USDC_TO_XCTD_RATE;
+    uint256 public immutable VESTING_DURATION;
 
     bool public emergencyReleased = false;
     address public project;
@@ -79,12 +77,13 @@ contract InsuredVestingV1 is Ownable {
         _;
     }
 
-    constructor(address _usdc, address _xctd, address _project, uint256 _usdcToXctdRate) {
+    constructor(address _usdc, address _xctd, address _project, uint256 _usdcToXctdRate, uint256 _vestingDuration) {
         USDC = IERC20(_usdc);
         XCTD = IERC20(_xctd);
 
         if (_project == address(0)) revert ZeroAddress();
 
+        VESTING_DURATION = _vestingDuration;
         USDC_TO_XCTD_RATE = _usdcToXctdRate;
         project = _project;
     }
@@ -218,7 +217,7 @@ contract InsuredVestingV1 is Ownable {
         if (startTime == 0) return 0;
 
         UserVesting storage targetStatus = userVestings[target];
-        return Math.min(targetStatus.usdcFunded, ((block.timestamp - startTime) * targetStatus.usdcFunded) / DURATION);
+        return Math.min(targetStatus.usdcFunded, ((block.timestamp - startTime) * targetStatus.usdcFunded) / VESTING_DURATION);
     }
 
     function usdcClaimableFor(address target) public view returns (uint256) {
