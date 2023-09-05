@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import BN from "bignumber.js";
-import { deployArtifact, expectRevert, setBalance } from "@defi.org/web3-candies/dist/hardhat";
+import { deployArtifact, expectRevert, setBalance, tag } from "@defi.org/web3-candies/dist/hardhat";
 import {
   FUNDING_PER_USER,
   LOCKUP_MONTHS,
@@ -39,7 +39,7 @@ import {
   vestedAmount,
   balances,
 } from "./fixture";
-import { bn18, bn6, web3, zeroAddress } from "@defi.org/web3-candies";
+import { account, bn18, bn6, web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 import { config } from "../../deployment/insured-vesting-v1/config";
 
@@ -88,6 +88,16 @@ describe("InsuredVestingV1", () => {
       });
 
       it("can claim tokens for multiple users, random amounts", async () => {
+        for (let i = 1; i <= 6; i++) {
+          additionalUsers.push(await account(i + 10));
+          tag(additionalUsers[i], "additionalUser" + i);
+        }
+
+        for (const target of additionalUsers) {
+          await mockUsdc.methods.transfer(target, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+          await mockUsdc.methods.approve(insuredVesting.options.address, await mockUsdc.amount(FUNDING_PER_USER)).send({ from: target });
+        }
+
         const additionalUsersFunding = [];
 
         for (const user of additionalUsers) {
