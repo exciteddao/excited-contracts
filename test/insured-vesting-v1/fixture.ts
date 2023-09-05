@@ -58,7 +58,6 @@ export enum Error {
   ZeroAddress = "ZeroAddress",
   VestingAlreadyStarted = "VestingAlreadyStarted",
   VestingNotStarted = "VestingNotStarted",
-  UsdcToXctdRateTooLow = "UsdcToXctdRateTooLow",
   StartTimeTooSoon = "StartTimeTooSoon",
   StartTimeNotInFuture = "StartTimeNotInFuture",
   AllocationExceeded = "AllocationExceeded",

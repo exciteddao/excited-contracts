@@ -58,7 +58,6 @@ contract InsuredVestingV1 is Ownable {
     error ZeroAddress();
     error VestingAlreadyStarted();
     error VestingNotStarted();
-    error UsdcToXctdRateTooLow(uint256 usdcToXctdRate);
     error AllocationExceeded(uint256 amount);
     error BelowMinFundingAmount(uint256 amount);
     error NothingToClaim();
@@ -83,14 +82,10 @@ contract InsuredVestingV1 is Ownable {
         _;
     }
 
-    // in real life: 80*1e12 = $0.0125 XCTD
-    // TODO - do not use decimals()
     constructor(address _usdc, address _xctd, address _project, uint256 _usdcToXctdRate) {
         USDC = IERC20(_usdc);
         XCTD = IERC20(_xctd);
 
-        // TODO: do these checks in deploy script rather than here
-        if (_usdcToXctdRate < 10 ** (ERC20(_xctd).decimals() - ERC20(_usdc).decimals())) revert UsdcToXctdRateTooLow(_usdcToXctdRate);
         if (_project == address(0)) revert ZeroAddress();
 
         USDC_TO_XCTD_RATE = _usdcToXctdRate;

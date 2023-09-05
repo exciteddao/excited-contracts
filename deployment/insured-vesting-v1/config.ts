@@ -15,7 +15,7 @@ export const _config: Config = {
   xctdAddress: zeroAddress,
   // TODO: replace with real address
   projectAddress: zeroAddress,
-  usdcToXctdRate: bn18(7).dividedBy(bn6(1)),
+  usdcToXctdRate: bn18(7).dividedBy(bn6(1)), // Reflects 1 USDC = 7 XCTD, based on Ethereum's USDC having 6 decimals and XCTD having 18 decimals
   durationSeconds: 60 * 60 * 24 * 365 * 2,
 };
 
