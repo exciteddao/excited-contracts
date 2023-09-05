@@ -1,6 +1,5 @@
 import { ConfigTuple, _config } from "./config";
 import BN from "bignumber.js";
-import { zeroAddress } from "@defi.org/web3-candies";
 import { DeployParams } from "@defi.org/web3-candies/dist/hardhat";
 
 export const deployInsuredVestingV1 = async (
@@ -9,23 +8,24 @@ export const deployInsuredVestingV1 = async (
   maxFeePerGas: BN,
   maxPriorityFeePerGas: BN
 ) => {
-  if (config[0] !== _config.usdcAddress) {
+  if (config[0] !== "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48") {
     throw new Error("Wrong USDC address");
   }
-
-  if (config[1] === zeroAddress) {
+  // TODO: check real XCTD address
+  if (config[1] === "0x0000000000000000000000000000000000000000") {
     throw new Error("XCTD address cannot be zero");
   }
 
-  if (config[2] === zeroAddress) {
+  // TODO: check real project address
+  if (config[2] === "0x0000000000000000000000000000000000000000") {
     throw new Error("Project address cannot be zero");
   }
 
-  if (!config[3].eq(_config.usdcToXctdRate)) {
+  if (config[3].toString() !== "7000000000000") {
     throw new Error("Wrong USDC to XCTD rate");
   }
 
-  if (config[4] !== _config.durationSeconds) {
+  if (config[4] !== 63_072_000) {
     throw new Error("Wrong vesting duration");
   }
 

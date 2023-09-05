@@ -1,6 +1,6 @@
 import { assert, expect } from "chai";
 import { withFixture, setup, insuredVesting } from "./fixture";
-import { bn18, bn6, erc20, zero, zeroAddress } from "@defi.org/web3-candies";
+import { bn18, bn6, erc20, zeroAddress } from "@defi.org/web3-candies";
 import BN from "bignumber.js";
 import { deployInsuredVestingV1, ConfigTuple } from "../../deployment/insured-vesting-v1";
 import sinon from "sinon";

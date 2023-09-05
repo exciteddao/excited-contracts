@@ -1,6 +1,5 @@
 import { ConfigTuple } from "./config";
 import BN from "bignumber.js";
-import { zeroAddress } from "@defi.org/web3-candies";
 import { DeployParams } from "@defi.org/web3-candies/dist/hardhat";
 
 export const deployUninsuredVestingV1 = async (
@@ -9,7 +8,8 @@ export const deployUninsuredVestingV1 = async (
   maxFeePerGas: BN,
   maxPriorityFeePerGas: BN
 ) => {
-  if (config[0] === zeroAddress) {
+  // TODO: check real XCTD address
+  if (config[0] === "0x0000000000000000000000000000000000000000") {
     throw new Error("XCTD address cannot be zero");
   }
 
