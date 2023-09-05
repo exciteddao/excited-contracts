@@ -74,6 +74,12 @@ export async function withFixture() {
   insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
   usdc = erc20("USDC", await insuredVesting.methods.USDC().call());
 
+  additionalUsers = [];
+  for (let i = 1; i <= 6; i++) {
+    additionalUsers.push(await account(i + 10));
+    tag(additionalUsers[i], "additionalUser" + i);
+  }
+
   await fundUsdcFromWhale(BN(FUNDING_PER_USER), [user1, user2].concat(additionalUsers));
 
   for (const target of [user1, user2].concat(additionalUsers)) {

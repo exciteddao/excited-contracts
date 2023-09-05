@@ -99,13 +99,13 @@ describe("InsuredVestingV1", () => {
       it("can claim tokens for multiple users, random amounts", async () => {
         const additionalUsersFunding = [];
 
-        // for (const user of additionalUsers) {
-        //   const amountToAllocate = 10 + Math.round(Math.random() * (FUNDING_PER_USER - 10));
-        //   await insuredVesting.methods.setAllocation(user, await usdc.amount(FUNDING_PER_USER)).send({ from: deployer });
-        //   const amountToFund = 10 + Math.round(Math.random() * (amountToAllocate - 10));
-        //   await insuredVesting.methods.addFunds(await usdc.amount(amountToFund)).send({ from: user });
-        //   additionalUsersFunding.push(amountToFund);
-        // }
+        for (const user of additionalUsers) {
+          const amountToAllocate = 10 + Math.round(Math.random() * (FUNDING_PER_USER - 10));
+          await insuredVesting.methods.setAllocation(user, await usdc.amount(FUNDING_PER_USER)).send({ from: deployer });
+          const amountToFund = 10 + Math.round(Math.random() * (amountToAllocate - 10));
+          await insuredVesting.methods.addFunds(await usdc.amount(amountToFund)).send({ from: user });
+          additionalUsersFunding.push(amountToFund);
+        }
 
         await setAllocationForUser1();
         await addFundingFromUser1();
