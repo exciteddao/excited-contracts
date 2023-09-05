@@ -355,9 +355,38 @@ describe("InsuredVestingV1", () => {
         await expectUserBalanceDelta("usdc", (await mockUsdc.amount(FUNDING_PER_USER)).negated());
       });
 
-      it("cannot add funds less than minimum required", async () => {
+      it("can add 1 wei amounts of USDC, fully vested", async () => {
+        await setBalancesForDelta();
         await setAllocationForUser1();
-        await expectRevert(async () => insuredVesting.methods.addFunds(await mockUsdc.amount(1)).send({ from: user1 }), Error.BelowMinFundingAmount);
+        await insuredVesting.methods.addFunds(1).send({ from: user1 });
+        await expectUserBalanceDelta("usdc", -1);
+        await insuredVesting.methods.activate().send({ from: deployer });
+        await advanceDays(VESTING_DURATION_DAYS);
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
+        await expectUserBalanceDelta("xctd", 1e12 * USDC_TO_XCTD_RATIO, 0);
+      });
+
+      it("can add 1 wei amounts of USDC, partially vested", async () => {
+        await setBalancesForDelta();
+        await setAllocationForUser1();
+        await insuredVesting.methods.addFunds(1).send({ from: user1 });
+        await expectUserBalanceDelta("usdc", -1);
+        await insuredVesting.methods.activate().send({ from: deployer });
+        await advanceDays(30);
+
+        // This is a corner case where the amount funded is so little, it's indivisible relative to the time passed
+        await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.NothingToClaim);
+      });
+
+      it("can add ~wei amounts of USDC, partially vested", async () => {
+        await setBalancesForDelta();
+        await setAllocationForUser1();
+        await insuredVesting.methods.addFunds(100).send({ from: user1 });
+        await expectUserBalanceDelta("usdc", -1);
+        await insuredVesting.methods.activate().send({ from: deployer });
+        await advanceDays(30);
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
+        await expectUserBalanceDelta("xctd", 4 * 1e12 * USDC_TO_XCTD_RATIO, 0);
       });
 
       it("user cannot fund if does not have allocation", async () => {
