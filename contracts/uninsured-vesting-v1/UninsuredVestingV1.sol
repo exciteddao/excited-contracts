@@ -108,7 +108,7 @@ contract UninsuredVestingV1 is Ownable {
     function totalVestedFor(address target) public view returns (uint256) {
         if (startTime == 0) return 0;
         UserVesting storage targetStatus = userVestings[target];
-        return Math.min(targetStatus.amount, ((block.timestamp - startTime) * targetStatus.amount) / VESTING_DURATION);
+        return Math.min(targetStatus.amount, ((block.timestamp - startTime) * targetStatus.amount) / DURATION);
     }
 
     function claimableFor(address target) public view returns (uint256) {
