@@ -80,7 +80,7 @@ describe("InsuredVestingV1 deployment config", () => {
       });
 
       it("usdc to xctd rate must be at least 1:1", async () => {
-        const usdcToXctdRate = BN(await insuredVesting.methods.USDC_TO_XCTD_RATE().call());
+        const usdcToXctdRate = BN(await insuredVesting.methods.XCTD_TO_USDC_RATE().call());
         expect(usdcToXctdRate).to.be.bignumber.gte(1e12);
       });
 

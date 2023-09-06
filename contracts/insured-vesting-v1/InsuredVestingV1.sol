@@ -8,10 +8,12 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
+    uint256 TOKEN_RATE_PRECISION = 1e20;
+
     // TODO(Audit) comment - rename "PROJECT_TOKEN" (FUNDING_TOKEN for insured)
     IERC20 public immutable USDC;
     IERC20 public immutable XCTD;
-    uint256 public immutable USDC_TO_XCTD_RATE; // TODO(audit) rename to PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE
+    uint256 public immutable XCTD_TO_USDC_RATE; // TODO(audit) rename to PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE
     uint256 public immutable VESTING_DURATION_SECONDS;
 
     bool public emergencyReleased = false;
@@ -77,7 +79,7 @@ contract InsuredVestingV1 is Ownable {
         _;
     }
 
-    constructor(address _usdc, address _xctd, address _project, uint256 _usdcToXctdRate, uint256 _vestingDurationSeconds) {
+    constructor(address _usdc, address _xctd, address _project, uint256 _xctdToUsdcRate, uint256 _vestingDurationSeconds) {
         USDC = IERC20(_usdc);
         XCTD = IERC20(_xctd);
 
@@ -85,7 +87,7 @@ contract InsuredVestingV1 is Ownable {
 
         VESTING_DURATION_SECONDS = _vestingDurationSeconds;
         // how many Project tokens you get per each 1 Funding token
-        USDC_TO_XCTD_RATE = _usdcToXctdRate; // 7 XCTD per 1 USD -> 1e12 * 7
+        XCTD_TO_USDC_RATE = _xctdToUsdcRate; // 7 XCTD per 1 USD -> 1e12 * 7
 
         /*
             TODO(audit) - use precision 1e18
@@ -122,7 +124,7 @@ contract InsuredVestingV1 is Ownable {
         if (claimableUsdc == 0) revert NothingToClaim();
         userStatus.usdcClaimed += claimableUsdc;
 
-        uint256 claimableXctd = claimableUsdc * USDC_TO_XCTD_RATE;
+        uint256 claimableXctd = usdcToXctd(claimableUsdc);
 
         // TODO consider using ternary conditions for readability
         if (userStatus.claimDecision == ClaimDecision.TOKENS) {
@@ -174,7 +176,7 @@ contract InsuredVestingV1 is Ownable {
         if (totalUsdcFunded == 0) revert NoFundsAdded();
         startTime = block.timestamp;
 
-        uint256 totalRequiredXctd = totalUsdcFunded * USDC_TO_XCTD_RATE;
+        uint256 totalRequiredXctd = usdcToXctd(totalUsdcFunded);
         uint256 delta = totalRequiredXctd - Math.min(XCTD.balanceOf(address(this)), totalRequiredXctd);
 
         XCTD.safeTransferFrom(project, address(this), delta);
@@ -245,7 +247,7 @@ contract InsuredVestingV1 is Ownable {
         // // in case of XCTD, we also need to retain the total locked amount in the contract
 
         if (tokenAddress == address(XCTD) && !emergencyReleased) {
-            tokenBalanceToRecover -= Math.min(totalUsdcFunded * USDC_TO_XCTD_RATE, tokenBalanceToRecover);
+            tokenBalanceToRecover -= Math.min(usdcToXctd(totalUsdcFunded), tokenBalanceToRecover);
         }
 
         if (tokenAddress == address(USDC)) {
@@ -262,6 +264,10 @@ contract InsuredVestingV1 is Ownable {
 
     // --- View functions ---
     // TODO(audit) - view functions as in VestingV1
+
+    function usdcToXctd(uint256 usdc) public view returns (uint256) {
+        return (usdc * TOKEN_RATE_PRECISION) / XCTD_TO_USDC_RATE;
+    }
 
     function usdcVestedFor(address target) public view returns (uint256) {
         if (startTime == 0) return 0;

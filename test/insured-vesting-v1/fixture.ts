@@ -25,7 +25,7 @@ export const DAY = 60 * 60 * 24;
 export const MONTH = DAY * 30;
 
 export const XCTD_TOKENS_ON_SALE = 1_000_000;
-export const USDC_TO_XCTD_RATIO = 7;
+export const USDC_TO_XCTD_RATIO = 5;
 export const VESTING_DURATION_DAYS = 730;
 export const VESTING_DURATION_SECONDS = DAY * VESTING_DURATION_DAYS;
 export const LOCKUP_MONTHS = 6;
