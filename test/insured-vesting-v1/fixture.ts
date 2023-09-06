@@ -49,16 +49,16 @@ export enum Event {
 
 export enum Error {
   ZeroAddress = "ZeroAddress",
-  VestingAlreadyStarted = "VestingAlreadyStarted",
   VestingNotStarted = "VestingNotStarted",
-  StartTimeTooSoon = "StartTimeTooSoon",
-  StartTimeNotInFuture = "StartTimeNotInFuture",
+  StartTimeTooLate = "StartTimeTooLate",
+  StartTimeIsInPast = "StartTimeIsInPast",
   AllowedAllocationExceeded = "AllowedAllocationExceeded",
   NothingToClaim = "NothingToClaim",
   NoFundsAdded = "NoFundsAdded",
   EmergencyReleased = "EmergencyReleased",
   EmergencyNotReleased = "EmergencyNotReleased",
   OnlyOwnerOrSender = "OnlyOwnerOrSender",
+  AlreadyActivated = "AlreadyActivated",
 }
 
 export async function withFixture() {
@@ -107,7 +107,7 @@ export function advanceMonths(months: number): Promise<BlockInfo> {
 }
 
 export async function getCurrentTimestamp(): Promise<string | number | BN> {
-  return (await web3().eth.getBlock("latest")).timestamp;
+  return BN((await web3().eth.getBlock("latest")).timestamp).plus(1); // TODO I hate this plus 1
 }
 
 export async function getDefaultStartTime(): Promise<BN> {

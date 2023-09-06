@@ -71,7 +71,7 @@ contract InsuredVestingV1 is Ownable {
 
     // --- Modifiers ---
     modifier onlyBeforeActivation() {
-        if (vestingStartTime != 0) revert AlreadyActivated();
+        if (isActivated()) revert AlreadyActivated();
         _;
     }
 
@@ -125,7 +125,7 @@ contract InsuredVestingV1 is Ownable {
     }
 
     function claim(address target) external onlyOwnerOrSender(target) onlyIfNotEmergencyReleased {
-        if (vestingStartTime == 0) revert VestingNotStarted();
+        if (!isVestingStarted()) revert VestingNotStarted();
 
         UserVesting storage userStatus = userVestings[target];
         if (userStatus.fundingTokenFunded == 0) revert NoFundsAdded();
@@ -181,11 +181,12 @@ contract InsuredVestingV1 is Ownable {
         emit AllowedAllocationSet(target, _fundingTokenAllocation);
     }
 
-    // TODO(audit) - change similar to VestingV1
-    // TODO(audit) - consider whether an additional onlyBeforeVestingStarted is needed)
-    function activate() external onlyOwner onlyBeforeActivation {
+    function activate(uint256 _vestingStartTime) external onlyOwner onlyBeforeActivation {
+        if (_vestingStartTime > block.timestamp + MAX_START_TIME_FROM_NOW)
+            revert StartTimeTooLate(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
+        if (_vestingStartTime < block.timestamp) revert StartTimeIsInPast(_vestingStartTime);
         if (totalFundingTokenFunded == 0) revert NoFundsAdded();
-        vestingStartTime = block.timestamp;
+        vestingStartTime = _vestingStartTime;
 
         uint256 totalRequiredProjectToken = totalFundingTokenFunded * FUNDING_TOKEN_TO_PROJECT_TOKEN_RATE;
         uint256 delta = totalRequiredProjectToken - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalRequiredProjectToken);
@@ -274,10 +275,16 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // --- View functions ---
-    // TODO(audit) - view functions as in VestingV1
+    function isActivated() public view returns (bool) {
+        return vestingStartTime != 0;
+    }
+
+    function isVestingStarted() public view returns (bool) {
+        return isActivated() && vestingStartTime <= block.timestamp;
+    }
 
     function fundingTokenVestedFor(address target) public view returns (uint256) {
-        if (vestingStartTime == 0) return 0;
+        if (!isVestingStarted()) return 0;
 
         UserVesting storage targetStatus = userVestings[target];
         return Math.min(targetStatus.fundingTokenFunded, ((block.timestamp - vestingStartTime) * targetStatus.fundingTokenFunded) / VESTING_DURATION_SECONDS);
