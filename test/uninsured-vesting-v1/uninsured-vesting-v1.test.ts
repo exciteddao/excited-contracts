@@ -67,7 +67,7 @@ describe("VestingV1", () => {
         );
       });
 
-      it("vests if set to current time stamp", async () => {
+      it("starts vesting if activated with current time stamp", async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: deployer });
         await vesting.methods.activate(BN(await getCurrentTimestamp()).plus(1)).send({ from: deployer });
         await advanceDays(1);
