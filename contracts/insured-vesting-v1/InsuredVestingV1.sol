@@ -8,9 +8,10 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
+    // TODO(Audit) comment - rename "PROJECT_TOKEN" (FUNDING_TOKEN for insured)
     IERC20 public immutable USDC;
     IERC20 public immutable XCTD;
-    uint256 public immutable USDC_TO_XCTD_RATE;
+    uint256 public immutable USDC_TO_XCTD_RATE; // TODO(audit) rename to PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE
     uint256 public immutable VESTING_DURATION_SECONDS;
 
     bool public emergencyReleased = false;
@@ -80,11 +81,24 @@ contract InsuredVestingV1 is Ownable {
         USDC = IERC20(_usdc);
         XCTD = IERC20(_xctd);
 
-        if (_project == address(0)) revert ZeroAddress();
+        if (_project == address(0)) revert ZeroAddress(); // TODO(audit) - remove
 
         VESTING_DURATION_SECONDS = _vestingDurationSeconds;
-        USDC_TO_XCTD_RATE = _usdcToXctdRate;
-        project = _project;
+        // how many Project tokens you get per each 1 Funding token
+        USDC_TO_XCTD_RATE = _usdcToXctdRate; // 7 XCTD per 1 USD -> 1e12 * 7
+
+        /*
+            TODO(audit) - use precision 1e18
+            TODO(audti) - PROJECT_TOKENS_TO_FUNDING_TOKENS_RATE (other way around)
+
+            PRECISION = 1e58
+            RATE = 14_000_000
+            (1e18 and 1e6)
+
+            14 cents per XCTD
+         */
+
+        project = _project; // TODO(audit) - rename to projectWallet
     }
 
     // --- User functions ---
@@ -126,6 +140,9 @@ contract InsuredVestingV1 is Ownable {
         }
     }
 
+    // TODO(audit) - two setters, each for one of the two decisions
+    // decision1 - PROJECT_TOKENS
+    // decision2 - REFUND_FUNDING_TOKENS
     function toggleDecision() external {
         if (userVestings[msg.sender].usdcFunded == 0) revert NoFundsAdded();
         userVestings[msg.sender].claimDecision = userVestings[msg.sender].claimDecision == ClaimDecision.TOKENS ? ClaimDecision.USDC : ClaimDecision.TOKENS;
@@ -134,6 +151,8 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // --- Owner functions ---
+
+    // TODO(audit) - rename to setAllowedAllocation
     function setAllocation(address target, uint256 _usdcAllocation) external onlyOwner onlyBeforeVesting onlyIfNotEmergencyReleased {
         // Update user allocation
         userVestings[target].usdcAllocation = _usdcAllocation;
@@ -149,6 +168,8 @@ contract InsuredVestingV1 is Ownable {
         emit AllocationSet(target, _usdcAllocation);
     }
 
+    // TODO(audit) - change similar to VestingV1
+    // TODO(audit) - rename onlyBeforeActivation (consider whether an additional onlyBeforeVestingStarted is needed)
     function activate() external onlyOwner onlyBeforeVesting {
         if (totalUsdcFunded == 0) revert NoFundsAdded();
         startTime = block.timestamp;
@@ -178,6 +199,33 @@ contract InsuredVestingV1 is Ownable {
         emit EmergencyRelease();
     }
 
+    /*
+    TODO(audit)
+    
+    two roles -> foundation and project
+
+    1. add modifiers for project
+    2. add project address to uninsured
+
+    Vesting(uninsured):
+        - dao (owner) 
+            - recover
+        - project 
+            - setAmount
+            - claimOnBehalf
+            - activate
+            - setProjectWalletAddress (non-revocable)
+
+    InsuredVesting:
+        - dao
+            - emergencyRelease
+            - recover
+        - project
+            - claimOnBehalf
+            - emergencyClaimOnBehalf
+            - setAllowedAllocation?
+            - setProjectWalletAddress (non-revocable)
+     */
     function emergencyClaim(address target) external onlyOwnerOrSender(target) {
         UserVesting storage userStatus = userVestings[target];
         if (!emergencyReleased) revert EmergencyNotReleased();
@@ -190,6 +238,7 @@ contract InsuredVestingV1 is Ownable {
         emit UserEmergencyClaimed(target, toClaim);
     }
 
+    // TODO(audit) - separate to recoverEth as in VestingV1
     function recover(address tokenAddress) external onlyOwner {
         // Return any balance of the token that's not xctd
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
@@ -212,6 +261,8 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // --- View functions ---
+    // TODO(audit) - view functions as in VestingV1
+
     function usdcVestedFor(address target) public view returns (uint256) {
         if (startTime == 0) return 0;
 

@@ -5,9 +5,11 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
+// TODO(Audit) comment - Rename to VestingV1
 contract UninsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
+    // TODO(Audit) comment - rename "PROJECT_TOKEN" (FUNDING_TOKEN for insured)
     IERC20 public immutable XCTD;
     uint256 public immutable VESTING_DURATION_SECONDS;
 
@@ -37,7 +39,7 @@ contract UninsuredVestingV1 is Ownable {
     error OnlyOwnerOrSender();
 
     // --- Modifiers ---
-    modifier onlyBeforeVesting() {
+    modifier onlyBeforeActivation() {
         if (startTime != 0) revert VestingAlreadyStarted();
         _;
     }
@@ -62,17 +64,7 @@ contract UninsuredVestingV1 is Ownable {
     }
 
     // --- Owner functions ---
-    function activate() external onlyOwner onlyBeforeVesting {
-        if (totalAllocated == 0) revert NoAllocationsAdded();
-
-        startTime = block.timestamp;
-        uint256 delta = totalAllocated - Math.min(XCTD.balanceOf(address(this)), totalAllocated);
-        XCTD.safeTransferFrom(msg.sender, address(this), delta);
-
-        emit StartTimeSet(startTime);
-    }
-
-    function setAmount(address target, uint256 amount) external onlyOwner onlyBeforeVesting {
+    function setAmount(address target, uint256 amount) external onlyOwner onlyBeforeActivation {
         uint256 currentAmountForUser = userVestings[target].amount;
 
         if (amount > currentAmountForUser) {
@@ -86,11 +78,30 @@ contract UninsuredVestingV1 is Ownable {
         emit AmountSet(target, amount);
     }
 
+    // TODO(Audit) comment - activate should get startTime as a parameter, contract would be locked for further investments
+    // there will be 2 points of time (add this explanation to header of contract):
+    // - activate - locks further allocations and transfers token to contract
+    // - startTime - vesting starts. TODO(Audit) - rename to vestingStartTime
+    // - startTime should be MAX more than 3 months
+    function activate() external onlyOwner onlyBeforeActivation {
+        if (totalAllocated == 0) revert NoAllocationsAdded();
+
+        startTime = block.timestamp;
+        uint256 delta = totalAllocated - Math.min(XCTD.balanceOf(address(this)), totalAllocated);
+        XCTD.safeTransferFrom(msg.sender, address(this), delta);
+
+        emit StartTimeSet(startTime);
+    }
+
     // --- Emergency functions ---
+    // TODO(Audit) - ensure with legal/compliance we're ok without an emergency lever to release all tokens here
+
+    // TODO(Audit) separate to recoverEther and recoverTokens
     function recover(address tokenAddress) external onlyOwner {
         // Return any balance of the token that's not XCTD
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
-        // // in case of XCTD, we also need to retain the total locked amount in the contract
+
+        // Recover only project tokens that were sent by accident (tokens assigned to investors will NOT be recovered)
         if (tokenAddress == address(XCTD)) {
             tokenBalanceToRecover -= Math.min(totalAllocated, tokenBalanceToRecover);
         }
@@ -105,7 +116,12 @@ contract UninsuredVestingV1 is Ownable {
     }
 
     // --- View functions ---
+    // TODO(Audit) add - isActivated, getVestingStartTime, isVestingStarted
+
+    // TODO(Audit) - emergency release to investors
+
     function totalVestedFor(address target) public view returns (uint256) {
+        // TODO(Audit) fix this to take a startTime that hasn't arrived yet into account
         if (startTime == 0) return 0;
         UserVesting storage targetStatus = userVestings[target];
         return Math.min(targetStatus.amount, ((block.timestamp - startTime) * targetStatus.amount) / VESTING_DURATION_SECONDS);
