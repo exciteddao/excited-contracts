@@ -5,9 +5,14 @@ export interface Config {
   usdcAddress: string;
   xctdAddress: string;
   projectAddress: string;
-  usdcToXctdRate: BN;
+  xctdToUsdcRate: BN;
   durationSeconds: number;
 }
+
+const PRECISION = 1e20;
+const USDC_DECIMALS = 1e6;
+const XCTD_DECIMALS = 1e18;
+const STRIKE_PRICE = 0.2; // 0.2$ per XCTD
 
 export const _config: Config = {
   usdcAddress: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
@@ -15,10 +20,12 @@ export const _config: Config = {
   xctdAddress: zeroAddress,
   // TODO: replace with real address
   projectAddress: zeroAddress,
-  usdcToXctdRate: bn18(7).dividedBy(bn6(1)), // Reflects 1 USDC = 7 XCTD, based on Ethereum's USDC having 6 decimals and XCTD having 18 decimals
+
+  // (1e6 * 1e20) / 1e18 * 0.2 = 20000000
+  xctdToUsdcRate: BN(USDC_DECIMALS).multipliedBy(PRECISION).dividedBy(XCTD_DECIMALS).multipliedBy(STRIKE_PRICE).integerValue(),
   durationSeconds: 60 * 60 * 24 * 365 * 2,
 };
 
 export type ConfigTuple = [string, string, string, BN, number];
 
-export const config: ConfigTuple = [_config.usdcAddress, _config.xctdAddress, _config.projectAddress, _config.usdcToXctdRate, _config.durationSeconds];
+export const config: ConfigTuple = [_config.usdcAddress, _config.xctdAddress, _config.projectAddress, _config.xctdToUsdcRate, _config.durationSeconds];

@@ -8,9 +8,11 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
+    uint256 public constant TOKEN_RATE_PRECISION = 1e20;
+
     IERC20 public immutable FUNDING_TOKEN;
     IERC20 public immutable PROJECT_TOKEN;
-    uint256 public immutable FUNDING_TOKEN_TO_PROJECT_TOKEN_RATE;
+    uint256 public immutable PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE;
     uint256 public immutable VESTING_DURATION_SECONDS;
 
     bool public emergencyReleased = false;
@@ -80,7 +82,7 @@ contract InsuredVestingV1 is Ownable {
         address _fundingToken,
         address _projectToken,
         address _projectWallet,
-        uint256 _fundingTokenToProjectTokenRate,
+        uint256 _projectTokenToFundingTokenRate,
         uint256 _vestingDurationSeconds
     ) {
         FUNDING_TOKEN = IERC20(_fundingToken);
@@ -88,18 +90,7 @@ contract InsuredVestingV1 is Ownable {
 
         VESTING_DURATION_SECONDS = _vestingDurationSeconds;
         // how many Project tokens you get per each 1 Funding token
-        FUNDING_TOKEN_TO_PROJECT_TOKEN_RATE = _fundingTokenToProjectTokenRate; // 7 PROJECT_TOKEN per 1 USD -> 1e12 * 7
-
-        /*
-            TODO(audit) - use precision 1e18
-            TODO(audti) - PROJECT_TOKENS_TO_FUNDING_TOKENS_RATE (other way around)
-
-            PRECISION = 1e58
-            RATE = 14_000_000
-            (1e18 and 1e6)
-
-            14 cents per PROJECT_TOKEN
-         */
+        PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE = _projectTokenToFundingTokenRate;
 
         projectWallet = _projectWallet;
     }
@@ -125,7 +116,7 @@ contract InsuredVestingV1 is Ownable {
         if (claimableFundingToken == 0) revert NothingToClaim();
         userStatus.fundingTokenClaimed += claimableFundingToken;
 
-        uint256 claimableProjectToken = claimableFundingToken * FUNDING_TOKEN_TO_PROJECT_TOKEN_RATE;
+        uint256 claimableProjectToken = fundingTokenToProjectToken(claimableFundingToken);
 
         // TODO consider using ternary conditions for readability
         if (userStatus.claimDecision == ClaimDecision.PROJECT_TOKEN) {
@@ -178,7 +169,7 @@ contract InsuredVestingV1 is Ownable {
         if (totalFundingTokenFunded == 0) revert NoFundsAdded();
         vestingStartTime = block.timestamp;
 
-        uint256 totalRequiredProjectToken = totalFundingTokenFunded * FUNDING_TOKEN_TO_PROJECT_TOKEN_RATE;
+        uint256 totalRequiredProjectToken = fundingTokenToProjectToken(totalFundingTokenFunded);
         uint256 delta = totalRequiredProjectToken - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalRequiredProjectToken);
 
         PROJECT_TOKEN.safeTransferFrom(projectWallet, address(this), delta);
@@ -249,7 +240,7 @@ contract InsuredVestingV1 is Ownable {
         // // in case of PROJECT_TOKEN, we also need to retain the total locked amount in the contract
 
         if (tokenAddress == address(PROJECT_TOKEN) && !emergencyReleased) {
-            tokenBalanceToRecover -= Math.min(totalFundingTokenFunded * FUNDING_TOKEN_TO_PROJECT_TOKEN_RATE, tokenBalanceToRecover);
+            tokenBalanceToRecover -= Math.min(fundingTokenToProjectToken(totalFundingTokenFunded), tokenBalanceToRecover);
         }
 
         if (tokenAddress == address(FUNDING_TOKEN)) {
@@ -266,6 +257,10 @@ contract InsuredVestingV1 is Ownable {
 
     // --- View functions ---
     // TODO(audit) - view functions as in VestingV1
+
+    function fundingTokenToProjectToken(uint256 fundingTokenAmount) public view returns (uint256) {
+        return (fundingTokenAmount * TOKEN_RATE_PRECISION) / PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE;
+    }
 
     function fundingTokenVestedFor(address target) public view returns (uint256) {
         if (vestingStartTime == 0) return 0;
