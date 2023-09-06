@@ -12,6 +12,7 @@ export interface Config {
 const PRECISION = 1e20;
 const USDC_DECIMALS = 1e6;
 const XCTD_DECIMALS = 1e18;
+const STRIKE_PRICE = 0.2; // 0.2$ per XCTD
 
 export const _config: Config = {
   usdcAddress: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
@@ -19,7 +20,9 @@ export const _config: Config = {
   xctdAddress: zeroAddress,
   // TODO: replace with real address
   projectAddress: zeroAddress,
-  xctdToUsdcRate: BN(USDC_DECIMALS).multipliedBy(PRECISION).dividedBy(XCTD_DECIMALS).dividedBy(5).integerValue(), // Reflects 0.2USD = 1 XCTD, based on Ethereum's USDC having 6 decimals and XCTD having 18 decimals
+
+  // (1e6 * 1e20) / 1e18 * 0.2 = 20000000
+  xctdToUsdcRate: BN(USDC_DECIMALS).multipliedBy(PRECISION).dividedBy(XCTD_DECIMALS).multipliedBy(STRIKE_PRICE).integerValue(),
   durationSeconds: 60 * 60 * 24 * 365 * 2,
 };
 
