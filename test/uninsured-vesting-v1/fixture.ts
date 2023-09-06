@@ -1,4 +1,4 @@
-import { Token, account, bn18, erc20, BlockInfo, web3 } from "@defi.org/web3-candies";
+import { Token, account, bn18, erc20, BlockInfo, web3, network } from "@defi.org/web3-candies";
 import { deployArtifact, mineBlock, tag, useChaiBigNumber } from "@defi.org/web3-candies/dist/hardhat";
 import BN from "bignumber.js";
 import { VestingV1 } from "../../typechain-hardhat/contracts/uninsured-vesting-v1/UninsuredVestingV1.sol";
@@ -75,8 +75,10 @@ export function advanceMonths(months: number): Promise<BlockInfo> {
   return mineBlock(months * MONTH);
 }
 
+import { time } from "@nomicfoundation/hardhat-network-helpers";
+
 export async function getCurrentTimestamp(): Promise<string | number | BN> {
-  return (await web3().eth.getBlock("latest")).timestamp;
+  return BN(await time.latest()).plus(1);
 }
 
 export async function getDefaultStartTime(): Promise<BN> {
