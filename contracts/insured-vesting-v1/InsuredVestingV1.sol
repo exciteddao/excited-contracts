@@ -10,54 +10,52 @@ contract InsuredVestingV1 is Ownable {
 
     uint256 TOKEN_RATE_PRECISION = 1e20;
 
-    // TODO(Audit) comment - rename "PROJECT_TOKEN" (FUNDING_TOKEN for insured)
-    IERC20 public immutable USDC;
-    IERC20 public immutable XCTD;
-    uint256 public immutable XCTD_TO_USDC_RATE; // TODO(audit) rename to PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE
-
+    IERC20 public immutable FUNDING_TOKEN;
+    IERC20 public immutable PROJECT_TOKEN;
+    uint256 public immutable PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE;
     uint256 public immutable VESTING_DURATION_SECONDS;
 
     bool public emergencyReleased = false;
-    address public project;
+    address public projectWallet;
 
-    uint256 public startTime;
-    uint256 public totalUsdcFunded;
+    uint256 public vestingStartTime;
+    uint256 public totalFundingTokenFunded;
 
     enum ClaimDecision {
-        TOKENS,
-        USDC
+        PROJECT_TOKEN,
+        FUNDING_TOKEN
     }
 
     struct UserVesting {
-        // Actual USDC amount funded by user
-        uint256 usdcFunded;
+        // Actual FUNDING_TOKEN amount funded by user
+        uint256 fundingTokenFunded;
         // Investment allocation, set by owner
-        uint256 usdcAllocation;
-        // Whether the user wants to claim XCTD or claim back USDC
+        uint256 fundingTokenAllocation;
+        // Whether the user wants to claim PROJECT_TOKEN or claim back FUNDING_TOKEN
         ClaimDecision claimDecision;
-        // Amount of USDC claimed by user (XCTD is computed from that)
-        uint256 usdcClaimed;
+        // Amount of FUNDING_TOKEN claimed by user (PROJECT_TOKEN is computed from that)
+        uint256 fundingTokenClaimed;
     }
 
     mapping(address => UserVesting) public userVestings;
 
     // --- Events ---
-    event UserClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount);
-    event UserEmergencyClaimed(address indexed target, uint256 usdcAmount);
-    event ProjectClaimed(address indexed target, uint256 usdcAmount, uint256 xctdAmount);
-    event AllocationSet(address indexed target, uint256 amount);
+    event UserClaimed(address indexed target, uint256 fundingTokenAmount, uint256 projectTokenAmount);
+    event UserEmergencyClaimed(address indexed target, uint256 fundingTokenAmount);
+    event ProjectClaimed(address indexed target, uint256 fundingTokenAmount, uint256 projectTokenAmount);
+    event AllowedAllocationSet(address indexed target, uint256 amount);
     event FundsAdded(address indexed target, uint256 amount);
     event EmergencyRelease();
     event DecisionChanged(address indexed target, ClaimDecision decision);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
-    event ProjectAddressChanged(address indexed oldAddress, address indexed newAddress);
-    event VestingStarted(uint256 xctdTransferredToContract);
+    event ProjectWalletAddressChanged(address indexed oldAddress, address indexed newAddress);
+    event VestingStarted(uint256 projectTokenTransferredToContract);
 
     // --- Errors ---
     error ZeroAddress();
     error VestingAlreadyStarted();
     error VestingNotStarted();
-    error AllocationExceeded(uint256 amount);
+    error AllowedAllocationExceeded(uint256 amount);
     error NothingToClaim();
     error NoFundsAdded();
     error EmergencyReleased();
@@ -65,8 +63,8 @@ contract InsuredVestingV1 is Ownable {
     error OnlyOwnerOrSender();
 
     // --- Modifiers ---
-    modifier onlyBeforeVesting() {
-        if (startTime != 0) revert VestingAlreadyStarted();
+    modifier onlyBeforeActivation() {
+        if (vestingStartTime != 0) revert VestingAlreadyStarted();
         _;
     }
 
@@ -80,55 +78,59 @@ contract InsuredVestingV1 is Ownable {
         _;
     }
 
-    constructor(address _usdc, address _xctd, address _project, uint256 _xctdToUsdcRate, uint256 _vestingDurationSeconds) {
-        USDC = IERC20(_usdc);
-        XCTD = IERC20(_xctd);
-
-        if (_project == address(0)) revert ZeroAddress(); // TODO(audit) - remove
+    constructor(
+        address _fundingToken,
+        address _projectToken,
+        address _projectWallet,
+        uint256 _projectTokenToFundingTokenRate,
+        uint256 _vestingDurationSeconds
+    ) {
+        FUNDING_TOKEN = IERC20(_fundingToken);
+        PROJECT_TOKEN = IERC20(_projectToken);
 
         VESTING_DURATION_SECONDS = _vestingDurationSeconds;
         // how many Project tokens you get per each 1 Funding token
-        XCTD_TO_USDC_RATE = _xctdToUsdcRate;
+        PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE = _projectTokenToFundingTokenRate;
 
-        project = _project; // TODO(audit) - rename to projectWallet
+        projectWallet = _projectWallet;
     }
 
     // --- User functions ---
-    function addFunds(uint256 amount) external onlyBeforeVesting onlyIfNotEmergencyReleased {
-        if ((userVestings[msg.sender].usdcAllocation - userVestings[msg.sender].usdcFunded) < amount) revert AllocationExceeded(amount);
+    function addFunds(uint256 amount) external onlyBeforeActivation onlyIfNotEmergencyReleased {
+        if ((userVestings[msg.sender].fundingTokenAllocation - userVestings[msg.sender].fundingTokenFunded) < amount) revert AllowedAllocationExceeded(amount);
 
-        userVestings[msg.sender].usdcFunded += amount;
-        totalUsdcFunded += amount;
-        USDC.safeTransferFrom(msg.sender, address(this), amount);
+        userVestings[msg.sender].fundingTokenFunded += amount;
+        totalFundingTokenFunded += amount;
+        FUNDING_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
 
         emit FundsAdded(msg.sender, amount);
     }
 
     function claim(address target) external onlyOwnerOrSender(target) onlyIfNotEmergencyReleased {
-        if (startTime == 0) revert VestingNotStarted();
+        if (vestingStartTime == 0) revert VestingNotStarted();
 
         UserVesting storage userStatus = userVestings[target];
-        if (userStatus.usdcFunded == 0) revert NoFundsAdded();
+        if (userStatus.fundingTokenFunded == 0) revert NoFundsAdded();
 
-        uint256 claimableUsdc = usdcClaimableFor(target);
-        if (claimableUsdc == 0) revert NothingToClaim();
-        userStatus.usdcClaimed += claimableUsdc;
+        uint256 claimableFundingToken = fundingTokenClaimableFor(target);
+        if (claimableFundingToken == 0) revert NothingToClaim();
+        userStatus.fundingTokenClaimed += claimableFundingToken;
 
-        uint256 claimableXctd = usdcToXctd(claimableUsdc);
+        uint256 claimableProjectToken = fundingTokenToProjectToken(claimableFundingToken);
 
         // TODO consider using ternary conditions for readability
-        if (userStatus.claimDecision == ClaimDecision.TOKENS) {
-            XCTD.safeTransfer(target, claimableXctd);
-            USDC.safeTransfer(project, claimableUsdc);
+        if (userStatus.claimDecision == ClaimDecision.PROJECT_TOKEN) {
+            PROJECT_TOKEN.safeTransfer(target, claimableProjectToken);
+            FUNDING_TOKEN.safeTransfer(projectWallet, claimableFundingToken);
 
-            emit UserClaimed(target, 0, claimableXctd);
-            emit ProjectClaimed(target, claimableUsdc, 0);
+            emit UserClaimed(target, 0, claimableProjectToken);
+            emit ProjectClaimed(target, claimableFundingToken, 0);
         } else {
-            XCTD.safeTransfer(project, claimableXctd);
-            USDC.safeTransfer(target, claimableUsdc);
+            PROJECT_TOKEN.safeTransfer(projectWallet, claimableProjectToken);
+            FUNDING_TOKEN.safeTransfer(target, claimableFundingToken);
 
-            emit UserClaimed(target, claimableUsdc, 0);
-            emit ProjectClaimed(target, 0, claimableXctd);
+            emit UserClaimed(target, claimableFundingToken, 0);
+            emit ProjectClaimed(target, 0, claimableProjectToken);
         }
     }
 
@@ -136,40 +138,41 @@ contract InsuredVestingV1 is Ownable {
     // decision1 - PROJECT_TOKENS
     // decision2 - REFUND_FUNDING_TOKENS
     function toggleDecision() external {
-        if (userVestings[msg.sender].usdcFunded == 0) revert NoFundsAdded();
-        userVestings[msg.sender].claimDecision = userVestings[msg.sender].claimDecision == ClaimDecision.TOKENS ? ClaimDecision.USDC : ClaimDecision.TOKENS;
+        if (userVestings[msg.sender].fundingTokenFunded == 0) revert NoFundsAdded();
+        userVestings[msg.sender].claimDecision = userVestings[msg.sender].claimDecision == ClaimDecision.PROJECT_TOKEN
+            ? ClaimDecision.FUNDING_TOKEN
+            : ClaimDecision.PROJECT_TOKEN;
 
         emit DecisionChanged(msg.sender, userVestings[msg.sender].claimDecision);
     }
 
     // --- Owner functions ---
 
-    // TODO(audit) - rename to setAllowedAllocation
-    function setAllocation(address target, uint256 _usdcAllocation) external onlyOwner onlyBeforeVesting onlyIfNotEmergencyReleased {
+    function setAllowedAllocation(address target, uint256 _fundingTokenAllocation) external onlyOwner onlyBeforeActivation onlyIfNotEmergencyReleased {
         // Update user allocation
-        userVestings[target].usdcAllocation = _usdcAllocation;
+        userVestings[target].fundingTokenAllocation = _fundingTokenAllocation;
 
         // Refund user if they have funded more than the new allocation
-        if (userVestings[target].usdcFunded > _usdcAllocation) {
-            uint256 _usdcToRefund = userVestings[target].usdcFunded - _usdcAllocation;
-            userVestings[target].usdcFunded = _usdcAllocation;
-            totalUsdcFunded -= _usdcToRefund;
-            USDC.safeTransfer(target, _usdcToRefund);
+        if (userVestings[target].fundingTokenFunded > _fundingTokenAllocation) {
+            uint256 _fundingTokenToRefund = userVestings[target].fundingTokenFunded - _fundingTokenAllocation;
+            userVestings[target].fundingTokenFunded = _fundingTokenAllocation;
+            totalFundingTokenFunded -= _fundingTokenToRefund;
+            FUNDING_TOKEN.safeTransfer(target, _fundingTokenToRefund);
         }
 
-        emit AllocationSet(target, _usdcAllocation);
+        emit AllowedAllocationSet(target, _fundingTokenAllocation);
     }
 
     // TODO(audit) - change similar to VestingV1
-    // TODO(audit) - rename onlyBeforeActivation (consider whether an additional onlyBeforeVestingStarted is needed)
-    function activate() external onlyOwner onlyBeforeVesting {
-        if (totalUsdcFunded == 0) revert NoFundsAdded();
-        startTime = block.timestamp;
+    // TODO(audit) - consider whether an additional onlyBeforeVestingStarted is needed)
+    function activate() external onlyOwner onlyBeforeActivation {
+        if (totalFundingTokenFunded == 0) revert NoFundsAdded();
+        vestingStartTime = block.timestamp;
 
-        uint256 totalRequiredXctd = usdcToXctd(totalUsdcFunded);
-        uint256 delta = totalRequiredXctd - Math.min(XCTD.balanceOf(address(this)), totalRequiredXctd);
+        uint256 totalRequiredProjectToken = fundingTokenToProjectToken(totalFundingTokenFunded);
+        uint256 delta = totalRequiredProjectToken - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalFundingTokenFunded);
 
-        XCTD.safeTransferFrom(project, address(this), delta);
+        PROJECT_TOKEN.safeTransferFrom(projectWallet, address(this), delta);
 
         emit VestingStarted(delta);
     }
@@ -178,14 +181,14 @@ contract InsuredVestingV1 is Ownable {
     function setProjectAddress(address newProject) external onlyOwner {
         if (newProject == address(0)) revert ZeroAddress();
 
-        address oldProjectAddress = project;
-        project = newProject;
+        address oldProjectAddress = projectWallet;
+        projectWallet = newProject;
 
-        emit ProjectAddressChanged(oldProjectAddress, newProject);
+        emit ProjectWalletAddressChanged(oldProjectAddress, newProject);
     }
 
     // --- Emergency functions ---
-    // Used to allow users to claim back USDC if anything goes wrong
+    // Used to allow users to claim back FUNDING_TOKEN if anything goes wrong
     function emergencyRelease() external onlyOwner onlyIfNotEmergencyReleased {
         emergencyReleased = true;
         emit EmergencyRelease();
@@ -221,33 +224,33 @@ contract InsuredVestingV1 is Ownable {
     function emergencyClaim(address target) external onlyOwnerOrSender(target) {
         UserVesting storage userStatus = userVestings[target];
         if (!emergencyReleased) revert EmergencyNotReleased();
-        if (userStatus.usdcFunded == 0) revert NoFundsAdded();
+        if (userStatus.fundingTokenFunded == 0) revert NoFundsAdded();
 
-        uint256 toClaim = userStatus.usdcFunded - userStatus.usdcClaimed;
-        userStatus.usdcClaimed += toClaim;
-        USDC.safeTransfer(target, toClaim);
+        uint256 toClaim = userStatus.fundingTokenFunded - userStatus.fundingTokenClaimed;
+        userStatus.fundingTokenClaimed += toClaim;
+        FUNDING_TOKEN.safeTransfer(target, toClaim);
 
         emit UserEmergencyClaimed(target, toClaim);
     }
 
     // TODO(audit) - separate to recoverEth as in VestingV1
     function recover(address tokenAddress) external onlyOwner {
-        // Return any balance of the token that's not xctd
+        // Return any balance of the token that's not projectToken
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
-        // // in case of XCTD, we also need to retain the total locked amount in the contract
+        // // in case of PROJECT_TOKEN, we also need to retain the total locked amount in the contract
 
-        if (tokenAddress == address(XCTD) && !emergencyReleased) {
-            tokenBalanceToRecover -= Math.min(usdcToXctd(totalUsdcFunded), tokenBalanceToRecover);
+        if (tokenAddress == address(PROJECT_TOKEN) && !emergencyReleased) {
+            tokenBalanceToRecover -= Math.min(fundingTokenToProjectToken(totalFundingTokenFunded), tokenBalanceToRecover);
         }
 
-        if (tokenAddress == address(USDC)) {
-            tokenBalanceToRecover -= Math.min(totalUsdcFunded, tokenBalanceToRecover);
+        if (tokenAddress == address(FUNDING_TOKEN)) {
+            tokenBalanceToRecover -= Math.min(totalFundingTokenFunded, tokenBalanceToRecover);
         }
 
-        IERC20(tokenAddress).safeTransfer(project, tokenBalanceToRecover);
+        IERC20(tokenAddress).safeTransfer(projectWallet, tokenBalanceToRecover);
 
         uint256 etherToRecover = address(this).balance;
-        Address.sendValue(payable(project), etherToRecover);
+        Address.sendValue(payable(projectWallet), etherToRecover);
 
         emit AmountRecovered(tokenAddress, tokenBalanceToRecover, etherToRecover);
     }
@@ -255,18 +258,18 @@ contract InsuredVestingV1 is Ownable {
     // --- View functions ---
     // TODO(audit) - view functions as in VestingV1
 
-    function usdcToXctd(uint256 usdc) public view returns (uint256) {
-        return (usdc * TOKEN_RATE_PRECISION) / XCTD_TO_USDC_RATE;
+    function fundingTokenToProjectToken(uint256 fundingTokenAmount) public view returns (uint256) {
+        return (fundingTokenAmount * TOKEN_RATE_PRECISION) / PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE;
     }
 
-    function usdcVestedFor(address target) public view returns (uint256) {
-        if (startTime == 0) return 0;
+    function fundingTokenVestedFor(address target) public view returns (uint256) {
+        if (vestingStartTime == 0) return 0;
 
         UserVesting storage targetStatus = userVestings[target];
-        return Math.min(targetStatus.usdcFunded, ((block.timestamp - startTime) * targetStatus.usdcFunded) / VESTING_DURATION_SECONDS);
+        return Math.min(targetStatus.fundingTokenFunded, ((block.timestamp - vestingStartTime) * targetStatus.fundingTokenFunded) / VESTING_DURATION_SECONDS);
     }
 
-    function usdcClaimableFor(address target) public view returns (uint256) {
-        return usdcVestedFor(target) - userVestings[target].usdcClaimed;
+    function fundingTokenClaimableFor(address target) public view returns (uint256) {
+        return fundingTokenVestedFor(target) - userVestings[target].fundingTokenClaimed;
     }
 }

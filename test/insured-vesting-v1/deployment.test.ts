@@ -9,7 +9,7 @@ import { deployArtifact } from "@defi.org/web3-candies/dist/hardhat";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 
-import { setup, VESTING_DURATION_SECONDS } from "./fixture";
+import { setup, FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO } from "./fixture";
 import { erc20, bn18, Token, account, bn6, zeroAddress } from "@defi.org/web3-candies";
 
 describe("InsuredVestingV1 deployment config", () => {
@@ -22,9 +22,9 @@ describe("InsuredVestingV1 deployment config", () => {
   describe("InsuredVestingV1 deployment", () => {
     before(async () => {
       deployer = await account(9);
-      xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "XCTD"])).options.address);
+      xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "PROJECT_TOKEN"])).options.address);
 
-      // TODO TEMPORARY: until having production XCTD & project addresses
+      // TODO TEMPORARY: until having production PROJECT_TOKEN & project wallet addresses
       const testConfig = [...config];
       testConfig[1] = xctd.options.address;
       testConfig[2] = await account(4);
@@ -36,9 +36,9 @@ describe("InsuredVestingV1 deployment config", () => {
     describe("InsuredVestingV1 deployment", () => {
       before(async () => {
         deployer = await account(9);
-        xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "XCTD"])).options.address);
+        xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "PROJECT_TOKEN"])).options.address);
 
-        // TODO TEMPORARY: until having production XCTD & project addresses
+        // TODO TEMPORARY: until having production PROJECT_TOKEN & project wallet addresses
         const testConfig = [...config];
         testConfig[1] = xctd.options.address;
         testConfig[2] = await account(4);
@@ -48,39 +48,39 @@ describe("InsuredVestingV1 deployment config", () => {
       });
 
       it("xctd address cannot be zero", async () => {
-        const xctd = await insuredVesting.methods.XCTD().call();
+        const xctd = await insuredVesting.methods.PROJECT_TOKEN().call();
         expect(xctd.toLowerCase()).to.not.match(/^0x0+$/);
       });
 
       it("xctd must have 18 decimals", async () => {
-        const xctd = await insuredVesting.methods.XCTD().call();
-        expect(await erc20("XCTD", xctd).decimals()).to.equal(18);
+        const xctd = await insuredVesting.methods.PROJECT_TOKEN().call();
+        expect(await erc20("PROJECT_TOKEN", xctd).decimals()).to.equal(18);
       });
 
       it("usdc address cannot be zero", async () => {
-        const usdc = await insuredVesting.methods.USDC().call();
+        const usdc = await insuredVesting.methods.FUNDING_TOKEN().call();
         expect(usdc.toLowerCase()).to.not.match(/^0x0+$/);
       });
 
       it("usdc must have 6 decimals", async () => {
-        const usdc = await insuredVesting.methods.USDC().call();
-        expect(await erc20("USDC", usdc).decimals()).to.equal(6);
+        const usdc = await insuredVesting.methods.FUNDING_TOKEN().call();
+        expect(await erc20("FUNDING_TOKEN", usdc).decimals()).to.equal(6);
       });
 
-      it("project address cannot be zero", async () => {
-        const project = await insuredVesting.methods.project().call();
-        expect(project.toLowerCase()).to.not.match(/^0x0+$/);
+      it("project wallet address cannot be zero", async () => {
+        const projectWallet = await insuredVesting.methods.projectWallet().call();
+        expect(projectWallet.toLowerCase()).to.not.match(/^0x0+$/);
       });
 
       // TODO define this amount
-      it.skip("project xctd balance must be over [TODO]", async () => {
-        const project = await insuredVesting.methods.project().call();
-        const xctd = erc20("XCTD", await insuredVesting.methods.XCTD().call());
-        expect(await xctd.methods.balanceOf(project).call()).to.be.bignumber.greaterThan(await xctd.amount(999_999_999));
+      it.skip("project wallet xctd balance must be over [TODO]", async () => {
+        const projectWallet = await insuredVesting.methods.projectWallet().call();
+        const xctd = erc20("PROJECT_TOKEN", await insuredVesting.methods.PROJECT_TOKEN().call());
+        expect(await xctd.methods.balanceOf(projectWallet).call()).to.be.bignumber.greaterThan(await xctd.amount(999_999_999));
       });
 
       it("for each usdc, we should get at least 1 xctd", async () => {
-        const usdcToXctdRate = BN(await insuredVesting.methods.XCTD_TO_USDC_RATE().call());
+        const usdcToXctdRate = BN(await insuredVesting.methods.PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE().call());
         expect(usdcToXctdRate).to.be.bignumber.lte(100_000_000);
       });
 
