@@ -5,6 +5,11 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
+// when owner calls activate, the contract will:
+// - transfer the necessary amount of tokens required to cover all funded tokens
+// - set the vesting clock to start at the specified time (no more than 90 days in the future)
+// - lock the contract for any further allowed allocations settings
+// - lock the contract for any further fundings
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
@@ -12,6 +17,7 @@ contract InsuredVestingV1 is Ownable {
     IERC20 public immutable PROJECT_TOKEN;
     uint256 public immutable FUNDING_TOKEN_TO_PROJECT_TOKEN_RATE;
     uint256 public immutable VESTING_DURATION_SECONDS;
+    uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
 
     bool public emergencyReleased = false;
     address public projectWallet;
@@ -51,7 +57,7 @@ contract InsuredVestingV1 is Ownable {
 
     // --- Errors ---
     error ZeroAddress();
-    error VestingAlreadyStarted();
+    error AlreadyActivated();
     error VestingNotStarted();
     error AllowedAllocationExceeded(uint256 amount);
     error NothingToClaim();
@@ -59,10 +65,12 @@ contract InsuredVestingV1 is Ownable {
     error EmergencyReleased();
     error EmergencyNotReleased();
     error OnlyOwnerOrSender();
+    error StartTimeTooLate(uint256 vestingStartTime, uint256 maxStartTime);
+    error StartTimeIsInPast(uint256 vestingStartTime);
 
     // --- Modifiers ---
     modifier onlyBeforeActivation() {
-        if (vestingStartTime != 0) revert VestingAlreadyStarted();
+        if (vestingStartTime != 0) revert AlreadyActivated();
         _;
     }
 

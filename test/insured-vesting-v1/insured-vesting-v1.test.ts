@@ -39,6 +39,7 @@ import {
   fundingToken,
   fundFundingTokenFromWhale,
   PROJECT_TOKENS_ON_SALE,
+  activateAndReachStartTime,
 } from "./fixture";
 import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
@@ -69,7 +70,7 @@ describe("InsuredVestingV1", () => {
         it(`can claim tokens proportional to amount of seconds in ${days} days passed`, async () => {
           await setAllowedAllocationForUser1();
           await addFundingFromUser1();
-          await insuredVesting.methods.activate().send({ from: deployer });
+          await activateAndReachStartTime();
           await advanceDays(days);
           await insuredVesting.methods.claim(user1).send({ from: user1 });
 
@@ -89,7 +90,7 @@ describe("InsuredVestingV1", () => {
         await addFundingFromUser1(FUNDING_PER_USER / 4);
         await setBalancesForDelta();
         await advanceMonths(LOCKUP_MONTHS - 3);
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await advanceDays(6);
         await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("projectToken", await vestedAmount(6, "projectToken"));
@@ -110,7 +111,7 @@ describe("InsuredVestingV1", () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
         await setBalancesForDelta();
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await advanceDays(30);
         await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("projectToken", await vestedAmount(30, "projectToken"));
@@ -134,7 +135,7 @@ describe("InsuredVestingV1", () => {
       it.skip("cannot claim if there's nothing to claim", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         insuredVesting.methods.claim(user1).send({ from: user1 });
 
         await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.NothingToClaim);
@@ -144,7 +145,7 @@ describe("InsuredVestingV1", () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1(FUNDING_PER_USER / 3);
         await setBalancesForDelta();
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await advanceDays(20);
         await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("projectToken", (await vestedAmount(20, "projectToken")).dividedBy(3));
@@ -158,7 +159,7 @@ describe("InsuredVestingV1", () => {
         await addFundingFromUser1(FUNDING_PER_USER / 4);
         await setBalancesForDelta();
         await advanceMonths(LOCKUP_MONTHS - 2);
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await advanceDays(20);
         await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("projectToken", (await vestedAmount(20, "projectToken")).dividedBy(2));
@@ -168,7 +169,7 @@ describe("InsuredVestingV1", () => {
       it("cannot double-claim tokens for same period of time", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await advanceDays(45);
 
         await insuredVesting.methods.claim(user1).send({ from: user1 });
@@ -195,7 +196,7 @@ describe("InsuredVestingV1", () => {
         await advanceMonths(LOCKUP_MONTHS);
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await expectRevert(async () => insuredVesting.methods.claim(user2).send({ from: user2 }), Error.NoFundsAdded);
       });
 
@@ -203,7 +204,7 @@ describe("InsuredVestingV1", () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
         await setBalancesForDelta();
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await advanceDays(VESTING_DURATION_DAYS);
         await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("projectToken", await projectToken.amount(FUNDING_PER_USER * FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO));
@@ -214,7 +215,7 @@ describe("InsuredVestingV1", () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
         await setBalancesForDelta();
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await advanceDays(VESTING_DURATION_DAYS * 3);
         await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("projectToken", await projectToken.amount(FUNDING_PER_USER * FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO));
@@ -224,7 +225,7 @@ describe("InsuredVestingV1", () => {
       it("project receives funding when claim is made", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await setBalancesForDelta();
         await advanceDays(77);
         await insuredVesting.methods.claim(user1).send({ from: user1 });
@@ -235,7 +236,7 @@ describe("InsuredVestingV1", () => {
       it("owner can claim on behalf of user", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await setBalancesForDelta();
         await advanceDays(77);
         await insuredVesting.methods.claim(user1).send({ from: deployer });
@@ -247,7 +248,7 @@ describe("InsuredVestingV1", () => {
         await setBalancesForDelta();
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await advanceDays(77);
         await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), Error.OnlyOwnerOrSender);
       });
@@ -256,7 +257,7 @@ describe("InsuredVestingV1", () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
         await setAllowedAllocationForUser1(FUNDING_PER_USER / 4);
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await advanceDays(77);
         await setBalancesForDelta();
         await insuredVesting.methods.claim(user1).send({ from: user1 });
@@ -269,7 +270,7 @@ describe("InsuredVestingV1", () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
 
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await setBalancesForDelta();
 
         await advanceDays(30);
@@ -289,7 +290,7 @@ describe("InsuredVestingV1", () => {
 
         await insuredVesting.methods.toggleDecision().send({ from: user1 });
 
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await setBalancesForDelta();
 
         await advanceDays(30);
@@ -307,7 +308,7 @@ describe("InsuredVestingV1", () => {
         await addFundingFromUser1();
 
         // Claim for 11 months
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await setBalancesForDelta();
         const currentProjectTokenBalance = balances.project.projectToken;
 
@@ -369,7 +370,7 @@ describe("InsuredVestingV1", () => {
         await setAllowedAllocationForUser1();
         await insuredVesting.methods.addFunds(1).send({ from: user1 });
         await expectUserBalanceDelta("fundingToken", -1);
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await advanceDays(VESTING_DURATION_DAYS);
         await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("projectToken", 1e12 * FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO, 0);
@@ -380,7 +381,7 @@ describe("InsuredVestingV1", () => {
         await setAllowedAllocationForUser1();
         await insuredVesting.methods.addFunds(1).send({ from: user1 });
         await expectUserBalanceDelta("fundingToken", -1);
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await advanceDays(30);
 
         // This is a corner case where the amount funded is so little, it's indivisible relative to the time passed
@@ -392,7 +393,7 @@ describe("InsuredVestingV1", () => {
         await setAllowedAllocationForUser1();
         await insuredVesting.methods.addFunds(100).send({ from: user1 });
         await expectUserBalanceDelta("fundingToken", -1);
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await advanceDays(30);
         await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("projectToken", 4 * 1e12 * FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO, 0);
@@ -419,7 +420,7 @@ describe("InsuredVestingV1", () => {
       it("cannot add funds after vesting started", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1(FUNDING_PER_USER / 2);
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), Error.VestingAlreadyStarted);
       });
 
@@ -445,7 +446,7 @@ describe("InsuredVestingV1", () => {
         it("cannot set allowed allocation after period started", async () => {
           await setAllowedAllocationForUser1(FUNDING_PER_USER / 4);
           await addFundingFromUser1(FUNDING_PER_USER / 4);
-          await insuredVesting.methods.activate().send({ from: deployer });
+          await activateAndReachStartTime();
           await expectRevert(
             async () => insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer }),
             Error.VestingAlreadyStarted
@@ -566,7 +567,7 @@ describe("InsuredVestingV1", () => {
       it("lets user emergency claim back remaining FUNDING_TOKEN balance, some PROJECT_TOKEN claimed", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await advanceDays(VESTING_DURATION_DAYS / 10);
         await insuredVesting.methods.claim(user1).send({ from: deployer });
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
@@ -581,7 +582,7 @@ describe("InsuredVestingV1", () => {
       it("cannot regularly claim once emergency released", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
         await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.EmergencyReleased);
       });
@@ -798,14 +799,14 @@ describe("InsuredVestingV1", () => {
       it("returns correct vested amount - immediately after activation", async () => {
         await setAllowedAllocationForUser1(FUNDING_PER_USER);
         await addFundingFromUser1(FUNDING_PER_USER);
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.eq(0);
       });
 
       it("returns correct vested amount - 30 days", async () => {
         await setAllowedAllocationForUser1(FUNDING_PER_USER);
         await addFundingFromUser1(FUNDING_PER_USER);
-        await insuredVesting.methods.activate().send({ from: deployer });
+        await activateAndReachStartTime();
         await advanceDays(30);
         expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.eq(await vestedAmount(30, "fundingToken"));
       });

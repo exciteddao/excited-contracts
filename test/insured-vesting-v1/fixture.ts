@@ -111,7 +111,7 @@ export async function getCurrentTimestamp(): Promise<string | number | BN> {
 }
 
 export async function getDefaultStartTime(): Promise<BN> {
-  return await BN(await getCurrentTimestamp()).plus(MONTH * 6);
+  return BN(await getCurrentTimestamp()).plus(DAY * 3);
 }
 
 export function fundingTokenToProjectToken(amountInFundingToken: BN): BN {
@@ -192,4 +192,9 @@ export async function fundFundingTokenFromWhale(amount: BN, targets: string[]) {
     await fundingToken.methods.transfer(target, await fundingToken.amount(amount)).send({ from: whale });
     expect(BN(await fundingToken.methods.balanceOf(target).call()).minus(initialBalance)).bignumber.eq(await fundingToken.amount(amount));
   }
+}
+
+export async function activateAndReachStartTime() {
+  await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: deployer });
+  await advanceDays(3);
 }
