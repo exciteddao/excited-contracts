@@ -8,7 +8,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
-    uint256 TOKEN_RATE_PRECISION = 1e20;
+    uint256 public constant TOKEN_RATE_PRECISION = 1e20;
 
     IERC20 public immutable FUNDING_TOKEN;
     IERC20 public immutable PROJECT_TOKEN;
