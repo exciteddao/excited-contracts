@@ -2,12 +2,7 @@ import { ConfigTuple } from "./config";
 import BN from "bignumber.js";
 import { DeployParams } from "@defi.org/web3-candies/dist/hardhat";
 
-export const deployUninsuredVestingV1 = async (
-  deploy: (params: DeployParams) => Promise<string>,
-  config: ConfigTuple,
-  maxFeePerGas: BN,
-  maxPriorityFeePerGas: BN
-) => {
+export const deployVestingV1 = async (deploy: (params: DeployParams) => Promise<string>, config: ConfigTuple, maxFeePerGas: BN, maxPriorityFeePerGas: BN) => {
   // TODO: check real XCTD address
   if (config[0] === "0x0000000000000000000000000000000000000000") {
     throw new Error("XCTD address cannot be zero");
@@ -18,7 +13,7 @@ export const deployUninsuredVestingV1 = async (
   }
 
   await deploy({
-    contractName: "UninsuredVestingV1",
+    contractName: "VestingV1",
     args: config,
     maxFeePerGas: maxFeePerGas,
     maxPriorityFeePerGas: maxPriorityFeePerGas,
