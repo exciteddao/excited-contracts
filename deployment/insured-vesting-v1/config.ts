@@ -23,6 +23,8 @@ export const _config: Config = {
   durationSeconds: 60 * 60 * 24 * 365 * 2,
 };
 
+throw BN(USDC_DECIMALS).multipliedBy(PRECISION).dividedBy(XCTD_DECIMALS).dividedBy(5).integerValue();
+
 export type ConfigTuple = [string, string, string, BN, number];
 
 export const config: ConfigTuple = [_config.usdcAddress, _config.xctdAddress, _config.projectAddress, _config.xctdToUsdcRate, _config.durationSeconds];
