@@ -89,17 +89,6 @@ contract InsuredVestingV1 is Ownable {
         // how many Project tokens you get per each 1 Funding token
         XCTD_TO_USDC_RATE = _xctdToUsdcRate; // 7 XCTD per 1 USD -> 1e12 * 7
 
-        /*
-            TODO(audit) - use precision 1e18
-            TODO(audti) - PROJECT_TOKENS_TO_FUNDING_TOKENS_RATE (other way around)
-
-            PRECISION = 1e58
-            RATE = 14_000_000
-            (1e18 and 1e6)
-
-            14 cents per XCTD
-         */
-
         project = _project; // TODO(audit) - rename to projectWallet
     }
 
