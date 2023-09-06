@@ -1,7 +1,7 @@
 import { Token, account, bn18, erc20, BlockInfo, web3 } from "@defi.org/web3-candies";
 import { deployArtifact, mineBlock, tag, useChaiBigNumber } from "@defi.org/web3-candies/dist/hardhat";
 import BN from "bignumber.js";
-import { UninsuredVestingV1 } from "../../typechain-hardhat/contracts/uninsured-vesting-v1/UninsuredVestingV1";
+import { VestingV1 } from "../../typechain-hardhat/contracts/uninsured-vesting-v1/UninsuredVestingV1.sol";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { config } from "../../deployment/uninsured-vesting-v1/config";
 
@@ -14,7 +14,7 @@ export let anyUser: string;
 
 export let projectToken: MockERC20 & Token;
 export let someOtherToken: MockERC20 & Token;
-export let uninsuredVesting: UninsuredVestingV1;
+export let vesting: VestingV1;
 
 export const DAY = 60 * 60 * 24;
 export const MONTH = DAY * 30;
@@ -45,7 +45,7 @@ export async function withFixture() {
   testConfig[0] = projectToken.options.address;
   // END TEMPORARY
 
-  uninsuredVesting = await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, testConfig);
+  vesting = await deployArtifact<VestingV1>("VestingV1", { from: deployer }, testConfig);
 }
 
 export enum Error {
@@ -60,11 +60,11 @@ export enum Error {
 }
 
 export async function transferProjectTokenToVesting() {
-  await projectToken.methods.transfer(uninsuredVesting.options.address, await projectToken.amount(PROJECT_TOKENS_ON_SALE)).send({ from: deployer });
+  await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(PROJECT_TOKENS_ON_SALE)).send({ from: deployer });
 }
 
 export async function approveProjectTokenToVesting(amount = PROJECT_TOKENS_ON_SALE) {
-  await projectToken.methods.approve(uninsuredVesting.options.address, await projectToken.amount(amount)).send({ from: deployer });
+  await projectToken.methods.approve(vesting.options.address, await projectToken.amount(amount)).send({ from: deployer });
 }
 
 export function advanceDays(days: number): Promise<BlockInfo> {
@@ -84,11 +84,11 @@ export async function getDefaultStartTime(): Promise<BN> {
 }
 
 export async function setAmountForUser1(amount = TOKENS_PER_USER) {
-  await uninsuredVesting.methods.setAmount(user1, await projectToken.amount(amount)).send({ from: deployer });
+  await vesting.methods.setAmount(user1, await projectToken.amount(amount)).send({ from: deployer });
 }
 
 export async function setAmountForUser2(amount = TOKENS_PER_USER) {
-  await uninsuredVesting.methods.setAmount(user2, await projectToken.amount(amount)).send({ from: deployer });
+  await vesting.methods.setAmount(user2, await projectToken.amount(amount)).send({ from: deployer });
 }
 
 export async function vestedAmount(days: number) {

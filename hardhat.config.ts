@@ -9,10 +9,10 @@ import _ from "lodash";
 import "hardhat-watcher";
 import "solidity-coverage";
 
-import { deployUninsuredVestingV1, ConfigTuple as UninsuredConfig } from "./deployment/uninsured-vesting-v1";
+import { deployVestingV1, ConfigTuple as UninsuredConfig } from "./deployment/uninsured-vesting-v1";
 import { deployInsuredVestingV1, ConfigTuple as InsuredConfig } from "./deployment/insured-vesting-v1";
 
-type Contract = "Insured" | "Uninsured";
+type Contract = "InsuredVesting" | "Vesting";
 
 task("deploy-contract", "Deploy Excited contract")
   .addParam<Contract>("contract", "Contract name")
@@ -21,13 +21,13 @@ task("deploy-contract", "Deploy Excited contract")
     let config: InsuredConfig | UninsuredConfig;
 
     switch (args.contract) {
-      case "Insured":
+      case "InsuredVesting":
         // TODO: confirm name
         contractName = "InsuredVesting";
         config = require("./deployment/insured-vesting-v1/config").config;
         break;
-      case "Uninsured":
-        contractName = "UninsuredVesting";
+      case "Vesting":
+        contractName = "Vesting";
         config = require("./deployment/uninsured-vesting-v1/config").config;
       default:
         console.error("Invalid contract name");
@@ -57,10 +57,10 @@ task("deploy-contract", "Deploy Excited contract")
       console.log("Deploying...");
 
       switch (args.contract) {
-        case "Insured":
+        case "InsuredVesting":
           await deployInsuredVestingV1(deploy, config as InsuredConfig, max, tip);
-        case "Uninsured":
-          await deployUninsuredVestingV1(deploy, config as UninsuredConfig, max, tip);
+        case "Vesting":
+          await deployVestingV1(deploy, config as UninsuredConfig, max, tip);
       }
     }
   });

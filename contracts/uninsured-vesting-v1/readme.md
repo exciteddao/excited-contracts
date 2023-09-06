@@ -1,4 +1,4 @@
-## Uninsured Vesting (VestingV1)
+## Vesting (VestingV1)
 
 1. Owner deploys
 2. Owner can set a starting time (lockup) from which vesting will start

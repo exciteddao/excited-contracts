@@ -5,8 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-// TODO(Audit) comment - Rename to VestingV1
-contract UninsuredVestingV1 is Ownable {
+contract VestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable PROJECT_TOKEN;
