@@ -14,6 +14,7 @@ contract InsuredVestingV1 is Ownable {
     IERC20 public immutable USDC;
     IERC20 public immutable XCTD;
     uint256 public immutable XCTD_TO_USDC_RATE; // TODO(audit) rename to PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE
+
     uint256 public immutable VESTING_DURATION_SECONDS;
 
     bool public emergencyReleased = false;
@@ -87,7 +88,7 @@ contract InsuredVestingV1 is Ownable {
 
         VESTING_DURATION_SECONDS = _vestingDurationSeconds;
         // how many Project tokens you get per each 1 Funding token
-        XCTD_TO_USDC_RATE = _xctdToUsdcRate; // 7 XCTD per 1 USD -> 1e12 * 7
+        XCTD_TO_USDC_RATE = _xctdToUsdcRate;
 
         project = _project; // TODO(audit) - rename to projectWallet
     }
