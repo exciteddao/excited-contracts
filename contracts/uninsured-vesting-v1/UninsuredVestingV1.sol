@@ -12,9 +12,10 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract VestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
+    uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
+
     IERC20 public immutable PROJECT_TOKEN;
     uint256 public immutable VESTING_DURATION_SECONDS;
-    uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
 
     uint256 public vestingStartTime;
     uint256 public totalAllocated;
@@ -29,7 +30,7 @@ contract VestingV1 is Ownable {
     // --- Events ---
     event Claimed(address indexed target, uint256 amount);
     event AmountSet(address indexed target, uint256 amount);
-    event StartTimeSet(uint256 timestamp);
+    event Activated(uint256 timestamp, uint256 tokensTransferred);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
     // --- Errors ---
@@ -91,7 +92,7 @@ contract VestingV1 is Ownable {
         uint256 delta = totalAllocated - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalAllocated);
         PROJECT_TOKEN.safeTransferFrom(msg.sender, address(this), delta);
 
-        emit StartTimeSet(vestingStartTime);
+        emit Activated(vestingStartTime, delta);
     }
 
     // --- Emergency functions ---
