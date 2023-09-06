@@ -40,6 +40,7 @@ import {
   fundFundingTokenFromWhale,
   PROJECT_TOKENS_ON_SALE,
   activateAndReachStartTime,
+  MONTH,
 } from "./fixture";
 import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
@@ -129,16 +130,6 @@ describe("InsuredVestingV1", () => {
             await projectToken.amount(0.1)
           );
         }
-      });
-
-      // TODO figure out a way to send both claims in the same block
-      it.skip("cannot claim if there's nothing to claim", async () => {
-        await setAllowedAllocationForUser1();
-        await addFundingFromUser1();
-        await activateAndReachStartTime();
-        insuredVesting.methods.claim(user1).send({ from: user1 });
-
-        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.NothingToClaim);
       });
 
       it("can fund a partial allowed allocation and claim tokens", async () => {
@@ -443,13 +434,13 @@ describe("InsuredVestingV1", () => {
 
     describe("admin", () => {
       describe("set allowed allocation", () => {
-        it("cannot set allowed allocation after period started", async () => {
+        it("cannot set allowed allocation after activation", async () => {
           await setAllowedAllocationForUser1(FUNDING_PER_USER / 4);
           await addFundingFromUser1(FUNDING_PER_USER / 4);
           await activateAndReachStartTime();
           await expectRevert(
             async () => insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer }),
-            Error.VestingAlreadyStarted
+            Error.AlreadyActivated
           );
         });
 
@@ -814,6 +805,18 @@ describe("InsuredVestingV1", () => {
   });
 
   describe("activate", () => {
+    it("fails if start time is in the past", async () => {
+      const timeInPast = BN(await getCurrentTimestamp()).minus(1);
+      await expectRevert(async () => insuredVesting.methods.activate(timeInPast).send({ from: deployer }), Error.StartTimeIsInPast);
+    });
+
+    it("fails if start time is too far in to the future", async () => {
+      const timeInDistantFuture = BN(await getCurrentTimestamp())
+        .plus(MONTH * 3)
+        .plus(DAY);
+      await expectRevert(async () => insuredVesting.methods.activate(timeInDistantFuture).send({ from: deployer }), Error.StartTimeTooLate);
+    });
+
     it("fails if there isn't enough PROJECT_TOKEN allowance to cover funded FUNDING_TOKEN", async () => {
       await setAllowedAllocationForUser1(FUNDING_PER_USER);
       await addFundingFromUser1(FUNDING_PER_USER);
