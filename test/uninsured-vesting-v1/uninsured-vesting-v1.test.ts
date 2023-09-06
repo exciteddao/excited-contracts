@@ -243,7 +243,7 @@ describe("VestingV1", () => {
       describe("set amount", () => {
         it("cannot set amount after activation", async () => {
           await setAmountForUser1();
-          await vesting.methods.activate(await getDefaultStartTime()).send({ from: deployer });
+          await vesting.methods.activate(await getCurrentTimestamp()).send({ from: deployer });
           await expectRevert(async () => await setAmountForUser2(), Error.AlreadyActivated);
         });
 
