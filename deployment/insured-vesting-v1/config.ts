@@ -23,7 +23,7 @@ export const _config: Config = {
   durationSeconds: 60 * 60 * 24 * 365 * 2,
 };
 
-throw BN(USDC_DECIMALS).multipliedBy(PRECISION).dividedBy(XCTD_DECIMALS).dividedBy(5).integerValue();
+throw BN(USDC_DECIMALS).multipliedBy(PRECISION).dividedBy(XCTD_DECIMALS).dividedBy(5).integerValue().toString();
 
 export type ConfigTuple = [string, string, string, BN, number];
 
