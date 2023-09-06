@@ -63,8 +63,7 @@ describe("InsuredVestingV1", () => {
     });
 
     describe("claim", () => {
-      // const testCases = [0, 1, 5, 10, 100, 200, 534];
-      const testCases = [534];
+      const testCases = [0, 1, 5, 10, 100, 200, 534];
 
       for (const days of testCases) {
         it(`can claim tokens proportional to amount of seconds in ${days} days passed`, async () => {

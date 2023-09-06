@@ -79,9 +79,9 @@ describe("InsuredVestingV1 deployment config", () => {
         expect(await xctd.methods.balanceOf(project).call()).to.be.bignumber.greaterThan(await xctd.amount(999_999_999));
       });
 
-      it("usdc to xctd rate must be at least 1:1", async () => {
+      it("for each usdc, we should get at least 1 xctd", async () => {
         const usdcToXctdRate = BN(await insuredVesting.methods.XCTD_TO_USDC_RATE().call());
-        expect(usdcToXctdRate).to.be.bignumber.gte(1e12);
+        expect(usdcToXctdRate).to.be.bignumber.lte(100_000_000);
       });
 
       it("duration is 2 years", async () => {
@@ -100,16 +100,16 @@ describe("InsuredVestingV1 deployment config", () => {
 
       const usdcAddress = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
       const randomEthAddress = "0xc0ffee254729296a45a3885639AC7E10F9d54979";
-      const usdcToXctdRate = bn18(7).dividedBy(bn6(1));
+      const xctdToUsdcRate = BN(20000000); // Reflects 0.2USD = 1 XCTD, based on Ethereum's USDC having 6 decimals and XCTD having 18 decimals
       const durationSeconds = 60 * 60 * 24 * 365 * 2;
 
       describe("Error handling", () => {
         const testCases: { config: ConfigTuple; errorMessage: string }[] = [
-          { config: [randomEthAddress, randomEthAddress, randomEthAddress, usdcToXctdRate, durationSeconds], errorMessage: "Wrong USDC address" },
-          { config: [usdcAddress, zeroAddress, randomEthAddress, usdcToXctdRate, durationSeconds], errorMessage: "XCTD address cannot be zero" },
-          { config: [usdcAddress, randomEthAddress, zeroAddress, usdcToXctdRate, durationSeconds], errorMessage: "Project address cannot be zero" },
-          { config: [usdcAddress, randomEthAddress, randomEthAddress, bn18(), durationSeconds], errorMessage: "Wrong USDC to XCTD rate" },
-          { config: [usdcAddress, randomEthAddress, randomEthAddress, usdcToXctdRate, 10000], errorMessage: "Wrong vesting duration" },
+          { config: [randomEthAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, durationSeconds], errorMessage: "Wrong USDC address" },
+          { config: [usdcAddress, zeroAddress, randomEthAddress, xctdToUsdcRate, durationSeconds], errorMessage: "XCTD address cannot be zero" },
+          { config: [usdcAddress, randomEthAddress, zeroAddress, xctdToUsdcRate, durationSeconds], errorMessage: "Project address cannot be zero" },
+          { config: [usdcAddress, randomEthAddress, randomEthAddress, bn18(), durationSeconds], errorMessage: "Wrong XCTD to USDC rate" },
+          { config: [usdcAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, 10000], errorMessage: "Wrong vesting duration" },
         ];
 
         for (const { config, errorMessage } of testCases) {
@@ -128,14 +128,14 @@ describe("InsuredVestingV1 deployment config", () => {
         it("should deploy", async () => {
           await deployInsuredVestingV1(
             web3CandiesStub.deploy,
-            [usdcAddress, randomEthAddress, randomEthAddress, usdcToXctdRate, durationSeconds],
+            [usdcAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, durationSeconds],
             new BN(10),
             new BN(10)
           );
           expect(web3CandiesStub.deploy.calledOnce).to.be.true;
           expect(web3CandiesStub.deploy.firstCall.args[0]).to.deep.equal({
             contractName: "InsuredVestingV1",
-            args: [usdcAddress, randomEthAddress, randomEthAddress, usdcToXctdRate, durationSeconds],
+            args: [usdcAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, durationSeconds],
             maxFeePerGas: new BN(10),
             maxPriorityFeePerGas: new BN(10),
           });

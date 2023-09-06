@@ -21,8 +21,8 @@ export const deployInsuredVestingV1 = async (
     throw new Error("Project address cannot be zero");
   }
 
-  if (config[3].toString() !== "7000000000000") {
-    throw new Error("Wrong USDC to XCTD rate");
+  if (config[3].toString() !== "20000000") {
+    throw new Error("Wrong XCTD to USDC rate");
   }
 
   if (config[4] !== 63_072_000) {
