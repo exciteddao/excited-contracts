@@ -130,16 +130,6 @@ describe("InsuredVestingV1", () => {
         }
       });
 
-      // TODO figure out a way to send both claims in the same block
-      it.skip("cannot claim if there's nothing to claim", async () => {
-        await setAllocationForUser1();
-        await addFundingFromUser1();
-        await insuredVesting.methods.activate().send({ from: deployer });
-        insuredVesting.methods.claim(user1).send({ from: user1 });
-
-        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.NothingToClaim);
-      });
-
       it("can fund a partial allocation and claim tokens", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1(FUNDING_PER_USER / 3);
