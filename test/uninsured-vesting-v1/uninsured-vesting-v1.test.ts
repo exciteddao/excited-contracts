@@ -311,4 +311,11 @@ describe("UninsuredVestingV1", () => {
       expect(await uninsuredVesting.methods.startTime().call()).to.be.bignumber.eq(await getCurrentTimestamp());
     });
   });
+
+  describe("view functions", () => {
+    it("returns 0 vested when not activated", async () => {
+      await setAmountForUser1();
+      expect(await uninsuredVesting.methods.totalVestedFor(user1).call()).to.be.bignumber.eq(0);
+    });
+  });
 });

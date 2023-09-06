@@ -183,7 +183,7 @@ export async function fundUsdcFromWhale(amount: BN, targets: string[]) {
   const whale = "0x0a59649758aa4d66e25f08dd01271e891fe52199";
   tag(whale, "usdcTokenWhale");
   await impersonate(whale);
-  await setBalance(whale, ether.times(100));
+  await setBalance(whale, ether.times(10000));
 
   expect(await usdc.methods.balanceOf(whale).call()).bignumber.gte(await usdc.amount(amount.multipliedBy(targets.length)));
 
