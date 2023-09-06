@@ -50,10 +50,10 @@ export async function withFixture() {
 
 export enum Error {
   ZeroAddress = "ZeroAddress",
-  StartTimeTooSoon = "StartTimeTooSoon",
-  StartTimeNotInFuture = "StartTimeNotInFuture",
+  StartTimeTooLate = "StartTimeTooLate",
+  StartTimeIsInPast = "StartTimeIsInPast",
   VestingNotStarted = "VestingNotStarted",
-  VestingAlreadyStarted = "VestingAlreadyStarted",
+  AlreadyActivated = "AlreadyActivated",
   NothingToClaim = "NothingToClaim",
   NoAllocationsAdded = "NoAllocationsAdded",
   OnlyOwnerOrSender = "OnlyOwnerOrSender",
@@ -80,7 +80,7 @@ export async function getCurrentTimestamp(): Promise<string | number | BN> {
 }
 
 export async function getDefaultStartTime(): Promise<BN> {
-  return await BN(await getCurrentTimestamp()).plus(MONTH * 6);
+  return BN(await getCurrentTimestamp()).plus(DAY * 3);
 }
 
 export async function setAmountForUser1(amount = TOKENS_PER_USER) {
@@ -96,4 +96,9 @@ export async function vestedAmount(days: number) {
     .dividedBy(VESTING_DURATION_SECONDS)
     .multipliedBy(DAY * days);
   return projectToken.amount(amount);
+}
+
+export async function activateAndReachStartTime() {
+  await vesting.methods.activate(await getDefaultStartTime()).send({ from: deployer });
+  await advanceDays(3);
 }
