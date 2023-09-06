@@ -1,4 +1,4 @@
-import { Token, account, bn18, erc20, BlockInfo, Receipt, web3 } from "@defi.org/web3-candies";
+import { Token, account, bn18, erc20, BlockInfo, web3 } from "@defi.org/web3-candies";
 import { deployArtifact, mineBlock, tag, useChaiBigNumber } from "@defi.org/web3-candies/dist/hardhat";
 import BN from "bignumber.js";
 import { UninsuredVestingV1 } from "../../typechain-hardhat/contracts/uninsured-vesting-v1/UninsuredVestingV1";
@@ -12,7 +12,7 @@ export let user1: string;
 export let user2: string;
 export let anyUser: string;
 
-export let xctd: MockERC20 & Token;
+export let projectToken: MockERC20 & Token;
 export let someOtherToken: MockERC20 & Token;
 export let uninsuredVesting: UninsuredVestingV1;
 
@@ -20,8 +20,8 @@ export const DAY = 60 * 60 * 24;
 export const MONTH = DAY * 30;
 export const VESTING_DURATION_SECONDS = DAY * 730;
 
-export const XCTD_TOKENS_ON_SALE = 1_000_000;
-export const USDC_TO_XCTD_RATIO = 7;
+export const PROJECT_TOKENS_ON_SALE = 1_000_000;
+export const FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO = 7;
 export const LOCKUP_MONTHS = 6;
 export const TOKENS_PER_USER = 10_000;
 
@@ -37,12 +37,12 @@ export async function setup() {
 }
 
 export async function withFixture() {
-  xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "XCTD"])).options.address);
+  projectToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "ProjectToken"])).options.address);
   someOtherToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "SomeOtherToken"])).options.address);
 
-  // TODO TEMPORARY: until having production XCTD address
+  // TODO TEMPORARY: until having production PROJECT_TOKEN address
   const testConfig = [...config];
-  testConfig[0] = xctd.options.address;
+  testConfig[0] = projectToken.options.address;
   // END TEMPORARY
 
   uninsuredVesting = await deployArtifact<UninsuredVestingV1>("UninsuredVestingV1", { from: deployer }, testConfig);
@@ -59,12 +59,12 @@ export enum Error {
   OnlyOwnerOrSender = "OnlyOwnerOrSender",
 }
 
-export async function transferXctdToVesting() {
-  await xctd.methods.transfer(uninsuredVesting.options.address, await xctd.amount(XCTD_TOKENS_ON_SALE)).send({ from: deployer });
+export async function transferProjectTokenToVesting() {
+  await projectToken.methods.transfer(uninsuredVesting.options.address, await projectToken.amount(PROJECT_TOKENS_ON_SALE)).send({ from: deployer });
 }
 
-export async function approveXctdToVesting(amount = XCTD_TOKENS_ON_SALE) {
-  await xctd.methods.approve(uninsuredVesting.options.address, await xctd.amount(amount)).send({ from: deployer });
+export async function approveProjectTokenToVesting(amount = PROJECT_TOKENS_ON_SALE) {
+  await projectToken.methods.approve(uninsuredVesting.options.address, await projectToken.amount(amount)).send({ from: deployer });
 }
 
 export function advanceDays(days: number): Promise<BlockInfo> {
@@ -84,16 +84,16 @@ export async function getDefaultStartTime(): Promise<BN> {
 }
 
 export async function setAmountForUser1(amount = TOKENS_PER_USER) {
-  await uninsuredVesting.methods.setAmount(user1, await xctd.amount(amount)).send({ from: deployer });
+  await uninsuredVesting.methods.setAmount(user1, await projectToken.amount(amount)).send({ from: deployer });
 }
 
 export async function setAmountForUser2(amount = TOKENS_PER_USER) {
-  await uninsuredVesting.methods.setAmount(user2, await xctd.amount(amount)).send({ from: deployer });
+  await uninsuredVesting.methods.setAmount(user2, await projectToken.amount(amount)).send({ from: deployer });
 }
 
 export async function vestedAmount(days: number) {
   let amount = BN(TOKENS_PER_USER)
     .dividedBy(VESTING_DURATION_SECONDS)
     .multipliedBy(DAY * days);
-  return xctd.amount(amount);
+  return projectToken.amount(amount);
 }

@@ -14,18 +14,18 @@ export let user1: string;
 export let user2: string;
 export let additionalUsers: string[] = [];
 export let anyUser: string;
-export let project: string;
+export let projectWallet: string;
 
-export let xctd: Token;
-export let usdc: Token;
+export let projectToken: Token;
+export let fundingToken: Token;
 export let someOtherToken: MockERC20 & Token;
 export let insuredVesting: InsuredVestingV1;
 
 export const DAY = 60 * 60 * 24;
 export const MONTH = DAY * 30;
 
-export const XCTD_TOKENS_ON_SALE = 1_000_000;
-export const USDC_TO_XCTD_RATIO = 7;
+export const PROJECT_TOKENS_ON_SALE = 1_000_000;
+export const FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO = 7;
 export const VESTING_DURATION_DAYS = 730;
 export const VESTING_DURATION_SECONDS = DAY * VESTING_DURATION_DAYS;
 export const LOCKUP_MONTHS = 6;
@@ -35,7 +35,7 @@ export async function setup() {
   deployer = await account(9);
   user1 = await account(0);
   user2 = await account(3);
-  project = await account(4);
+  projectWallet = await account(4);
   anyUser = await account(1);
   tag(deployer, "deployer");
   tag(user1, "user1");
@@ -44,7 +44,7 @@ export async function setup() {
 }
 
 export enum Event {
-  ProjectAddressChanged = "ProjectAddressChanged",
+  ProjectWalletAddressChanged = "ProjectWalletAddressChanged",
 }
 
 export enum Error {
@@ -53,7 +53,7 @@ export enum Error {
   VestingNotStarted = "VestingNotStarted",
   StartTimeTooSoon = "StartTimeTooSoon",
   StartTimeNotInFuture = "StartTimeNotInFuture",
-  AllocationExceeded = "AllocationExceeded",
+  AllowedAllocationExceeded = "AllowedAllocationExceeded",
   NothingToClaim = "NothingToClaim",
   NoFundsAdded = "NoFundsAdded",
   EmergencyReleased = "EmergencyReleased",
@@ -63,16 +63,16 @@ export enum Error {
 
 export async function withFixture() {
   someOtherToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "SomeOtherToken"])).options.address);
-  xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "XCTD"])).options.address);
+  projectToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "ProjectToken"])).options.address);
 
-  // TODO TEMPORARY: until having production XCTD & project addresses
+  // TODO TEMPORARY: until having production project token address & project wallet address
   const testConfig = [...config];
-  testConfig[1] = xctd.options.address;
-  testConfig[2] = project;
+  testConfig[1] = projectToken.options.address;
+  testConfig[2] = projectWallet;
   // END TEMPORARY
 
   insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
-  usdc = erc20("USDC", await insuredVesting.methods.USDC().call());
+  fundingToken = erc20("fundingToken", await insuredVesting.methods.FUNDING_TOKEN().call());
 
   additionalUsers = [];
   for (let i = 1; i <= 6; i++) {
@@ -80,22 +80,22 @@ export async function withFixture() {
     tag(additionalUsers[i], "additionalUser" + i);
   }
 
-  await fundUsdcFromWhale(BN(FUNDING_PER_USER), [user1, user2].concat(additionalUsers));
+  await fundFundingTokenFromWhale(BN(FUNDING_PER_USER), [user1, user2].concat(additionalUsers));
 
   for (const target of [user1, user2].concat(additionalUsers)) {
-    await usdc.methods.approve(insuredVesting.options.address, await usdc.amount(FUNDING_PER_USER)).send({ from: target });
+    await fundingToken.methods.approve(insuredVesting.options.address, await fundingToken.amount(FUNDING_PER_USER)).send({ from: target });
   }
 
-  await xctd.methods.transfer(project, bn18(1e9)).send({ from: deployer });
-  await xctd.methods.approve(project, bn18(1e9)).send({ from: deployer });
+  await projectToken.methods.transfer(projectWallet, bn18(1e9)).send({ from: deployer });
+  await projectToken.methods.approve(projectWallet, bn18(1e9)).send({ from: deployer });
 }
 
-export async function transferXctdToVesting(amount = XCTD_TOKENS_ON_SALE) {
-  await xctd.methods.transfer(insuredVesting.options.address, await xctd.amount(amount)).send({ from: project });
+export async function transferProjectTokenToVesting(amount = PROJECT_TOKENS_ON_SALE) {
+  await projectToken.methods.transfer(insuredVesting.options.address, await projectToken.amount(amount)).send({ from: projectWallet });
 }
 
-export async function approveXctdToVesting(amount = XCTD_TOKENS_ON_SALE) {
-  await xctd.methods.approve(insuredVesting.options.address, await xctd.amount(amount)).send({ from: project });
+export async function approveProjectTokenToVesting(amount = PROJECT_TOKENS_ON_SALE) {
+  await projectToken.methods.approve(insuredVesting.options.address, await projectToken.amount(amount)).send({ from: projectWallet });
 }
 
 export function advanceDays(days: number): Promise<BlockInfo> {
@@ -114,82 +114,82 @@ export async function getDefaultStartTime(): Promise<BN> {
   return await BN(await getCurrentTimestamp()).plus(MONTH * 6);
 }
 
-export function usdcToXctd(amountInUsdc: BN): BN {
-  const xctdDecimals = 18;
-  const multiplier = USDC_TO_XCTD_RATIO * 10 ** xctdDecimals;
-  return amountInUsdc.multipliedBy(multiplier);
+export function fundingTokenToProjectToken(amountInFundingToken: BN): BN {
+  const projectTokenDecimals = 18;
+  const multiplier = FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO * 10 ** projectTokenDecimals;
+  return amountInFundingToken.multipliedBy(multiplier);
 }
 
 export async function addFundingFromUser1(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.addFunds(await usdc.amount(amount)).send({ from: user1 });
+  await insuredVesting.methods.addFunds(await fundingToken.amount(amount)).send({ from: user1 });
 }
 
-export async function setAllocationForUser1(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.setAllocation(user1, await usdc.amount(amount)).send({ from: deployer });
+export async function setAllowedAllocationForUser1(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(amount)).send({ from: deployer });
 }
 
 export async function addFundingFromUser2(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.addFunds(await usdc.amount(amount)).send({ from: user2 });
+  await insuredVesting.methods.addFunds(await fundingToken.amount(amount)).send({ from: user2 });
 }
 
-export async function setAllocationForUser2(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.setAllocation(user2, await usdc.amount(amount)).send({ from: deployer });
+export async function setAllowedAllocationForUser2(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(amount)).send({ from: deployer });
 }
 
 export const balances = {
   project: {
-    xctd: BN(-1),
-    usdc: BN(-1),
+    projectToken: BN(-1),
+    fundingToken: BN(-1),
   },
   user1: {
-    xctd: BN(-1),
-    usdc: BN(-1),
+    projectToken: BN(-1),
+    fundingToken: BN(-1),
   },
 };
 
 export async function setBalancesForDelta() {
-  balances.user1.usdc = BN(await usdc.methods.balanceOf(user1).call());
-  balances.user1.xctd = BN(await xctd.methods.balanceOf(user1).call());
-  balances.project.usdc = BN(await usdc.methods.balanceOf(project).call());
-  balances.project.xctd = BN(await xctd.methods.balanceOf(project).call());
+  balances.user1.fundingToken = BN(await fundingToken.methods.balanceOf(user1).call());
+  balances.user1.projectToken = BN(await projectToken.methods.balanceOf(user1).call());
+  balances.project.fundingToken = BN(await fundingToken.methods.balanceOf(projectWallet).call());
+  balances.project.projectToken = BN(await projectToken.methods.balanceOf(projectWallet).call());
 }
 
-export async function vestedAmount(days: number, token: "usdc" | "xctd") {
+export async function vestedAmount(days: number, token: "fundingToken" | "projectToken") {
   let amount = BN(FUNDING_PER_USER)
     .dividedBy(VESTING_DURATION_SECONDS)
     .multipliedBy(DAY * days);
-  if (token === "xctd") {
-    return xctd.amount(amount.multipliedBy(USDC_TO_XCTD_RATIO));
+  if (token === "projectToken") {
+    return projectToken.amount(amount.multipliedBy(FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO));
   } else {
-    return usdc.amount(amount);
+    return fundingToken.amount(amount);
   }
 }
 
-export async function expectBalanceDelta(target: "project" | "user1", token: "usdc" | "xctd", expectedDelta: BN | number, closeTo: number) {
-  const _token = token === "xctd" ? xctd : usdc;
-  const amount = BN(await _token.methods.balanceOf(target === "user1" ? user1 : project).call());
+export async function expectBalanceDelta(target: "project" | "user1", token: "fundingToken" | "projectToken", expectedDelta: BN | number, closeTo: number) {
+  const _token = token === "projectToken" ? projectToken : fundingToken;
+  const amount = BN(await _token.methods.balanceOf(target === "user1" ? user1 : projectWallet).call());
   return expect(amount.minus(balances[target][token])).to.bignumber.closeTo(expectedDelta, await _token.amount(closeTo));
 }
 
-export async function expectUserBalanceDelta(token: "usdc" | "xctd", expectedDelta: BN | number, closeTo: number = 0.1) {
+export async function expectUserBalanceDelta(token: "fundingToken" | "projectToken", expectedDelta: BN | number, closeTo: number = 0.1) {
   return expectBalanceDelta("user1", token, expectedDelta, closeTo);
 }
 
-export async function expectProjectBalanceDelta(token: "usdc" | "xctd", expectedDelta: BN | number, closeTo: number = 0.1) {
+export async function expectProjectBalanceDelta(token: "fundingToken" | "projectToken", expectedDelta: BN | number, closeTo: number = 0.1) {
   return expectBalanceDelta("project", token, expectedDelta, closeTo);
 }
 
-export async function fundUsdcFromWhale(amount: BN, targets: string[]) {
+export async function fundFundingTokenFromWhale(amount: BN, targets: string[]) {
   const whale = "0x0a59649758aa4d66e25f08dd01271e891fe52199";
-  tag(whale, "usdcTokenWhale");
+  tag(whale, "fundingTokenTokenWhale");
   await impersonate(whale);
   await setBalance(whale, ether.times(10000));
 
-  expect(await usdc.methods.balanceOf(whale).call()).bignumber.gte(await usdc.amount(amount.multipliedBy(targets.length)));
+  expect(await fundingToken.methods.balanceOf(whale).call()).bignumber.gte(await fundingToken.amount(amount.multipliedBy(targets.length)));
 
   for (const target of targets) {
-    const initialBalance = await usdc.methods.balanceOf(target).call();
-    await usdc.methods.transfer(target, await usdc.amount(amount)).send({ from: whale });
-    expect(BN(await usdc.methods.balanceOf(target).call()).minus(initialBalance)).bignumber.eq(await usdc.amount(amount));
+    const initialBalance = await fundingToken.methods.balanceOf(target).call();
+    await fundingToken.methods.transfer(target, await fundingToken.amount(amount)).send({ from: whale });
+    expect(BN(await fundingToken.methods.balanceOf(target).call()).minus(initialBalance)).bignumber.eq(await fundingToken.amount(amount));
   }
 }

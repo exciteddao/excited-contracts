@@ -5,7 +5,6 @@ import sinon from "sinon";
 
 import { zeroAddress } from "@defi.org/web3-candies";
 import { ConfigTuple, deployUninsuredVestingV1 } from "../../deployment/uninsured-vesting-v1";
-import { VESTING_DURATION_SECONDS } from "../insured-vesting-v1/fixture";
 
 describe("UninsuredVestingV1 deployment config", () => {
   before(async () => await setup());
@@ -14,7 +13,7 @@ describe("UninsuredVestingV1 deployment config", () => {
 
   // TODO: reenable this when config is using real XCTD address
   it.skip("xctd address cannot be zero", async () => {
-    expect((await uninsuredVesting.methods.XCTD().call()).toLowerCase()).to.not.match(/^0x0+$/);
+    expect((await uninsuredVesting.methods.PROJECT_TOKEN().call()).toLowerCase()).to.not.match(/^0x0+$/);
   });
 
   it("duration is 2 years", async () => {
