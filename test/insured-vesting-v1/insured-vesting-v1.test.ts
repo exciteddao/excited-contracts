@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import BN from "bignumber.js";
 import { SnapshotRestorer, takeSnapshot } from "@nomicfoundation/hardhat-network-helpers";
-import { deployArtifact, expectRevert, setBalance } from "@defi.org/web3-candies/dist/hardhat";
+import { expectRevert, setBalance } from "@defi.org/web3-candies/dist/hardhat";
 import {
   FUNDING_PER_USER,
   LOCKUP_MONTHS,
@@ -41,8 +41,6 @@ import {
   PROJECT_TOKENS_ON_SALE,
 } from "./fixture";
 import { web3, zeroAddress } from "@defi.org/web3-candies";
-import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
-import { config } from "../../deployment/insured-vesting-v1/config";
 
 describe("InsuredVestingV1", () => {
   let snap: SnapshotRestorer;

@@ -170,7 +170,7 @@ contract InsuredVestingV1 is Ownable {
         vestingStartTime = block.timestamp;
 
         uint256 totalRequiredProjectToken = fundingTokenToProjectToken(totalFundingTokenFunded);
-        uint256 delta = totalRequiredProjectToken - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalFundingTokenFunded);
+        uint256 delta = totalRequiredProjectToken - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalRequiredProjectToken);
 
         PROJECT_TOKEN.safeTransferFrom(projectWallet, address(this), delta);
 
