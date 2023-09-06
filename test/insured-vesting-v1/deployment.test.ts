@@ -9,7 +9,7 @@ import { deployArtifact } from "@defi.org/web3-candies/dist/hardhat";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 
-import { setup } from "./fixture";
+import { setup, VESTING_DURATION_SECONDS } from "./fixture";
 import { erc20, bn18, Token, account, bn6, zeroAddress } from "@defi.org/web3-candies";
 
 describe("InsuredVestingV1 deployment config", () => {
@@ -85,7 +85,7 @@ describe("InsuredVestingV1 deployment config", () => {
       });
 
       it("duration is 2 years", async () => {
-        expect(await insuredVesting.methods.VESTING_DURATION().call()).to.equal(String(60 * 60 * 24 * 365 * 2));
+        expect(await insuredVesting.methods.VESTING_DURATION_SECONDS().call()).to.equal(String(60 * 60 * 24 * 365 * 2));
       });
     });
 

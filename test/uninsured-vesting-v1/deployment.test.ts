@@ -5,6 +5,7 @@ import sinon from "sinon";
 
 import { zeroAddress } from "@defi.org/web3-candies";
 import { ConfigTuple, deployUninsuredVestingV1 } from "../../deployment/uninsured-vesting-v1";
+import { VESTING_DURATION_SECONDS } from "../insured-vesting-v1/fixture";
 
 describe("UninsuredVestingV1 deployment config", () => {
   before(async () => await setup());
@@ -17,7 +18,7 @@ describe("UninsuredVestingV1 deployment config", () => {
   });
 
   it("duration is 2 years", async () => {
-    expect(await uninsuredVesting.methods.DURATION().call()).to.equal(String(60 * 60 * 24 * 365 * 2));
+    expect(await uninsuredVesting.methods.VESTING_DURATION_SECONDS().call()).to.equal(String(60 * 60 * 24 * 365 * 2));
   });
 });
 
