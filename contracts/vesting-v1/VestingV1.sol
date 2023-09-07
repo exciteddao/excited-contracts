@@ -33,9 +33,10 @@ contract VestingV1 is Ownable {
     event Claimed(address indexed target, uint256 amount);
     event AmountSet(address indexed target, uint256 amount);
     event Activated(uint256 timestamp, uint256 tokensTransferred);
-    event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
     event EmergencyRelease();
     event UserEmergencyClaimed(address indexed target, uint256 projectTokenAmount);
+    event TokenRecovered(address indexed token, uint256 tokenAmount);
+    event EtherRecovered(uint256 etherAmount);
 
     // --- Errors ---
     error StartTimeTooLate(uint256 vestingStartTime, uint256 maxStartTime);
@@ -131,8 +132,7 @@ contract VestingV1 is Ownable {
         emit UserEmergencyClaimed(target, toClaim);
     }
 
-    // TODO(Audit) separate to recoverEther and recoverTokens
-    function recover(address tokenAddress) external onlyOwner {
+    function recoverToken(address tokenAddress) external onlyOwner {
         // Return any balance of the token that's not PROJECT_TOKEN
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
 
@@ -143,11 +143,14 @@ contract VestingV1 is Ownable {
 
         IERC20(tokenAddress).safeTransfer(owner(), tokenBalanceToRecover);
 
-        // in case of ETH, transfer the balance as well
+        emit TokenRecovered(tokenAddress, tokenBalanceToRecover);
+    }
+
+    function recoverEther() external onlyOwner {
         uint256 etherToRecover = address(this).balance;
         Address.sendValue(payable(owner()), etherToRecover);
 
-        emit AmountRecovered(tokenAddress, tokenBalanceToRecover, etherToRecover);
+        emit EtherRecovered(etherToRecover);
     }
 
     // --- View functions ---
