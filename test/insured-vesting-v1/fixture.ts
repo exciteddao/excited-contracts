@@ -4,6 +4,7 @@ import BN from "bignumber.js";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { expect } from "chai";
+import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 import { config } from "../../deployment/insured-vesting-v1";
 
@@ -106,8 +107,12 @@ export function advanceMonths(months: number): Promise<BlockInfo> {
   return mineBlock(months * MONTH);
 }
 
+// TODO export to utils and use across multiple contracts
 export async function getCurrentTimestamp(): Promise<string | number | BN> {
-  return BN((await web3().eth.getBlock("latest")).timestamp).plus(1); // TODO I hate this plus 1
+  // Plus 1 - we are passing a timestamp the contract that's supposed to act as "now"
+  // when the transaction actually executes, it's going to be 1 second later
+  // TODO - consider whether this is viable/stable
+  return BN(await time.latest()).plus(1);
 }
 
 export async function getDefaultStartTime(): Promise<BN> {
