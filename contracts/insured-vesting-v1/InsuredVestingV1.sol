@@ -121,10 +121,10 @@ contract InsuredVestingV1 is Ownable {
         if (userStatus.fundingTokenFunded == 0) revert NoFundsAdded();
 
         uint256 claimableFundingToken = fundingTokenClaimableFor(target);
+        uint256 claimableProjectToken = projectTokenClaimableFor(target);
+
         if (claimableFundingToken == 0) revert NothingToClaim();
         userStatus.fundingTokenClaimed += claimableFundingToken;
-
-        uint256 claimableProjectToken = fundingTokenToProjectToken(claimableFundingToken);
 
         // TODO consider using ternary conditions for readability
         if (userStatus.claimDecision == ClaimDecision.PROJECT_TOKEN) {
@@ -286,5 +286,13 @@ contract InsuredVestingV1 is Ownable {
 
     function fundingTokenClaimableFor(address target) public view returns (uint256) {
         return fundingTokenVestedFor(target) - userVestings[target].fundingTokenClaimed;
+    }
+
+    function projectTokenVestedFor(address target) public view returns (uint256) {
+        return fundingTokenToProjectToken(fundingTokenVestedFor(target));
+    }
+
+    function projectTokenClaimableFor(address target) public view returns (uint256) {
+        return fundingTokenToProjectToken(fundingTokenClaimableFor(target));
     }
 }
