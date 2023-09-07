@@ -170,6 +170,14 @@ describe("VestingV1", () => {
         expect(await web3().eth.getBalance(deployer)).to.bignumber.closeTo(BN(12345 * 1e18).plus(startingBalance), BN(0.1e18));
       });
 
+      it("does not recover ether if recovering token", async () => {
+        expect(await web3().eth.getBalance(vesting.options.address)).to.bignumber.eq(0);
+        await setBalance(vesting.options.address, BN(12345 * 1e18));
+        await someOtherToken.methods.transfer(vesting.options.address, BN(12345 * 1e18)).send({ from: deployer });
+        await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
+        expect(await web3().eth.getBalance(vesting.options.address)).to.bignumber.closeTo(BN(12345 * 1e18), BN(0.1e18));
+      });
+
       it("recovers other tokens", async () => {
         await someOtherToken.methods.transfer(vesting.options.address, BN(12345 * 1e18)).send({ from: deployer });
         await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
