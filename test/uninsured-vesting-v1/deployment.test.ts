@@ -4,7 +4,7 @@ import BN from "bignumber.js";
 import sinon from "sinon";
 
 import { zeroAddress } from "@defi.org/web3-candies";
-import { ConfigTuple, deployVestingV1 } from "../../deployment/uninsured-vesting-v1";
+import { ConfigTuple, deployVestingV1 } from "../../deployment/vesting-v1";
 
 describe("VestingV1 deployment config", () => {
   before(async () => await setup());
