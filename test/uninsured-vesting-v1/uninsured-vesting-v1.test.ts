@@ -383,7 +383,7 @@ describe("VestingV1", () => {
     });
   });
 
-  describe.only("emergency release", () => {
+  describe("emergency release", () => {
     it("does not allow non-owner to emergency release", async () => {
       await expectRevert(async () => vesting.methods.emergencyRelease().send({ from: anyUser }), "Ownable: caller is not the owner");
     });
