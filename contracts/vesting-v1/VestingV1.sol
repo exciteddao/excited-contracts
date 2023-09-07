@@ -17,6 +17,8 @@ contract VestingV1 is Ownable {
     IERC20 public immutable PROJECT_TOKEN;
     uint256 public immutable VESTING_DURATION_SECONDS;
 
+    bool public emergencyReleased = false;
+
     uint256 public vestingStartTime;
     uint256 public totalAllocated;
 
@@ -32,6 +34,8 @@ contract VestingV1 is Ownable {
     event AmountSet(address indexed target, uint256 amount);
     event Activated(uint256 timestamp, uint256 tokensTransferred);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
+    event EmergencyRelease();
+    event UserEmergencyClaimed(address indexed target, uint256 projectTokenAmount);
 
     // --- Errors ---
     error StartTimeTooLate(uint256 vestingStartTime, uint256 maxStartTime);
@@ -41,10 +45,23 @@ contract VestingV1 is Ownable {
     error NoAllocationsAdded();
     error OnlyOwnerOrSender();
     error AlreadyActivated();
+    error NotActivated();
+    error EmergencyReleased();
+    error EmergencyNotReleased();
 
     // --- Modifiers ---
     modifier onlyBeforeActivation() {
         if (isActivated()) revert AlreadyActivated();
+        _;
+    }
+
+    modifier onlyIfNotEmergencyReleased() {
+        if (emergencyReleased) revert EmergencyReleased();
+        _;
+    }
+
+    modifier onlyOwnerOrSender(address target) {
+        if (!(msg.sender == owner() || msg.sender == target)) revert OnlyOwnerOrSender();
         _;
     }
 
@@ -54,9 +71,7 @@ contract VestingV1 is Ownable {
     }
 
     // --- User functions ---
-    function claim(address target) external {
-        // TODO ensure that we indeed want to apply this restriction (to enable vaults / auto-compounding)
-        if (!(msg.sender == owner() || msg.sender == target)) revert OnlyOwnerOrSender();
+    function claim(address target) external onlyOwnerOrSender(target) onlyIfNotEmergencyReleased {
         if (!isVestingStarted()) revert VestingNotStarted();
         uint256 claimable = claimableFor(target);
         if (claimable == 0) revert NothingToClaim();
@@ -97,6 +112,24 @@ contract VestingV1 is Ownable {
 
     // --- Emergency functions ---
     // TODO(Audit) - ensure with legal/compliance we're ok without an emergency lever to release all tokens here
+
+    function emergencyRelease() external onlyOwner onlyIfNotEmergencyReleased {
+        if (vestingStartTime == 0) revert NotActivated();
+        emergencyReleased = true;
+        emit EmergencyRelease();
+    }
+
+    function emergencyClaim(address target) external onlyOwnerOrSender(target) {
+        UserVesting storage userStatus = userVestings[target];
+        if (!emergencyReleased) revert EmergencyNotReleased();
+        if (userStatus.amount == 0) revert NothingToClaim(); // TODO different error?
+
+        uint256 toClaim = userStatus.amount - userStatus.totalClaimed;
+        userStatus.totalClaimed += toClaim;
+        PROJECT_TOKEN.safeTransfer(target, toClaim);
+
+        emit UserEmergencyClaimed(target, toClaim);
+    }
 
     // TODO(Audit) separate to recoverEther and recoverTokens
     function recover(address tokenAddress) external onlyOwner {
