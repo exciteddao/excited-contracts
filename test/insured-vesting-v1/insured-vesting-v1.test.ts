@@ -662,7 +662,7 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
 
         await setBalancesForDelta();
-        await insuredVesting.methods.recover(projectToken.options.address).send({ from: deployer });
+        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         // Recover all but the tokens allocated to users, backed by funding
         expect(await projectToken.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(0);
         await expectProjectBalanceDelta("projectToken", (await projectToken.amount(FUNDING_PER_USER * 2)).multipliedBy(FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO));
@@ -702,14 +702,14 @@ describe("InsuredVestingV1", () => {
         const startingBalance = await web3().eth.getBalance(projectWallet);
         expect(await web3().eth.getBalance(insuredVesting.options.address)).to.bignumber.eq(0);
         await setBalance(insuredVesting.options.address, BN(12345 * 1e18));
-        await insuredVesting.methods.recover(projectToken.options.address).send({ from: deployer });
+        await insuredVesting.methods.recoverEther().send({ from: deployer });
         expect(await web3().eth.getBalance(insuredVesting.options.address)).to.be.bignumber.zero;
         expect(await web3().eth.getBalance(projectWallet)).to.bignumber.closeTo(BN(12345 * 1e18).plus(startingBalance), BN(0.1e18));
       });
 
       it("recovers other tokens", async () => {
         await someOtherToken.methods.transfer(insuredVesting.options.address, BN(12345 * 1e18)).send({ from: deployer });
-        await insuredVesting.methods.recover(someOtherToken.options.address).send({ from: deployer });
+        await insuredVesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
         expect(await someOtherToken.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.zero;
       });
 
@@ -720,7 +720,7 @@ describe("InsuredVestingV1", () => {
         await transferProjectTokenToVesting();
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user2 });
-        await insuredVesting.methods.recover(projectToken.options.address).send({ from: deployer });
+        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         // Recover all but the tokens allocated to users, backed by funding
         expect(await projectToken.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(
           (await projectToken.amount(FUNDING_PER_USER * 2)).multipliedBy(FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO)
@@ -733,7 +733,7 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user2 });
         await projectToken.methods.transfer(insuredVesting.options.address, await projectToken.amount(100)).send({ from: projectWallet });
-        await insuredVesting.methods.recover(projectToken.options.address).send({ from: deployer });
+        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         // Retains tokens in the contract, nothing to recover
         expect(await projectToken.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(100));
       });
@@ -749,7 +749,7 @@ describe("InsuredVestingV1", () => {
 
         let initiaProjectBalance = await projectToken.methods.balanceOf(projectWallet).call();
         await setBalancesForDelta();
-        await insuredVesting.methods.recover(projectToken.options.address).send({ from: deployer });
+        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
 
         expect(await projectToken.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(
           (await projectToken.amount(FUNDING_PER_USER * 2)).multipliedBy(FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO)
@@ -772,7 +772,7 @@ describe("InsuredVestingV1", () => {
         );
 
         initiaProjectBalance = await projectToken.methods.balanceOf(projectWallet).call();
-        await insuredVesting.methods.recover(projectToken.options.address).send({ from: deployer });
+        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(await projectToken.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(0);
         expect(await projectToken.methods.balanceOf(projectWallet).call()).to.be.bignumber.eq(
           BN(initiaProjectBalance).plus((await projectToken.amount(FUNDING_PER_USER * 2)).multipliedBy(FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO))
@@ -793,7 +793,7 @@ describe("InsuredVestingV1", () => {
           await fundFundingTokenFromWhale(BN(extraFundingToPass), [insuredVesting.options.address]);
 
           await setBalancesForDelta();
-          await insuredVesting.methods.recover(fundingToken.options.address).send({ from: deployer });
+          await insuredVesting.methods.recoverToken(fundingToken.options.address).send({ from: deployer });
           await expectProjectBalanceDelta("projectToken", 0);
           await expectProjectBalanceDelta("fundingToken", await fundingToken.amount(extraFundingToPass));
         });
@@ -805,9 +805,13 @@ describe("InsuredVestingV1", () => {
         await expectRevert(async () => insuredVesting.methods.setAllowedAllocation(user1, 1).send({ from: anyUser }), "Ownable: caller is not the owner");
       });
 
-      it("cannot recover if not owner", async () => {
+      it("cannot recover ether if not owner", async () => {
+        await expectRevert(async () => insuredVesting.methods.recoverEther().send({ from: anyUser }), "Ownable: caller is not the owner");
+      });
+
+      it("cannot recover token if not owner", async () => {
         await expectRevert(
-          async () => insuredVesting.methods.recover(projectToken.options.address).send({ from: anyUser }),
+          async () => insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: anyUser }),
           "Ownable: caller is not the owner"
         );
       });

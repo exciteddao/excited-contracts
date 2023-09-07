@@ -53,7 +53,8 @@ contract InsuredVestingV1 is Ownable {
     event FundsAdded(address indexed target, uint256 amount);
     event EmergencyRelease();
     event DecisionChanged(address indexed target, ClaimDecision decision);
-    event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
+    event TokenRecovered(address indexed token, uint256 tokenAmount);
+    event EtherRecovered(uint256 etherAmount);
     event ProjectWalletAddressChanged(address indexed oldAddress, address indexed newAddress);
     event Activated(uint256 startTime, uint256 projectTokenTransferredToContract);
 
@@ -243,7 +244,7 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // TODO(audit) - separate to recoverEth as in VestingV1
-    function recover(address tokenAddress) external onlyOwner {
+    function recoverToken(address tokenAddress) external onlyOwner {
         // Return any balance of the token that's not projectToken
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
         // // in case of PROJECT_TOKEN, we also need to retain the total locked amount in the contract
@@ -258,10 +259,14 @@ contract InsuredVestingV1 is Ownable {
 
         IERC20(tokenAddress).safeTransfer(projectWallet, tokenBalanceToRecover);
 
+        emit TokenRecovered(tokenAddress, tokenBalanceToRecover);
+    }
+
+    function recoverEther() external onlyOwner {
         uint256 etherToRecover = address(this).balance;
         Address.sendValue(payable(projectWallet), etherToRecover);
 
-        emit AmountRecovered(tokenAddress, tokenBalanceToRecover, etherToRecover);
+        emit EtherRecovered(etherToRecover);
     }
 
     // --- View functions ---
