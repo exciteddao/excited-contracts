@@ -4,6 +4,7 @@ import BN from "bignumber.js";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { expect } from "chai";
+import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 import { config } from "../../deployment/insured-vesting-v1";
 
@@ -49,16 +50,16 @@ export enum Event {
 
 export enum Error {
   ZeroAddress = "ZeroAddress",
-  VestingAlreadyStarted = "VestingAlreadyStarted",
   VestingNotStarted = "VestingNotStarted",
-  StartTimeTooSoon = "StartTimeTooSoon",
-  StartTimeNotInFuture = "StartTimeNotInFuture",
+  StartTimeTooLate = "StartTimeTooLate",
+  StartTimeIsInPast = "StartTimeIsInPast",
   AllowedAllocationExceeded = "AllowedAllocationExceeded",
   NothingToClaim = "NothingToClaim",
   NoFundsAdded = "NoFundsAdded",
   EmergencyReleased = "EmergencyReleased",
   EmergencyNotReleased = "EmergencyNotReleased",
   OnlyOwnerOrSender = "OnlyOwnerOrSender",
+  AlreadyActivated = "AlreadyActivated",
 }
 
 export async function withFixture() {
@@ -106,12 +107,16 @@ export function advanceMonths(months: number): Promise<BlockInfo> {
   return mineBlock(months * MONTH);
 }
 
+// TODO export to utils and use across multiple contracts
 export async function getCurrentTimestamp(): Promise<string | number | BN> {
-  return (await web3().eth.getBlock("latest")).timestamp;
+  // Plus 1 - we are passing a timestamp the contract that's supposed to act as "now"
+  // when the transaction actually executes, it's going to be 1 second later
+  // TODO - consider whether this is viable/stable
+  return BN(await time.latest()).plus(1);
 }
 
 export async function getDefaultStartTime(): Promise<BN> {
-  return await BN(await getCurrentTimestamp()).plus(MONTH * 6);
+  return BN(await getCurrentTimestamp()).plus(DAY * 3);
 }
 
 export function fundingTokenToProjectToken(amountInFundingToken: BN): BN {
@@ -192,4 +197,9 @@ export async function fundFundingTokenFromWhale(amount: BN, targets: string[]) {
     await fundingToken.methods.transfer(target, await fundingToken.amount(amount)).send({ from: whale });
     expect(BN(await fundingToken.methods.balanceOf(target).call()).minus(initialBalance)).bignumber.eq(await fundingToken.amount(amount));
   }
+}
+
+export async function activateAndReachStartTime() {
+  await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: deployer });
+  await advanceDays(3);
 }

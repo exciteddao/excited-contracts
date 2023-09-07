@@ -5,9 +5,15 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
+// when owner calls activate, the contract will:
+// - transfer the necessary amount of tokens required to cover all funded tokens
+// - set the vesting clock to start at the specified time (no more than 90 days in the future)
+// - lock the contract for any further allowed allocations settings
+// - lock the contract for any further fundings
 contract InsuredVestingV1 is Ownable {
     using SafeERC20 for IERC20;
 
+    uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
     uint256 public constant TOKEN_RATE_PRECISION = 1e20;
 
     IERC20 public immutable FUNDING_TOKEN;
@@ -49,11 +55,11 @@ contract InsuredVestingV1 is Ownable {
     event DecisionChanged(address indexed target, ClaimDecision decision);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
     event ProjectWalletAddressChanged(address indexed oldAddress, address indexed newAddress);
-    event VestingStarted(uint256 projectTokenTransferredToContract);
+    event Activated(uint256 startTime, uint256 projectTokenTransferredToContract);
 
     // --- Errors ---
     error ZeroAddress();
-    error VestingAlreadyStarted();
+    error AlreadyActivated();
     error VestingNotStarted();
     error AllowedAllocationExceeded(uint256 amount);
     error NothingToClaim();
@@ -61,10 +67,12 @@ contract InsuredVestingV1 is Ownable {
     error EmergencyReleased();
     error EmergencyNotReleased();
     error OnlyOwnerOrSender();
+    error StartTimeTooLate(uint256 vestingStartTime, uint256 maxStartTime);
+    error StartTimeIsInPast(uint256 vestingStartTime);
 
     // --- Modifiers ---
     modifier onlyBeforeActivation() {
-        if (vestingStartTime != 0) revert VestingAlreadyStarted();
+        if (isActivated()) revert AlreadyActivated();
         _;
     }
 
@@ -107,7 +115,7 @@ contract InsuredVestingV1 is Ownable {
     }
 
     function claim(address target) external onlyOwnerOrSender(target) onlyIfNotEmergencyReleased {
-        if (vestingStartTime == 0) revert VestingNotStarted();
+        if (!isVestingStarted()) revert VestingNotStarted();
 
         UserVesting storage userStatus = userVestings[target];
         if (userStatus.fundingTokenFunded == 0) revert NoFundsAdded();
@@ -163,18 +171,19 @@ contract InsuredVestingV1 is Ownable {
         emit AllowedAllocationSet(target, _fundingTokenAllocation);
     }
 
-    // TODO(audit) - change similar to VestingV1
-    // TODO(audit) - consider whether an additional onlyBeforeVestingStarted is needed)
-    function activate() external onlyOwner onlyBeforeActivation {
+    function activate(uint256 _vestingStartTime) external onlyOwner onlyBeforeActivation {
+        if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW))
+            revert StartTimeTooLate(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
+        if (_vestingStartTime < block.timestamp) revert StartTimeIsInPast(_vestingStartTime);
         if (totalFundingTokenFunded == 0) revert NoFundsAdded();
-        vestingStartTime = block.timestamp;
+        vestingStartTime = _vestingStartTime;
 
         uint256 totalRequiredProjectToken = fundingTokenToProjectToken(totalFundingTokenFunded);
         uint256 delta = totalRequiredProjectToken - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalRequiredProjectToken);
 
         PROJECT_TOKEN.safeTransferFrom(projectWallet, address(this), delta);
 
-        emit VestingStarted(delta);
+        emit Activated(vestingStartTime, delta);
     }
 
     // TODO - revisit this with Tal
@@ -256,14 +265,20 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // --- View functions ---
-    // TODO(audit) - view functions as in VestingV1
+    function isActivated() public view returns (bool) {
+        return vestingStartTime != 0;
+    }
+
+    function isVestingStarted() public view returns (bool) {
+        return isActivated() && vestingStartTime <= block.timestamp;
+    }
 
     function fundingTokenToProjectToken(uint256 fundingTokenAmount) public view returns (uint256) {
         return (fundingTokenAmount * TOKEN_RATE_PRECISION) / PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE;
     }
 
     function fundingTokenVestedFor(address target) public view returns (uint256) {
-        if (vestingStartTime == 0) return 0;
+        if (!isVestingStarted()) return 0;
 
         UserVesting storage targetStatus = userVestings[target];
         return Math.min(targetStatus.fundingTokenFunded, ((block.timestamp - vestingStartTime) * targetStatus.fundingTokenFunded) / VESTING_DURATION_SECONDS);

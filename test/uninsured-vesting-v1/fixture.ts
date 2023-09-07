@@ -4,6 +4,7 @@ import BN from "bignumber.js";
 import { VestingV1 } from "../../typechain-hardhat/contracts/vesting-v1";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { config } from "../../deployment/vesting-v1/config";
+import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 useChaiBigNumber();
 
@@ -74,8 +75,6 @@ export function advanceDays(days: number): Promise<BlockInfo> {
 export function advanceMonths(months: number): Promise<BlockInfo> {
   return mineBlock(months * MONTH);
 }
-
-import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 // TODO export to utils and use across multiple contracts
 export async function getCurrentTimestamp(): Promise<string | number | BN> {
