@@ -27,18 +27,13 @@ contract InsuredVestingV1 is Ownable {
     uint256 public vestingStartTime;
     uint256 public totalFundingTokenFunded;
 
-    enum ClaimDecision {
-        PROJECT_TOKEN,
-        FUNDING_TOKEN
-    }
-
     struct UserVesting {
         // Actual FUNDING_TOKEN amount funded by user
         uint256 fundingTokenFunded;
         // Investment allocation, set by owner
         uint256 fundingTokenAllocation;
-        // Whether the user wants to claim PROJECT_TOKEN or claim back FUNDING_TOKEN
-        ClaimDecision claimDecision;
+        // true - user will get FUNDING_TOKEN back, false - user will get PROJECT_TOKEN
+        bool shouldRefund;
         // Amount of FUNDING_TOKEN claimed by user (PROJECT_TOKEN is computed from that)
         uint256 fundingTokenClaimed;
     }
@@ -52,7 +47,7 @@ contract InsuredVestingV1 is Ownable {
     event AllowedAllocationSet(address indexed target, uint256 amount);
     event FundsAdded(address indexed target, uint256 amount);
     event EmergencyRelease();
-    event DecisionChanged(address indexed target, ClaimDecision decision);
+    event DecisionChanged(address indexed target, bool shouldRefund);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
     event ProjectWalletAddressChanged(address indexed oldAddress, address indexed newAddress);
     event Activated(uint256 startTime, uint256 projectTokenTransferredToContract);
@@ -127,7 +122,7 @@ contract InsuredVestingV1 is Ownable {
         uint256 claimableProjectToken = fundingTokenToProjectToken(claimableFundingToken);
 
         // TODO consider using ternary conditions for readability
-        if (userStatus.claimDecision == ClaimDecision.PROJECT_TOKEN) {
+        if (!userStatus.shouldRefund) {
             PROJECT_TOKEN.safeTransfer(target, claimableProjectToken);
             FUNDING_TOKEN.safeTransfer(projectWallet, claimableFundingToken);
 
@@ -142,16 +137,12 @@ contract InsuredVestingV1 is Ownable {
         }
     }
 
-    // TODO(audit) - two setters, each for one of the two decisions
-    // decision1 - PROJECT_TOKENS
-    // decision2 - REFUND_FUNDING_TOKENS
-    function toggleDecision() external {
+    function setDecision(bool _shouldRefund) external {
         if (userVestings[msg.sender].fundingTokenFunded == 0) revert NoFundsAdded();
-        userVestings[msg.sender].claimDecision = userVestings[msg.sender].claimDecision == ClaimDecision.PROJECT_TOKEN
-            ? ClaimDecision.FUNDING_TOKEN
-            : ClaimDecision.PROJECT_TOKEN;
+        if (userVestings[msg.sender].shouldRefund == _shouldRefund) return;
+        userVestings[msg.sender].shouldRefund = _shouldRefund;
 
-        emit DecisionChanged(msg.sender, userVestings[msg.sender].claimDecision);
+        emit DecisionChanged(msg.sender, _shouldRefund);
     }
 
     // --- Owner functions ---
