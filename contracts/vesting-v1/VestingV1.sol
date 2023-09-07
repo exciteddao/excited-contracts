@@ -1,21 +1,25 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
-// when owner calls activate, the contract will:
+// when project calls activate, the contract will:
 // - transfer the necessary amount of tokens required to cover all allocations
 // - set the vesting clock to start at the specified time (no more than 90 days in the future)
 // - lock the contract for any further allocations
-contract VestingV1 is Ownable {
+contract VestingV1 is AccessControl {
     using SafeERC20 for IERC20;
 
     uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
+    bytes32 public constant DAO_ROLE = keccak256("DAO_ROLE");
+    bytes32 public constant PROJECT_ROLE = keccak256("PROJECT_ROLE");
 
     IERC20 public immutable PROJECT_TOKEN;
     uint256 public immutable VESTING_DURATION_SECONDS;
+    address public immutable DAO_WALLET;
+    address public immutable PROJECT_WALLET;
 
     bool public emergencyReleased = false;
 
@@ -44,7 +48,7 @@ contract VestingV1 is Ownable {
     error VestingNotStarted();
     error NothingToClaim();
     error NoAllocationsAdded();
-    error OnlyOwnerOrSender();
+    error OnlyProjectOrSender();
     error AlreadyActivated();
     error NotActivated();
     error EmergencyReleased();
@@ -61,18 +65,24 @@ contract VestingV1 is Ownable {
         _;
     }
 
-    modifier onlyOwnerOrSender(address target) {
-        if (!(msg.sender == owner() || msg.sender == target)) revert OnlyOwnerOrSender();
+    modifier onlyProjectOrSender(address target) {
+        if (!(hasRole(PROJECT_ROLE, msg.sender) || msg.sender == target)) revert OnlyProjectOrSender();
         _;
     }
 
-    constructor(address projectToken, uint256 vestingDurationSeconds) {
+    constructor(address projectToken, uint256 vestingDurationSeconds, address daoWallet, address projectWallet) {
         PROJECT_TOKEN = IERC20(projectToken);
         VESTING_DURATION_SECONDS = vestingDurationSeconds;
+        DAO_WALLET = daoWallet;
+        PROJECT_WALLET = projectWallet;
+
+        _grantRole(DAO_ROLE, daoWallet);
+        _grantRole(PROJECT_ROLE, projectWallet);
     }
 
-    // --- User functions ---
-    function claim(address target) external onlyOwnerOrSender(target) onlyIfNotEmergencyReleased {
+    // --- Investor functions ---
+    function claim(address target) external onlyProjectOrSender(target) onlyIfNotEmergencyReleased {
+        // TODO ensure that we indeed want to apply this restriction (to enable vaults / auto-compounding)
         if (!isVestingStarted()) revert VestingNotStarted();
         uint256 claimable = claimableFor(target);
         if (claimable == 0) revert NothingToClaim();
@@ -83,8 +93,8 @@ contract VestingV1 is Ownable {
         emit Claimed(target, claimable);
     }
 
-    // --- Owner functions ---
-    function setAmount(address target, uint256 amount) external onlyOwner onlyBeforeActivation {
+    // --- Project only functions ---
+    function setAmount(address target, uint256 amount) external onlyRole(PROJECT_ROLE) onlyBeforeActivation {
         uint256 currentAmountForUser = userVestings[target].amount;
 
         if (amount > currentAmountForUser) {
@@ -98,7 +108,7 @@ contract VestingV1 is Ownable {
         emit AmountSet(target, amount);
     }
 
-    function activate(uint256 _vestingStartTime) external onlyOwner onlyBeforeActivation {
+    function activate(uint256 _vestingStartTime) external onlyRole(PROJECT_ROLE) onlyBeforeActivation {
         if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW))
             revert StartTimeTooLate(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
         if (_vestingStartTime < block.timestamp) revert StartTimeIsInPast(_vestingStartTime);
@@ -113,14 +123,13 @@ contract VestingV1 is Ownable {
 
     // --- Emergency functions ---
     // TODO(Audit) - ensure with legal/compliance we're ok without an emergency lever to release all tokens here
-
-    function emergencyRelease() external onlyOwner onlyIfNotEmergencyReleased {
+    function emergencyRelease() external onlyRole(DAO_ROLE) onlyIfNotEmergencyReleased {
         if (vestingStartTime == 0) revert NotActivated();
         emergencyReleased = true;
         emit EmergencyRelease();
     }
 
-    function emergencyClaim(address target) external onlyOwnerOrSender(target) {
+    function emergencyClaim(address target) external onlyProjectOrSender(target) {
         UserVesting storage userStatus = userVestings[target];
         if (!emergencyReleased) revert EmergencyNotReleased();
         if (userStatus.amount == 0) revert NothingToClaim(); // TODO different error?
@@ -132,7 +141,7 @@ contract VestingV1 is Ownable {
         emit UserEmergencyClaimed(target, toClaim);
     }
 
-    function recoverToken(address tokenAddress) external onlyOwner {
+    function recoverToken(address tokenAddress) external onlyRole(DAO_ROLE) {
         // Return any balance of the token that's not PROJECT_TOKEN
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
 
@@ -141,21 +150,19 @@ contract VestingV1 is Ownable {
             tokenBalanceToRecover -= Math.min(totalAllocated, tokenBalanceToRecover);
         }
 
-        IERC20(tokenAddress).safeTransfer(owner(), tokenBalanceToRecover);
+        IERC20(tokenAddress).safeTransfer(DAO_WALLET, tokenBalanceToRecover);
 
         emit TokenRecovered(tokenAddress, tokenBalanceToRecover);
     }
 
-    function recoverEther() external onlyOwner {
+    function recoverEther() external onlyRole(DAO_ROLE) {
         uint256 etherToRecover = address(this).balance;
-        Address.sendValue(payable(owner()), etherToRecover);
+        Address.sendValue(payable(DAO_WALLET), etherToRecover);
 
         emit EtherRecovered(etherToRecover);
     }
 
     // --- View functions ---
-    // TODO(Audit) - emergency release to investors
-
     function isActivated() public view returns (bool) {
         return vestingStartTime != 0;
     }

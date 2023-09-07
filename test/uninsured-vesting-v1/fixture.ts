@@ -12,6 +12,8 @@ export let deployer: string;
 export let user1: string;
 export let user2: string;
 export let anyUser: string;
+export let daoWallet: string;
+export let projectWallet: string;
 
 export let projectToken: MockERC20 & Token;
 export let someOtherToken: MockERC20 & Token;
@@ -28,19 +30,25 @@ export async function setup() {
   user1 = await account(0);
   user2 = await account(3);
   anyUser = await account(1);
+  daoWallet = await account(4);
+  projectWallet = await account(5);
   tag(deployer, "deployer");
   tag(user1, "user1");
   tag(user2, "user2");
   tag(anyUser, "anyUser");
+  tag(daoWallet, "daoWallet");
+  tag(projectWallet, "projectWallet");
 }
 
 export async function withFixture() {
-  projectToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "ProjectToken"])).options.address);
+  projectToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: projectWallet }, [bn18(1e9), "ProjectToken"])).options.address);
   someOtherToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "SomeOtherToken"])).options.address);
 
   // TODO TEMPORARY: until having production PROJECT_TOKEN address
   const testConfig = [...config];
   testConfig[0] = projectToken.options.address;
+  testConfig[2] = daoWallet;
+  testConfig[3] = projectWallet;
   // END TEMPORARY
 
   vesting = await deployArtifact<VestingV1>("VestingV1", { from: deployer }, testConfig);
@@ -54,18 +62,18 @@ export enum Error {
   AlreadyActivated = "AlreadyActivated",
   NothingToClaim = "NothingToClaim",
   NoAllocationsAdded = "NoAllocationsAdded",
-  OnlyOwnerOrSender = "OnlyOwnerOrSender",
+  OnlyProjectOrSender = "OnlyProjectOrSender",
   NotActivated = "NotActivated",
   EmergencyReleased = "EmergencyReleased",
   EmergencyNotReleased = "EmergencyNotReleased",
 }
 
 export async function transferProjectTokenToVesting() {
-  await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(PROJECT_TOKENS_ON_SALE)).send({ from: deployer });
+  await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(PROJECT_TOKENS_ON_SALE)).send({ from: projectWallet });
 }
 
 export async function approveProjectTokenToVesting(amount = PROJECT_TOKENS_ON_SALE) {
-  await projectToken.methods.approve(vesting.options.address, await projectToken.amount(amount)).send({ from: deployer });
+  await projectToken.methods.approve(vesting.options.address, await projectToken.amount(amount)).send({ from: projectWallet });
 }
 
 export async function getDefaultStartTime(): Promise<BN> {
@@ -73,11 +81,11 @@ export async function getDefaultStartTime(): Promise<BN> {
 }
 
 export async function setAmountForUser1(amount = TOKENS_PER_USER) {
-  await vesting.methods.setAmount(user1, await projectToken.amount(amount)).send({ from: deployer });
+  await vesting.methods.setAmount(user1, await projectToken.amount(amount)).send({ from: projectWallet });
 }
 
 export async function setAmountForUser2(amount = TOKENS_PER_USER) {
-  await vesting.methods.setAmount(user2, await projectToken.amount(amount)).send({ from: deployer });
+  await vesting.methods.setAmount(user2, await projectToken.amount(amount)).send({ from: projectWallet });
 }
 
 export async function vestedAmount(days: number) {
@@ -88,6 +96,6 @@ export async function vestedAmount(days: number) {
 }
 
 export async function activateAndReachStartTime() {
-  await vesting.methods.activate(await getDefaultStartTime()).send({ from: deployer });
+  await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
   await advanceDays(3);
 }
