@@ -19,6 +19,16 @@ describe("VestingV1 deployment config", () => {
   it("duration is 2 years", async () => {
     expect(await vesting.methods.VESTING_DURATION_SECONDS().call()).to.equal(String(60 * 60 * 24 * 365 * 2));
   });
+
+  // TODO: reenable this when config is using real Dao wallet address
+  it.skip("dao wallet address cannot be zero", async () => {
+    expect((await vesting.methods.DAO_WALLET().call()).toLowerCase()).to.not.match(/^0x0+$/);
+  });
+
+  // TODO: reenable this when config is using real project wallet address
+  it.skip("project wallet address cannot be zero", async () => {
+    expect((await vesting.methods.PROJECT_WALLET().call()).toLowerCase()).to.not.match(/^0x0+$/);
+  });
 });
 
 describe("VestingV1 deployment script", () => {
@@ -31,9 +41,13 @@ describe("VestingV1 deployment script", () => {
   });
 
   describe("Error handling", () => {
+    const walletAddress = "0xc0ffee254729296a45a3885639AC7E10F9d54979";
+
     const testCases: { config: ConfigTuple; errorMessage: string }[] = [
-      { config: [zeroAddress, 1], errorMessage: "XCTD address cannot be zero" },
-      { config: ["Ox123", 10], errorMessage: "Duration must be 2 years" },
+      { config: [zeroAddress, 1, walletAddress, walletAddress], errorMessage: "XCTD address cannot be zero" },
+      { config: ["Ox123", 10, walletAddress, walletAddress], errorMessage: "Duration must be 2 years" },
+      { config: [walletAddress, 63_072_000, zeroAddress, walletAddress], errorMessage: "DAO wallet address cannot be zero" },
+      { config: [walletAddress, 63_072_000, walletAddress, zeroAddress], errorMessage: "Project wallet address cannot be zero" },
     ];
 
     for (const { config, errorMessage } of testCases) {
@@ -50,11 +64,11 @@ describe("VestingV1 deployment script", () => {
 
   describe("Success", () => {
     it("should deploy", async () => {
-      await deployVestingV1(web3CandiesStub.deploy, ["0x123", 63_072_000], new BN(10), new BN(10));
+      await deployVestingV1(web3CandiesStub.deploy, ["0x123", 63_072_000, "0x123", "0x123"], new BN(10), new BN(10));
       expect(web3CandiesStub.deploy.calledOnce).to.be.true;
       expect(web3CandiesStub.deploy.firstCall.args[0]).to.deep.equal({
         contractName: "VestingV1",
-        args: ["0x123", 63_072_000],
+        args: ["0x123", 63_072_000, "0x123", "0x123"],
         maxFeePerGas: new BN(10),
         maxPriorityFeePerGas: new BN(10),
       });

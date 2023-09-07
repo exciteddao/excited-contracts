@@ -6,7 +6,6 @@ import {
   FUNDING_PER_USER,
   LOCKUP_MONTHS,
   FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO,
-  advanceMonths,
   anyUser,
   projectWallet,
   user1,
@@ -15,14 +14,11 @@ import {
   projectToken,
   deployer,
   someOtherToken,
-  getCurrentTimestamp,
   user2,
   additionalUsers,
   setup,
-  advanceDays,
   Error,
   VESTING_DURATION_SECONDS,
-  DAY,
   VESTING_DURATION_DAYS,
   transferProjectTokenToVesting,
   approveProjectTokenToVesting,
@@ -40,10 +36,10 @@ import {
   fundFundingTokenFromWhale,
   PROJECT_TOKENS_ON_SALE,
   activateAndReachStartTime,
-  MONTH,
   getDefaultStartTime,
 } from "./fixture";
 import { web3, zeroAddress } from "@defi.org/web3-candies";
+import { advanceDays, DAY, getCurrentTimestamp, advanceMonths, MONTH } from "../utils";
 
 describe("InsuredVestingV1", () => {
   let snap: SnapshotRestorer;
@@ -838,25 +834,86 @@ describe("InsuredVestingV1", () => {
     });
 
     describe("view functions", () => {
-      it("returns 0 vested when not activated", async () => {
-        await setAllowedAllocationForUser1(FUNDING_PER_USER);
-        await addFundingFromUser1(FUNDING_PER_USER);
-        expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.eq(0);
+      describe("funding token", () => {
+        it("returns 0 vested when not activated", async () => {
+          await setAllowedAllocationForUser1(FUNDING_PER_USER);
+          await addFundingFromUser1(FUNDING_PER_USER);
+          expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.eq(0);
+        });
+
+        it("returns correct vested amount - immediately after activation", async () => {
+          await setAllowedAllocationForUser1(FUNDING_PER_USER);
+          await addFundingFromUser1(FUNDING_PER_USER);
+          await activateAndReachStartTime();
+          expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.closeTo(0, 200);
+        });
+
+        it("returns correct vested amount - 30 days", async () => {
+          await setAllowedAllocationForUser1(FUNDING_PER_USER);
+          await addFundingFromUser1(FUNDING_PER_USER);
+          await activateAndReachStartTime();
+          await advanceDays(30);
+          expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.eq(await vestedAmount(30, "fundingToken"));
+        });
+
+        it("returns correct vested amount - claim", async () => {
+          await setAllowedAllocationForUser1(FUNDING_PER_USER);
+          await addFundingFromUser1(FUNDING_PER_USER);
+          await activateAndReachStartTime();
+          await advanceDays(30);
+          await insuredVesting.methods.claim(user1).send({ from: deployer });
+          expect(await insuredVesting.methods.fundingTokenClaimableFor(user1).call()).to.be.bignumber.zero;
+          await advanceDays(30);
+          expect(await insuredVesting.methods.fundingTokenClaimableFor(user1).call()).to.be.bignumber.eq(await vestedAmount(30, "fundingToken"));
+          expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.closeTo(
+            await vestedAmount(60, "fundingToken"),
+            await fundingToken.amount(0.1)
+          );
+        });
       });
 
-      it("returns correct vested amount - immediately after activation", async () => {
-        await setAllowedAllocationForUser1(FUNDING_PER_USER);
-        await addFundingFromUser1(FUNDING_PER_USER);
-        await activateAndReachStartTime();
-        expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.eq(0);
-      });
+      describe("project token", () => {
+        it("returns 0 vested when not activated", async () => {
+          await setAllowedAllocationForUser1(FUNDING_PER_USER);
+          await addFundingFromUser1(FUNDING_PER_USER);
+          expect(await insuredVesting.methods.projectTokenClaimableFor(user1).call()).to.be.bignumber.eq(0);
+        });
 
-      it("returns correct vested amount - 30 days", async () => {
-        await setAllowedAllocationForUser1(FUNDING_PER_USER);
-        await addFundingFromUser1(FUNDING_PER_USER);
-        await activateAndReachStartTime();
-        await advanceDays(30);
-        expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.eq(await vestedAmount(30, "fundingToken"));
+        it("returns correct vested amount - immediately after activation", async () => {
+          await setAllowedAllocationForUser1(FUNDING_PER_USER);
+          await addFundingFromUser1(FUNDING_PER_USER);
+          await activateAndReachStartTime();
+          expect(await insuredVesting.methods.projectTokenClaimableFor(user1).call()).to.be.bignumber.closeTo(0, 200);
+        });
+
+        it("returns correct vested amount - 30 days", async () => {
+          await setAllowedAllocationForUser1(FUNDING_PER_USER);
+          await addFundingFromUser1(FUNDING_PER_USER);
+          await activateAndReachStartTime();
+          await advanceDays(30);
+          expect(await insuredVesting.methods.projectTokenClaimableFor(user1).call()).to.be.bignumber.closeTo(
+            await vestedAmount(30, "projectToken"),
+            await projectToken.amount(0.1)
+          );
+        });
+
+        it("returns correct vested amount - claim", async () => {
+          await setAllowedAllocationForUser1(FUNDING_PER_USER);
+          await addFundingFromUser1(FUNDING_PER_USER);
+          await activateAndReachStartTime();
+          await advanceDays(30);
+          await insuredVesting.methods.claim(user1).send({ from: deployer });
+          expect(await insuredVesting.methods.projectTokenClaimableFor(user1).call()).to.be.bignumber.zero;
+          await advanceDays(30);
+          expect(await insuredVesting.methods.projectTokenClaimableFor(user1).call()).to.be.bignumber.closeTo(
+            await vestedAmount(30, "projectToken"),
+            await projectToken.amount(0.1)
+          );
+          expect(await insuredVesting.methods.projectTokenVestedFor(user1).call()).to.be.bignumber.closeTo(
+            await vestedAmount(60, "projectToken"),
+            await projectToken.amount(0.1)
+          );
+        });
       });
     });
   });
