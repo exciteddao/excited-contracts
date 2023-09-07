@@ -27,18 +27,13 @@ contract InsuredVestingV1 is Ownable {
     uint256 public vestingStartTime;
     uint256 public totalFundingTokenFunded;
 
-    enum ClaimDecision {
-        PROJECT_TOKEN,
-        FUNDING_TOKEN
-    }
-
     struct UserVesting {
         // Actual FUNDING_TOKEN amount funded by user
         uint256 fundingTokenFunded;
         // Investment allocation, set by owner
         uint256 fundingTokenAllocation;
-        // Whether the user wants to claim PROJECT_TOKEN or claim back FUNDING_TOKEN
-        ClaimDecision claimDecision;
+        // true - user will get FUNDING_TOKEN back, false - user will get PROJECT_TOKEN
+        bool shouldRefund;
         // Amount of FUNDING_TOKEN claimed by user (PROJECT_TOKEN is computed from that)
         uint256 fundingTokenClaimed;
     }
@@ -52,8 +47,9 @@ contract InsuredVestingV1 is Ownable {
     event AllowedAllocationSet(address indexed target, uint256 amount);
     event FundsAdded(address indexed target, uint256 amount);
     event EmergencyRelease();
-    event DecisionChanged(address indexed target, ClaimDecision decision);
-    event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
+    event DecisionChanged(address indexed target, bool shouldRefund);
+    event TokenRecovered(address indexed token, uint256 tokenAmount);
+    event EtherRecovered(uint256 etherAmount);
     event ProjectWalletAddressChanged(address indexed oldAddress, address indexed newAddress);
     event Activated(uint256 startTime, uint256 projectTokenTransferredToContract);
 
@@ -127,7 +123,7 @@ contract InsuredVestingV1 is Ownable {
         userStatus.fundingTokenClaimed += claimableFundingToken;
 
         // TODO consider using ternary conditions for readability
-        if (userStatus.claimDecision == ClaimDecision.PROJECT_TOKEN) {
+        if (!userStatus.shouldRefund) {
             PROJECT_TOKEN.safeTransfer(target, claimableProjectToken);
             FUNDING_TOKEN.safeTransfer(projectWallet, claimableFundingToken);
 
@@ -142,16 +138,12 @@ contract InsuredVestingV1 is Ownable {
         }
     }
 
-    // TODO(audit) - two setters, each for one of the two decisions
-    // decision1 - PROJECT_TOKENS
-    // decision2 - REFUND_FUNDING_TOKENS
-    function toggleDecision() external {
+    function setDecision(bool _shouldRefund) external {
         if (userVestings[msg.sender].fundingTokenFunded == 0) revert NoFundsAdded();
-        userVestings[msg.sender].claimDecision = userVestings[msg.sender].claimDecision == ClaimDecision.PROJECT_TOKEN
-            ? ClaimDecision.FUNDING_TOKEN
-            : ClaimDecision.PROJECT_TOKEN;
+        if (userVestings[msg.sender].shouldRefund == _shouldRefund) return;
+        userVestings[msg.sender].shouldRefund = _shouldRefund;
 
-        emit DecisionChanged(msg.sender, userVestings[msg.sender].claimDecision);
+        emit DecisionChanged(msg.sender, _shouldRefund);
     }
 
     // --- Owner functions ---
@@ -243,7 +235,7 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // TODO(audit) - separate to recoverEth as in VestingV1
-    function recover(address tokenAddress) external onlyOwner {
+    function recoverToken(address tokenAddress) external onlyOwner {
         // Return any balance of the token that's not projectToken
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
         // // in case of PROJECT_TOKEN, we also need to retain the total locked amount in the contract
@@ -258,10 +250,14 @@ contract InsuredVestingV1 is Ownable {
 
         IERC20(tokenAddress).safeTransfer(projectWallet, tokenBalanceToRecover);
 
+        emit TokenRecovered(tokenAddress, tokenBalanceToRecover);
+    }
+
+    function recoverEther() external onlyOwner {
         uint256 etherToRecover = address(this).balance;
         Address.sendValue(payable(projectWallet), etherToRecover);
 
-        emit AmountRecovered(tokenAddress, tokenBalanceToRecover, etherToRecover);
+        emit EtherRecovered(etherToRecover);
     }
 
     // --- View functions ---

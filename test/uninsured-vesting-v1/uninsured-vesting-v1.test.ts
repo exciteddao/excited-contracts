@@ -165,36 +165,44 @@ describe("VestingV1", () => {
         const startingBalance = await web3().eth.getBalance(deployer);
         expect(await web3().eth.getBalance(vesting.options.address)).to.bignumber.eq(0);
         await setBalance(vesting.options.address, BN(12345 * 1e18));
-        await vesting.methods.recover(projectToken.options.address).send({ from: deployer });
+        await vesting.methods.recoverEther().send({ from: deployer });
         expect(await web3().eth.getBalance(vesting.options.address)).to.be.bignumber.zero;
         expect(await web3().eth.getBalance(deployer)).to.bignumber.closeTo(BN(12345 * 1e18).plus(startingBalance), BN(0.1e18));
       });
 
+      it("does not recover ether if recovering token", async () => {
+        expect(await web3().eth.getBalance(vesting.options.address)).to.bignumber.eq(0);
+        await setBalance(vesting.options.address, BN(12345 * 1e18));
+        await someOtherToken.methods.transfer(vesting.options.address, BN(12345 * 1e18)).send({ from: deployer });
+        await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
+        expect(await web3().eth.getBalance(vesting.options.address)).to.bignumber.closeTo(BN(12345 * 1e18), BN(0.1e18));
+      });
+
       it("recovers other tokens", async () => {
         await someOtherToken.methods.transfer(vesting.options.address, BN(12345 * 1e18)).send({ from: deployer });
-        await vesting.methods.recover(someOtherToken.options.address).send({ from: deployer });
+        await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
         expect(await someOtherToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.zero;
       });
 
       it("recovers excess projectToken, some allocations set", async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: deployer });
         await vesting.methods.setAmount(user2, await projectToken.amount(TOKENS_PER_USER)).send({ from: deployer });
-        await vesting.methods.recover(projectToken.options.address).send({ from: deployer });
+        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         // Recover all but the tokens allocated to users
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER * 2));
       });
 
       it("recovers excess projectToken, no allocations set", async () => {
-        await vesting.methods.recover(projectToken.options.address).send({ from: deployer });
+        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(0));
       });
 
       it("recovers excess projectToken, recovery called multiple times is idempotent", async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER / 4)).send({ from: deployer });
-        await vesting.methods.recover(projectToken.options.address).send({ from: deployer });
+        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER / 4));
-        await vesting.methods.recover(projectToken.options.address).send({ from: deployer });
-        await vesting.methods.recover(projectToken.options.address).send({ from: deployer });
+        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
+        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER / 4));
       });
 
@@ -213,14 +221,14 @@ describe("VestingV1", () => {
           await projectToken.amount(0.1)
         );
 
-        await vesting.methods.recover(projectToken.options.address).send({ from: deployer });
+        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
       });
 
       it("handles zero token balance gracefully", async () => {
         const startingBalance = await someOtherToken.methods.balanceOf(vesting.options.address).call();
         expect(startingBalance).to.be.bignumber.zero;
-        await vesting.methods.recover(someOtherToken.options.address).send({ from: deployer });
+        await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
         expect(await someOtherToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.zero;
       });
     });
@@ -234,8 +242,12 @@ describe("VestingV1", () => {
         await expectRevert(async () => vesting.methods.setAmount(user1, 1).send({ from: anyUser }), "Ownable: caller is not the owner");
       });
 
-      it("cannot recover if not owner", async () => {
-        await expectRevert(async () => vesting.methods.recover(projectToken.options.address).send({ from: anyUser }), "Ownable: caller is not the owner");
+      it("cannot recover ether if not owner", async () => {
+        await expectRevert(async () => vesting.methods.recoverEther().send({ from: anyUser }), "Ownable: caller is not the owner");
+      });
+
+      it("cannot recover token if not owner", async () => {
+        await expectRevert(async () => vesting.methods.recoverToken(projectToken.options.address).send({ from: anyUser }), "Ownable: caller is not the owner");
       });
     });
 
