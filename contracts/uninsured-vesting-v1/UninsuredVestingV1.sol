@@ -83,7 +83,7 @@ contract VestingV1 is Ownable {
     }
 
     function activate(uint256 _vestingStartTime) external onlyOwner onlyBeforeActivation {
-        if (_vestingStartTime > block.timestamp + MAX_START_TIME_FROM_NOW)
+        if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW))
             revert StartTimeTooLate(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
         if (_vestingStartTime < block.timestamp) revert StartTimeIsInPast(_vestingStartTime);
         if (totalAllocated == 0) revert NoAllocationsAdded();
