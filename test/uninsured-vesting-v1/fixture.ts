@@ -55,6 +55,9 @@ export enum Error {
   NothingToClaim = "NothingToClaim",
   NoAllocationsAdded = "NoAllocationsAdded",
   OnlyOwnerOrSender = "OnlyOwnerOrSender",
+  NotActivated = "NotActivated",
+  EmergencyReleased = "EmergencyReleased",
+  EmergencyNotReleased = "EmergencyNotReleased",
 }
 
 export async function transferProjectTokenToVesting() {

@@ -24,6 +24,8 @@ import {
 } from "./fixture";
 import { web3 } from "@defi.org/web3-candies";
 import { advanceDays, DAY, getCurrentTimestamp, MONTH } from "../utils";
+import { VESTING_DURATION_DAYS } from "../insured-vesting-v1/fixture";
+import { EmergencyRelease } from "../../typechain-hardhat/contracts/vesting-v1/VestingV1";
 
 describe("VestingV1", () => {
   before(async () => await setup());
@@ -375,6 +377,131 @@ describe("VestingV1", () => {
       const startTimeToSet = await getDefaultStartTime();
       await vesting.methods.activate(startTimeToSet).send({ from: deployer });
       expect(await vesting.methods.vestingStartTime().call()).to.be.bignumber.eq(startTimeToSet);
+    });
+  });
+
+  describe("emergency release", () => {
+    it("does not allow non-owner to emergency release", async () => {
+      await expectRevert(async () => vesting.methods.emergencyRelease().send({ from: anyUser }), "Ownable: caller is not the owner");
+    });
+
+    it("allows owner to emergency release", async () => {
+      await setAmountForUser1();
+      await approveProjectTokenToVesting();
+      await vesting.methods.activate(await getDefaultStartTime()).send({ from: deployer });
+      expect(await vesting.methods.emergencyReleased().call()).to.be.false;
+      await vesting.methods.emergencyRelease().send({ from: deployer });
+      expect(await vesting.methods.emergencyReleased().call()).to.be.true;
+    });
+
+    it("cannot emergency release if not activated", async () => {
+      await expectRevert(async () => vesting.methods.emergencyRelease().send({ from: deployer }), Error.NotActivated);
+    });
+
+    it("cannot emergency claim if not owner or sender", async () => {
+      await setAmountForUser1();
+      await approveProjectTokenToVesting();
+      await activateAndReachStartTime();
+      await vesting.methods.emergencyRelease().send({ from: deployer });
+      await expectRevert(async () => vesting.methods.emergencyClaim(user1).send({ from: anyUser }), Error.OnlyOwnerOrSender);
+    });
+
+    it("cannot emergency release twice", async () => {
+      await setAmountForUser1();
+      await approveProjectTokenToVesting();
+      await activateAndReachStartTime();
+      await vesting.methods.emergencyRelease().send({ from: deployer });
+      await expectRevert(async () => vesting.methods.emergencyRelease().send({ from: deployer }), Error.EmergencyReleased);
+    });
+
+    [
+      ["user", false],
+      ["owner", true],
+    ].forEach(([who, isOwner]) => {
+      describe(`emergency claim by ${who}`, () => {
+        it("lets user claim after emergency release (full amount)", async () => {
+          await setAmountForUser1();
+          await approveProjectTokenToVesting();
+          await activateAndReachStartTime();
+          await vesting.methods.emergencyRelease().send({ from: deployer });
+          await vesting.methods.emergencyClaim(user1).send({ from: isOwner ? deployer : user1 });
+          expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
+        });
+
+        it("lets user claim after emergency release (some already claimed before)", async () => {
+          await setAmountForUser1();
+          await approveProjectTokenToVesting();
+          await activateAndReachStartTime();
+          await advanceDays(VESTING_DURATION_DAYS / 4);
+          await vesting.methods.claim(user1).send({ from: user1 });
+          expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
+            (await projectToken.amount(TOKENS_PER_USER)).dividedBy(4),
+            await projectToken.amount(0.1)
+          );
+          await vesting.methods.emergencyRelease().send({ from: deployer });
+          await vesting.methods.emergencyClaim(user1).send({ from: isOwner ? deployer : user1 });
+          expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
+        });
+
+        it("lets multiple users claim after emergency release (some already claimed before)", async () => {
+          await setAmountForUser1();
+          await setAmountForUser2();
+          await approveProjectTokenToVesting();
+          await activateAndReachStartTime();
+          await advanceDays(VESTING_DURATION_DAYS / 4);
+          await vesting.methods.claim(user1).send({ from: user1 });
+          expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
+            (await projectToken.amount(TOKENS_PER_USER)).dividedBy(4),
+            await projectToken.amount(0.1)
+          );
+          await vesting.methods.emergencyRelease().send({ from: deployer });
+          await vesting.methods.emergencyClaim(user1).send({ from: isOwner ? deployer : user1 });
+          expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
+          await vesting.methods.emergencyClaim(user2).send({ from: isOwner ? deployer : user2 });
+          expect(await projectToken.methods.balanceOf(user2).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
+        });
+
+        it("cannot emergency claim if no allocation", async () => {
+          await setAmountForUser1();
+          await approveProjectTokenToVesting();
+          await activateAndReachStartTime();
+          await vesting.methods.emergencyRelease().send({ from: deployer });
+          await expectRevert(async () => vesting.methods.emergencyClaim(user2).send({ from: isOwner ? deployer : user2 }), Error.NothingToClaim);
+        });
+
+        it("can emergegency claim if activated, not reached start time yet", async () => {
+          await setAmountForUser1();
+          await approveProjectTokenToVesting();
+          await vesting.methods.activate(await getDefaultStartTime()).send({ from: deployer });
+          await vesting.methods.emergencyRelease().send({ from: deployer });
+          await vesting.methods.emergencyClaim(user1).send({ from: isOwner ? deployer : user1 });
+          expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
+        });
+        it("emergency claim twice does not cause double spend", async () => {
+          await setAmountForUser1();
+          await setAmountForUser2();
+          await approveProjectTokenToVesting();
+          await vesting.methods.activate(await getDefaultStartTime()).send({ from: deployer });
+          await vesting.methods.emergencyRelease().send({ from: deployer });
+          await vesting.methods.emergencyClaim(user1).send({ from: isOwner ? deployer : user1 });
+          expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
+          await vesting.methods.emergencyClaim(user1).send({ from: isOwner ? deployer : user1 });
+          expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
+        });
+        it("cannot emergency claim if not released", async () => {
+          await setAmountForUser1();
+          await approveProjectTokenToVesting();
+          await activateAndReachStartTime();
+          await expectRevert(async () => vesting.methods.emergencyClaim(user1).send({ from: isOwner ? deployer : user1 }), Error.EmergencyNotReleased);
+        });
+        it("cannot regularly claim if emergency released", async () => {
+          await setAmountForUser1();
+          await approveProjectTokenToVesting();
+          await activateAndReachStartTime();
+          await vesting.methods.emergencyRelease().send({ from: deployer });
+          await expectRevert(async () => vesting.methods.claim(user1).send({ from: isOwner ? deployer : user1 }), Error.EmergencyReleased);
+        });
+      });
     });
   });
 
