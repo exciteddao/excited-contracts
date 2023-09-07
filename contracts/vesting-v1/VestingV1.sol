@@ -5,8 +5,14 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
+// when owner calls activate, the contract will:
+// - transfer the necessary amount of tokens required to cover all allocations
+// - set the vesting clock to start at the specified time (no more than 90 days in the future)
+// - lock the contract for any further allocations
 contract VestingV1 is Ownable {
     using SafeERC20 for IERC20;
+
+    uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
 
     IERC20 public immutable PROJECT_TOKEN;
     uint256 public immutable VESTING_DURATION_SECONDS;
@@ -24,21 +30,21 @@ contract VestingV1 is Ownable {
     // --- Events ---
     event Claimed(address indexed target, uint256 amount);
     event AmountSet(address indexed target, uint256 amount);
-    event StartTimeSet(uint256 timestamp);
+    event Activated(uint256 timestamp, uint256 tokensTransferred);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
 
     // --- Errors ---
-    error StartTimeTooSoon(uint256 vestingStartTime, uint256 minStartTime);
-    error StartTimeNotInFuture(uint256 newStartTime);
+    error StartTimeTooLate(uint256 vestingStartTime, uint256 maxStartTime);
+    error StartTimeIsInPast(uint256 vestingStartTime);
     error VestingNotStarted();
-    error VestingAlreadyStarted();
     error NothingToClaim();
     error NoAllocationsAdded();
     error OnlyOwnerOrSender();
+    error AlreadyActivated();
 
     // --- Modifiers ---
     modifier onlyBeforeActivation() {
-        if (vestingStartTime != 0) revert VestingAlreadyStarted();
+        if (isActivated()) revert AlreadyActivated();
         _;
     }
 
@@ -51,7 +57,7 @@ contract VestingV1 is Ownable {
     function claim(address target) external {
         // TODO ensure that we indeed want to apply this restriction (to enable vaults / auto-compounding)
         if (!(msg.sender == owner() || msg.sender == target)) revert OnlyOwnerOrSender();
-        if (vestingStartTime == 0) revert VestingNotStarted();
+        if (!isVestingStarted()) revert VestingNotStarted();
         uint256 claimable = claimableFor(target);
         if (claimable == 0) revert NothingToClaim();
 
@@ -76,18 +82,17 @@ contract VestingV1 is Ownable {
         emit AmountSet(target, amount);
     }
 
-    // TODO(Audit) comment - activate should get startTime as a parameter, contract would be locked for further investments
-    // there will be 2 points of time (add this explanation to header of contract):
-    // - activate - locks further allocations and transfers token to contract
-    // - startTime should be MAX more than 3 months
-    function activate() external onlyOwner onlyBeforeActivation {
+    function activate(uint256 _vestingStartTime) external onlyOwner onlyBeforeActivation {
+        if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW))
+            revert StartTimeTooLate(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
+        if (_vestingStartTime < block.timestamp) revert StartTimeIsInPast(_vestingStartTime);
         if (totalAllocated == 0) revert NoAllocationsAdded();
 
-        vestingStartTime = block.timestamp;
+        vestingStartTime = _vestingStartTime;
         uint256 delta = totalAllocated - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalAllocated);
         PROJECT_TOKEN.safeTransferFrom(msg.sender, address(this), delta);
 
-        emit StartTimeSet(vestingStartTime);
+        emit Activated(vestingStartTime, delta);
     }
 
     // --- Emergency functions ---
@@ -113,13 +118,18 @@ contract VestingV1 is Ownable {
     }
 
     // --- View functions ---
-    // TODO(Audit) add - isActivated, getVestingStartTime, isVestingStarted
-
     // TODO(Audit) - emergency release to investors
 
+    function isActivated() public view returns (bool) {
+        return vestingStartTime != 0;
+    }
+
+    function isVestingStarted() public view returns (bool) {
+        return isActivated() && vestingStartTime <= block.timestamp;
+    }
+
     function totalVestedFor(address target) public view returns (uint256) {
-        // TODO(Audit) fix this to take a startTime that hasn't arrived yet into account
-        if (vestingStartTime == 0) return 0;
+        if (!isVestingStarted()) return 0;
         UserVesting storage targetStatus = userVestings[target];
         return Math.min(targetStatus.amount, ((block.timestamp - vestingStartTime) * targetStatus.amount) / VESTING_DURATION_SECONDS);
     }
