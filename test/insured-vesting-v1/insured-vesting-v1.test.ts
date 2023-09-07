@@ -6,7 +6,6 @@ import {
   FUNDING_PER_USER,
   LOCKUP_MONTHS,
   FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO,
-  advanceMonths,
   anyUser,
   projectWallet,
   user1,
@@ -15,14 +14,11 @@ import {
   projectToken,
   deployer,
   someOtherToken,
-  getCurrentTimestamp,
   user2,
   additionalUsers,
   setup,
-  advanceDays,
   Error,
   VESTING_DURATION_SECONDS,
-  DAY,
   VESTING_DURATION_DAYS,
   transferProjectTokenToVesting,
   approveProjectTokenToVesting,
@@ -40,10 +36,10 @@ import {
   fundFundingTokenFromWhale,
   PROJECT_TOKENS_ON_SALE,
   activateAndReachStartTime,
-  MONTH,
   getDefaultStartTime,
 } from "./fixture";
 import { web3, zeroAddress } from "@defi.org/web3-candies";
+import { advanceDays, DAY, getCurrentTimestamp, advanceMonths, MONTH } from "../utils";
 
 describe("InsuredVestingV1", () => {
   let snap: SnapshotRestorer;

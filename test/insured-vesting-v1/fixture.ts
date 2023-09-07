@@ -1,12 +1,12 @@
-import { Token, account, bn18, erc20, BlockInfo, Receipt, web3, bn6, ether } from "@defi.org/web3-candies";
-import { deployArtifact, impersonate, mineBlock, setBalance, tag, useChaiBigNumber } from "@defi.org/web3-candies/dist/hardhat";
+import { Token, account, bn18, erc20, ether } from "@defi.org/web3-candies";
+import { deployArtifact, impersonate, setBalance, tag, useChaiBigNumber } from "@defi.org/web3-candies/dist/hardhat";
 import BN from "bignumber.js";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { expect } from "chai";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 import { config } from "../../deployment/insured-vesting-v1";
+import { DAY, advanceDays, getCurrentTimestamp } from "../utils";
 
 useChaiBigNumber();
 
@@ -21,9 +21,6 @@ export let projectToken: Token;
 export let fundingToken: Token;
 export let someOtherToken: MockERC20 & Token;
 export let insuredVesting: InsuredVestingV1;
-
-export const DAY = 60 * 60 * 24;
-export const MONTH = DAY * 30;
 
 export const PROJECT_TOKENS_ON_SALE = 1_000_000;
 export const FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO = 5; // TODO do we want to modify this to be the other way around as well
@@ -97,22 +94,6 @@ export async function transferProjectTokenToVesting(amount = PROJECT_TOKENS_ON_S
 
 export async function approveProjectTokenToVesting(amount = PROJECT_TOKENS_ON_SALE) {
   await projectToken.methods.approve(insuredVesting.options.address, await projectToken.amount(amount)).send({ from: projectWallet });
-}
-
-export function advanceDays(days: number): Promise<BlockInfo> {
-  return mineBlock(days * DAY);
-}
-
-export function advanceMonths(months: number): Promise<BlockInfo> {
-  return mineBlock(months * MONTH);
-}
-
-// TODO export to utils and use across multiple contracts
-export async function getCurrentTimestamp(): Promise<string | number | BN> {
-  // Plus 1 - we are passing a timestamp the contract that's supposed to act as "now"
-  // when the transaction actually executes, it's going to be 1 second later
-  // TODO - consider whether this is viable/stable
-  return BN(await time.latest()).plus(1);
 }
 
 export async function getDefaultStartTime(): Promise<BN> {
