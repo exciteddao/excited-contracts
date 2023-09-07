@@ -77,7 +77,11 @@ export function advanceMonths(months: number): Promise<BlockInfo> {
 
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 
+// TODO export to utils and use across multiple contracts
 export async function getCurrentTimestamp(): Promise<string | number | BN> {
+  // Plus 1 - we are passing a timestamp the contract that's supposed to act as "now"
+  // when the transaction actually executes, it's going to be 1 second later
+  // TODO - consider whether this is viable/stable
   return BN(await time.latest()).plus(1);
 }
 
