@@ -1,9 +1,9 @@
 import { Token, account, bn18, erc20, BlockInfo, web3, network } from "@defi.org/web3-candies";
 import { deployArtifact, mineBlock, tag, useChaiBigNumber } from "@defi.org/web3-candies/dist/hardhat";
 import BN from "bignumber.js";
-import { VestingV1 } from "../../typechain-hardhat/contracts/uninsured-vesting-v1/UninsuredVestingV1.sol";
+import { VestingV1 } from "../../typechain-hardhat/contracts/vesting-v1";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
-import { config } from "../../deployment/uninsured-vesting-v1/config";
+import { config } from "../../deployment/vesting-v1/config";
 
 useChaiBigNumber();
 
