@@ -293,8 +293,8 @@ describe("InsuredVestingV1", () => {
       });
     });
 
-    describe("toggle decision", () => {
-      it("can toggle decision and claim fundingToken back (toggle after vesting)", async () => {
+    describe("set decision for refund", () => {
+      it("can set decision and claim fundingToken back (after vesting)", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
 
@@ -303,7 +303,7 @@ describe("InsuredVestingV1", () => {
 
         await advanceDays(30);
 
-        await insuredVesting.methods.toggleDecision().send({ from: user1 });
+        await insuredVesting.methods.setDecision(true).send({ from: user1 });
         await insuredVesting.methods.claim(user1).send({ from: user1 });
 
         await expectUserBalanceDelta("projectToken", 0);
@@ -312,11 +312,11 @@ describe("InsuredVestingV1", () => {
         await expectProjectBalanceDelta("fundingToken", 0);
       });
 
-      it("can toggle decision and claim fundingToken back (toggle before vesting)", async () => {
+      it("can set decision and claim fundingToken back (before vesting)", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
 
-        await insuredVesting.methods.toggleDecision().send({ from: user1 });
+        await insuredVesting.methods.setDecision(true).send({ from: user1 });
 
         await activateAndReachStartTime();
         await setBalancesForDelta();
@@ -331,7 +331,7 @@ describe("InsuredVestingV1", () => {
         await expectProjectBalanceDelta("fundingToken", 0);
       });
 
-      it("can claim some tokens, some fundingToken for entire vesting period, use toggle multiple times", async () => {
+      it("can claim some tokens, some fundingToken for entire vesting period, use setDecision multiple times", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
 
@@ -347,8 +347,8 @@ describe("InsuredVestingV1", () => {
         await expectProjectBalanceDelta("projectToken", 0);
         await expectProjectBalanceDelta("fundingToken", await vestedAmount(11 * 30, "fundingToken"));
 
-        // Toggle, let 3 months pass and claim FUNDING_TOKEN (we're at month 14)
-        await insuredVesting.methods.toggleDecision().send({ from: user1 });
+        // Set decision, let 3 months pass and claim FUNDING_TOKEN (we're at month 14)
+        await insuredVesting.methods.setDecision(true).send({ from: user1 });
         await advanceDays(3 * 30);
         await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("projectToken", await vestedAmount(11 * 30, "projectToken"));
@@ -356,17 +356,17 @@ describe("InsuredVestingV1", () => {
         await expectProjectBalanceDelta("projectToken", await vestedAmount(3 * 30, "projectToken"));
         await expectProjectBalanceDelta("fundingToken", await vestedAmount(11 * 30, "fundingToken"));
 
-        // Let another 3 months pass, toggle again to token and claim (we're at month 17)
+        // Let another 3 months pass, set decision again to token and claim (we're at month 17)
         await advanceDays(3 * 30);
-        await insuredVesting.methods.toggleDecision().send({ from: user1 });
+        await insuredVesting.methods.setDecision(false).send({ from: user1 });
         await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("projectToken", await vestedAmount(14 * 30, "projectToken"));
         await expectUserBalanceDelta("fundingToken", await vestedAmount(3 * 30, "fundingToken"));
         await expectProjectBalanceDelta("projectToken", await vestedAmount(3 * 30, "projectToken"));
         await expectProjectBalanceDelta("fundingToken", await vestedAmount(14 * 30, "fundingToken"));
 
-        // Toggle again and claim FUNDING_TOKEN for remaining periods (we're at month 24 - finished)
-        await insuredVesting.methods.toggleDecision().send({ from: user1 });
+        // Set decision again and claim FUNDING_TOKEN for remaining periods (we're at month 24 - finished)
+        await insuredVesting.methods.setDecision(true).send({ from: user1 });
         await advanceDays(220);
         await insuredVesting.methods.claim(user1).send({ from: user1 });
 
@@ -378,10 +378,26 @@ describe("InsuredVestingV1", () => {
         );
       });
 
-      it("cannot toggle decision if has not funded", async () => {
+      it("cannot set decision if has not funded", async () => {
         await setAllowedAllocationForUser1();
 
-        await expectRevert(() => insuredVesting.methods.toggleDecision().send({ from: user1 }), Error.NoFundsAdded);
+        await expectRevert(() => insuredVesting.methods.setDecision(true).send({ from: user1 }), Error.NoFundsAdded);
+      });
+
+      it("setting same decision multiple times is idempotent", async () => {
+        await setAllowedAllocationForUser1();
+        await addFundingFromUser1();
+
+        expect((await insuredVesting.methods.userVestings(user1).call()).isRefund).to.be.false;
+        await insuredVesting.methods.setDecision(true).send({ from: user1 });
+        expect((await insuredVesting.methods.userVestings(user1).call()).isRefund).to.be.true;
+        await insuredVesting.methods.setDecision(true).send({ from: user1 });
+        expect((await insuredVesting.methods.userVestings(user1).call()).isRefund).to.be.true;
+
+        await insuredVesting.methods.setDecision(false).send({ from: user1 });
+        expect((await insuredVesting.methods.userVestings(user1).call()).isRefund).to.be.false;
+        await insuredVesting.methods.setDecision(false).send({ from: user1 });
+        expect((await insuredVesting.methods.userVestings(user1).call()).isRefund).to.be.false;
       });
     });
 
