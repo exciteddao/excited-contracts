@@ -1,9 +1,9 @@
 import { Token, account, bn18, erc20, BlockInfo, web3, network } from "@defi.org/web3-candies";
 import { deployArtifact, mineBlock, tag, useChaiBigNumber } from "@defi.org/web3-candies/dist/hardhat";
 import BN from "bignumber.js";
-import { VestingV1 } from "../../typechain-hardhat/contracts/uninsured-vesting-v1/UninsuredVestingV1.sol";
+import { VestingV1 } from "../../typechain-hardhat/contracts/vesting-v1";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
-import { config } from "../../deployment/uninsured-vesting-v1/config";
+import { config } from "../../deployment/vesting-v1/config";
 
 useChaiBigNumber();
 
@@ -77,7 +77,11 @@ export function advanceMonths(months: number): Promise<BlockInfo> {
 
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 
+// TODO export to utils and use across multiple contracts
 export async function getCurrentTimestamp(): Promise<string | number | BN> {
+  // Plus 1 - we are passing a timestamp the contract that's supposed to act as "now"
+  // when the transaction actually executes, it's going to be 1 second later
+  // TODO - consider whether this is viable/stable
   return BN(await time.latest()).plus(1);
 }
 
