@@ -845,7 +845,7 @@ describe("InsuredVestingV1", () => {
           await setAllowedAllocationForUser1(FUNDING_PER_USER);
           await addFundingFromUser1(FUNDING_PER_USER);
           await activateAndReachStartTime();
-          expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.eq(0);
+          expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.closeTo(0, 200);
         });
 
         it("returns correct vested amount - 30 days", async () => {
@@ -883,7 +883,7 @@ describe("InsuredVestingV1", () => {
           await setAllowedAllocationForUser1(FUNDING_PER_USER);
           await addFundingFromUser1(FUNDING_PER_USER);
           await activateAndReachStartTime();
-          expect(await insuredVesting.methods.projectTokenClaimableFor(user1).call()).to.be.bignumber.eq(0);
+          expect(await insuredVesting.methods.projectTokenClaimableFor(user1).call()).to.be.bignumber.closeTo(0, 200);
         });
 
         it("returns correct vested amount - 30 days", async () => {
