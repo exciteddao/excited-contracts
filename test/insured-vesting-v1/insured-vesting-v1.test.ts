@@ -388,16 +388,16 @@ describe("InsuredVestingV1", () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
 
-        expect((await insuredVesting.methods.userVestings(user1).call()).isRefund).to.be.false;
+        expect((await insuredVesting.methods.userVestings(user1).call()).shouldRefund).to.be.false;
         await insuredVesting.methods.setDecision(true).send({ from: user1 });
-        expect((await insuredVesting.methods.userVestings(user1).call()).isRefund).to.be.true;
+        expect((await insuredVesting.methods.userVestings(user1).call()).shouldRefund).to.be.true;
         await insuredVesting.methods.setDecision(true).send({ from: user1 });
-        expect((await insuredVesting.methods.userVestings(user1).call()).isRefund).to.be.true;
+        expect((await insuredVesting.methods.userVestings(user1).call()).shouldRefund).to.be.true;
 
         await insuredVesting.methods.setDecision(false).send({ from: user1 });
-        expect((await insuredVesting.methods.userVestings(user1).call()).isRefund).to.be.false;
+        expect((await insuredVesting.methods.userVestings(user1).call()).shouldRefund).to.be.false;
         await insuredVesting.methods.setDecision(false).send({ from: user1 });
-        expect((await insuredVesting.methods.userVestings(user1).call()).isRefund).to.be.false;
+        expect((await insuredVesting.methods.userVestings(user1).call()).shouldRefund).to.be.false;
       });
     });
 

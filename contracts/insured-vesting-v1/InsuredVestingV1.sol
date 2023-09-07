@@ -33,7 +33,7 @@ contract InsuredVestingV1 is Ownable {
         // Investment allocation, set by owner
         uint256 fundingTokenAllocation;
         // true - user will get FUNDING_TOKEN back, false - user will get PROJECT_TOKEN
-        bool isRefund;
+        bool shouldRefund;
         // Amount of FUNDING_TOKEN claimed by user (PROJECT_TOKEN is computed from that)
         uint256 fundingTokenClaimed;
     }
@@ -47,7 +47,7 @@ contract InsuredVestingV1 is Ownable {
     event AllowedAllocationSet(address indexed target, uint256 amount);
     event FundsAdded(address indexed target, uint256 amount);
     event EmergencyRelease();
-    event DecisionChanged(address indexed target, bool isRefund);
+    event DecisionChanged(address indexed target, bool isRefundDecision);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
     event ProjectWalletAddressChanged(address indexed oldAddress, address indexed newAddress);
     event Activated(uint256 startTime, uint256 projectTokenTransferredToContract);
@@ -122,7 +122,7 @@ contract InsuredVestingV1 is Ownable {
         uint256 claimableProjectToken = fundingTokenToProjectToken(claimableFundingToken);
 
         // TODO consider using ternary conditions for readability
-        if (!userStatus.isRefund) {
+        if (!userStatus.shouldRefund) {
             PROJECT_TOKEN.safeTransfer(target, claimableProjectToken);
             FUNDING_TOKEN.safeTransfer(projectWallet, claimableFundingToken);
 
@@ -137,12 +137,12 @@ contract InsuredVestingV1 is Ownable {
         }
     }
 
-    function setDecision(bool _isRefund) external {
+    function setDecision(bool _isRefundDecision) external {
         if (userVestings[msg.sender].fundingTokenFunded == 0) revert NoFundsAdded();
-        if (userVestings[msg.sender].isRefund == _isRefund) return;
-        userVestings[msg.sender].isRefund = _isRefund;
+        if (userVestings[msg.sender].shouldRefund == _isRefundDecision) return;
+        userVestings[msg.sender].shouldRefund = _isRefundDecision;
 
-        emit DecisionChanged(msg.sender, _isRefund);
+        emit DecisionChanged(msg.sender, _isRefundDecision);
     }
 
     // --- Owner functions ---
