@@ -9,12 +9,9 @@ import {
   projectToken,
   TOKENS_PER_USER,
   deployer,
-  getCurrentTimestamp,
   someOtherToken,
   user2,
   Error,
-  advanceDays,
-  DAY,
   VESTING_DURATION_SECONDS,
   approveProjectTokenToVesting,
   transferProjectTokenToVesting,
@@ -22,11 +19,11 @@ import {
   setAmountForUser2,
   setup,
   vestedAmount,
-  MONTH,
   getDefaultStartTime,
   activateAndReachStartTime,
 } from "./fixture";
 import { web3 } from "@defi.org/web3-candies";
+import { advanceDays, DAY, getCurrentTimestamp, MONTH } from "../utils";
 
 describe("VestingV1", () => {
   before(async () => await setup());

@@ -1,10 +1,10 @@
-import { Token, account, bn18, erc20, BlockInfo, web3, network } from "@defi.org/web3-candies";
-import { deployArtifact, mineBlock, tag, useChaiBigNumber } from "@defi.org/web3-candies/dist/hardhat";
+import { Token, account, bn18, erc20 } from "@defi.org/web3-candies";
+import { deployArtifact, tag, useChaiBigNumber } from "@defi.org/web3-candies/dist/hardhat";
 import BN from "bignumber.js";
 import { VestingV1 } from "../../typechain-hardhat/contracts/vesting-v1";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { config } from "../../deployment/vesting-v1/config";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { DAY, getCurrentTimestamp, advanceDays } from "../utils";
 
 useChaiBigNumber();
 
@@ -17,12 +17,9 @@ export let projectToken: MockERC20 & Token;
 export let someOtherToken: MockERC20 & Token;
 export let vesting: VestingV1;
 
-export const DAY = 60 * 60 * 24;
-export const MONTH = DAY * 30;
 export const VESTING_DURATION_SECONDS = DAY * 730;
 
 export const PROJECT_TOKENS_ON_SALE = 1_000_000;
-export const FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO = 7;
 export const LOCKUP_MONTHS = 6;
 export const TOKENS_PER_USER = 10_000;
 
@@ -66,22 +63,6 @@ export async function transferProjectTokenToVesting() {
 
 export async function approveProjectTokenToVesting(amount = PROJECT_TOKENS_ON_SALE) {
   await projectToken.methods.approve(vesting.options.address, await projectToken.amount(amount)).send({ from: deployer });
-}
-
-export function advanceDays(days: number): Promise<BlockInfo> {
-  return mineBlock(days * DAY);
-}
-
-export function advanceMonths(months: number): Promise<BlockInfo> {
-  return mineBlock(months * MONTH);
-}
-
-// TODO export to utils and use across multiple contracts
-export async function getCurrentTimestamp(): Promise<string | number | BN> {
-  // Plus 1 - we are passing a timestamp the contract that's supposed to act as "now"
-  // when the transaction actually executes, it's going to be 1 second later
-  // TODO - consider whether this is viable/stable
-  return BN(await time.latest()).plus(1);
 }
 
 export async function getDefaultStartTime(): Promise<BN> {
