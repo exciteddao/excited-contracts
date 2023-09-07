@@ -19,18 +19,22 @@ task("deploy-contract", "Deploy Excited contract")
   .setAction(async (args, hre) => {
     let contractName: string;
     let config: InsuredVestingConfig | VestingConfig;
+    let testGrep;
 
     switch (args.contract) {
       case "InsuredVesting":
         // TODO: confirm name
         contractName = "InsuredVesting";
         config = require("./deployment/insured-vesting-v1/config").config;
+        testGrep = "/^insuredvestingv1/i";
         break;
       case "Vesting":
         contractName = "Vesting";
         config = require("./deployment/vesting-v1/config").config;
+        testGrep = "/^vestingv1/i";
+        break;
       default:
-        console.error("Invalid contract name");
+        console.error(`Invalid contract name: ${args.contract}`);
         return;
     }
 
@@ -40,7 +44,8 @@ task("deploy-contract", "Deploy Excited contract")
     console.log("--------------------------------------");
 
     console.log("Running tests...");
-    const result = await hre.run("test", { bail: true });
+    const result = await hre.run("test", { bail: true, grep: testGrep });
+
     if (result === 1) {
       console.log("Tests failed! Aborting deployment...");
       return;
