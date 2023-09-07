@@ -47,7 +47,7 @@ contract InsuredVestingV1 is Ownable {
     event AllowedAllocationSet(address indexed target, uint256 amount);
     event FundsAdded(address indexed target, uint256 amount);
     event EmergencyRelease();
-    event DecisionChanged(address indexed target, bool isRefundDecision);
+    event DecisionChanged(address indexed target, bool shouldRefund);
     event AmountRecovered(address indexed token, uint256 tokenAmount, uint256 etherAmount);
     event ProjectWalletAddressChanged(address indexed oldAddress, address indexed newAddress);
     event Activated(uint256 startTime, uint256 projectTokenTransferredToContract);
@@ -137,12 +137,12 @@ contract InsuredVestingV1 is Ownable {
         }
     }
 
-    function setDecision(bool _isRefundDecision) external {
+    function setDecision(bool _shouldRefund) external {
         if (userVestings[msg.sender].fundingTokenFunded == 0) revert NoFundsAdded();
-        if (userVestings[msg.sender].shouldRefund == _isRefundDecision) return;
-        userVestings[msg.sender].shouldRefund = _isRefundDecision;
+        if (userVestings[msg.sender].shouldRefund == _shouldRefund) return;
+        userVestings[msg.sender].shouldRefund = _shouldRefund;
 
-        emit DecisionChanged(msg.sender, _isRefundDecision);
+        emit DecisionChanged(msg.sender, _shouldRefund);
     }
 
     // --- Owner functions ---
