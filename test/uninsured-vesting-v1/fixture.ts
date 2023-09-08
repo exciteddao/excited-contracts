@@ -12,8 +12,8 @@ export let deployer: string;
 export let user1: string;
 export let user2: string;
 export let anyUser: string;
-export let daoWallet: string;
 export let projectWallet: string;
+export let differentProjectWallet: string;
 
 export let projectToken: MockERC20 & Token;
 export let someOtherToken: MockERC20 & Token;
@@ -30,14 +30,15 @@ export async function setup() {
   user1 = await account(0);
   user2 = await account(3);
   anyUser = await account(1);
-  daoWallet = await account(4);
   projectWallet = await account(5);
+  differentProjectWallet = await account(6);
+
   tag(deployer, "deployer");
   tag(user1, "user1");
   tag(user2, "user2");
   tag(anyUser, "anyUser");
-  tag(daoWallet, "daoWallet");
   tag(projectWallet, "projectWallet");
+  tag(differentProjectWallet, "differentProjectWallet");
 }
 
 export async function withFixture() {
@@ -47,8 +48,7 @@ export async function withFixture() {
   // TODO TEMPORARY: until having production PROJECT_TOKEN address
   const testConfig = [...config];
   testConfig[0] = projectToken.options.address;
-  testConfig[2] = daoWallet;
-  testConfig[3] = projectWallet;
+  testConfig[2] = projectWallet;
   // END TEMPORARY
 
   vesting = await deployArtifact<VestingV1>("VestingV1", { from: deployer }, testConfig);

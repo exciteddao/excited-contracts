@@ -21,12 +21,13 @@ import {
   vestedAmount,
   getDefaultStartTime,
   activateAndReachStartTime,
-  daoWallet,
   projectWallet,
+  differentProjectWallet,
 } from "./fixture";
-import { web3 } from "@defi.org/web3-candies";
+import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { advanceDays, DAY, getCurrentTimestamp, MONTH } from "../utils";
 import { VESTING_DURATION_DAYS } from "../insured-vesting-v1/fixture";
+import { CALLER_NOT_OWNER_REVERT_MSG, OWNER_REVERT_MSG, PROJECT_ROLE_REVERT_MSG } from "../constants";
 
 describe("VestingV1", () => {
   before(async () => await setup());
@@ -160,50 +161,92 @@ describe("VestingV1", () => {
       });
     });
 
+    describe("transfer project role", () => {
+      it("should only be transferable by project wallet", async () => {
+        expect(await vesting.methods.projectWallet().call()).to.be.eq(projectWallet);
+        await vesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
+        expect(await vesting.methods.projectWallet().call()).to.be.eq(differentProjectWallet);
+      });
+
+      it("should not be updatable to zero address", async () => {
+        await expectRevert(
+          () => vesting.methods.transferProjectRole(zeroAddress).send({ from: projectWallet }),
+          "ProjectRole: new project wallet is the zero address"
+        );
+      });
+
+      it("project role permissions should be available to new project wallet address after role transfer", async () => {
+        await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
+        await vesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
+        await advanceDays(10);
+        await vesting.methods.claim(user1).send({ from: differentProjectWallet });
+      });
+
+      it("old wallet should not have project role permissions after ownership transfer", async () => {
+        await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await vesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
+
+        await expectRevert(
+          async () => await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet }),
+          PROJECT_ROLE_REVERT_MSG
+        );
+
+        await expectRevert(async () => await vesting.methods.claim(user1).send({ from: projectWallet }), Error.OnlyProjectOrSender);
+      });
+
+      it("old wallet address should not be able to call transfer role again after initial transfer", async () => {
+        await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await vesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
+
+        await expectRevert(async () => await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet }), PROJECT_ROLE_REVERT_MSG);
+      });
+    });
+
     describe("recovery", () => {
       it("recovers ether", async () => {
         const startingBalance = await web3().eth.getBalance(projectWallet);
         expect(await web3().eth.getBalance(vesting.options.address)).to.bignumber.eq(0);
         await setBalance(vesting.options.address, BN(12345 * 1e18));
-        await vesting.methods.recoverEther().send({ from: daoWallet });
+        await vesting.methods.recoverEther().send({ from: deployer });
         expect(await web3().eth.getBalance(vesting.options.address)).to.be.bignumber.zero;
-        expect(await web3().eth.getBalance(daoWallet)).to.bignumber.closeTo(BN(12345 * 1e18).plus(startingBalance), BN(0.1e18));
+        expect(await web3().eth.getBalance(projectWallet)).to.bignumber.closeTo(BN(12345 * 1e18).plus(startingBalance), BN(0.1e18));
       });
 
       it("does not recover ether if recovering token", async () => {
         expect(await web3().eth.getBalance(vesting.options.address)).to.bignumber.eq(0);
         await setBalance(vesting.options.address, BN(12345 * 1e18));
         await someOtherToken.methods.transfer(vesting.options.address, BN(12345 * 1e18)).send({ from: deployer });
-        await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: daoWallet });
+        await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
         expect(await web3().eth.getBalance(vesting.options.address)).to.bignumber.closeTo(BN(12345 * 1e18), BN(0.1e18));
       });
 
       it("recovers other tokens", async () => {
         await someOtherToken.methods.transfer(vesting.options.address, BN(12345 * 1e18)).send({ from: deployer });
-        await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: daoWallet });
+        await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
         expect(await someOtherToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.zero;
-        // TODO: assert balance of daoWallet / projectWallet
+        // TODO: assert balance of owner wallet / projectWallet
       });
 
       it("recovers excess projectToken, some allocations set", async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
         await vesting.methods.setAmount(user2, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-        await vesting.methods.recoverToken(projectToken.options.address).send({ from: daoWallet });
+        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         // Recover all but the tokens allocated to users
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER * 2));
       });
 
       it("recovers excess projectToken, no allocations set", async () => {
-        await vesting.methods.recoverToken(projectToken.options.address).send({ from: daoWallet });
+        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(0));
       });
 
       it("recovers excess projectToken, recovery called multiple times is idempotent", async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER / 4)).send({ from: projectWallet });
-        await vesting.methods.recoverToken(projectToken.options.address).send({ from: daoWallet });
+        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER / 4));
-        await vesting.methods.recoverToken(projectToken.options.address).send({ from: daoWallet });
-        await vesting.methods.recoverToken(projectToken.options.address).send({ from: daoWallet });
+        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
+        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER / 4));
       });
 
@@ -222,33 +265,25 @@ describe("VestingV1", () => {
           await projectToken.amount(0.1)
         );
 
-        await vesting.methods.recoverToken(projectToken.options.address).send({ from: daoWallet });
+        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
       });
 
       it("handles zero token balance gracefully", async () => {
         const startingBalance = await someOtherToken.methods.balanceOf(vesting.options.address).call();
         expect(startingBalance).to.be.bignumber.zero;
-        await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: daoWallet });
+        await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
         expect(await someOtherToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.zero;
       });
     });
 
     describe("access control", () => {
-      const generateAccessControlErrorMsg = (account: string, role: string) =>
-        `VM Exception while processing transaction: reverted with reason string 'AccessControl: account ${account.toLowerCase()} is missing role ${role}'`;
-
       describe("only project", () => {
         it("can activate", async () => {
-          const projectRole = await vesting.methods.PROJECT_ROLE().call();
-
-          const expectedInvalidUsers = [daoWallet, deployer];
+          const expectedInvalidUsers = [user1, deployer, anyUser];
 
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(
-              async () => vesting.methods.activate(await getDefaultStartTime()).send({ from: invalidUser }),
-              generateAccessControlErrorMsg(invalidUser, projectRole)
-            );
+            await expectRevert(async () => vesting.methods.activate(await getDefaultStartTime()).send({ from: invalidUser }), PROJECT_ROLE_REVERT_MSG);
           }
 
           await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
@@ -257,15 +292,10 @@ describe("VestingV1", () => {
         });
 
         it("can set amounts", async () => {
-          const projectRole = await vesting.methods.PROJECT_ROLE().call();
-
-          const expectedInvalidUsers = [anyUser, daoWallet, deployer];
+          const expectedInvalidUsers = [anyUser, user2, deployer];
 
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(
-              async () => vesting.methods.setAmount(user1, 1).send({ from: invalidUser }),
-              generateAccessControlErrorMsg(invalidUser, projectRole)
-            );
+            await expectRevert(async () => vesting.methods.setAmount(user1, 1).send({ from: invalidUser }), PROJECT_ROLE_REVERT_MSG);
           }
 
           await vesting.methods.setAmount(user1, 1).send({ from: projectWallet });
@@ -276,64 +306,45 @@ describe("VestingV1", () => {
           await setAmountForUser1();
           await approveProjectTokenToVesting();
           await activateAndReachStartTime();
-          await vesting.methods.emergencyRelease().send({ from: daoWallet });
+          await vesting.methods.emergencyRelease().send({ from: deployer });
           await expectRevert(async () => vesting.methods.emergencyClaim(user1).send({ from: anyUser }), Error.OnlyProjectOrSender);
 
           await vesting.methods.emergencyClaim(user1).send({ from: projectWallet });
         });
       });
 
-      describe("only dao", () => {
+      describe("only owner", () => {
         it("can recover ether", async () => {
-          const daoRole = await vesting.methods.DAO_ROLE().call();
-          const expectedInvalidUsers = [projectWallet, deployer, user2];
-
-          for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(
-              async () => await vesting.methods.recoverEther().send({ from: invalidUser }),
-              generateAccessControlErrorMsg(invalidUser, daoRole)
-            );
-          }
-
-          await vesting.methods.recoverEther().send({ from: daoWallet });
-        });
-
-        it("can recover token", async () => {
-          const daoRole = await vesting.methods.DAO_ROLE().call();
           const expectedInvalidUsers = [projectWallet, anyUser, user2];
 
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(
-              async () => await vesting.methods.recoverToken(projectToken.options.address).send({ from: invalidUser }),
-              generateAccessControlErrorMsg(invalidUser, daoRole)
-            );
+            await expectRevert(async () => await vesting.methods.recoverEther().send({ from: invalidUser }), OWNER_REVERT_MSG);
           }
 
-          await vesting.methods.recoverToken(projectToken.options.address).send({ from: daoWallet });
+          await vesting.methods.recoverEther().send({ from: deployer });
+        });
+
+        it("can recover token", async () => {
+          const expectedInvalidUsers = [projectWallet, anyUser, user2];
+
+          for (const invalidUser of expectedInvalidUsers) {
+            await expectRevert(async () => await vesting.methods.recoverToken(projectToken.options.address).send({ from: invalidUser }), OWNER_REVERT_MSG);
+          }
+
+          await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         });
 
         it("can emergency release", async () => {
-          const daoRole = await vesting.methods.DAO_ROLE().call();
           await setAmountForUser1();
           await approveProjectTokenToVesting();
           await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
           expect(await vesting.methods.emergencyReleased().call()).to.be.false;
 
-          await expectRevert(async () => vesting.methods.emergencyRelease().send({ from: anyUser }), generateAccessControlErrorMsg(anyUser, daoRole));
+          await expectRevert(async () => vesting.methods.emergencyRelease().send({ from: anyUser }), OWNER_REVERT_MSG);
 
-          await vesting.methods.emergencyRelease().send({ from: daoWallet });
+          await vesting.methods.emergencyRelease().send({ from: deployer });
           expect(await vesting.methods.emergencyReleased().call()).to.be.true;
         });
-      });
-
-      it("the daoWallet address should be set to the DAO_ROLE", async () => {
-        const daoRole = await vesting.methods.DAO_ROLE().call();
-        expect(await vesting.methods.hasRole(daoRole, daoWallet).call()).to.equal(true);
-      });
-
-      it("the projectWallet address should be set to the PROJECT_ROLE", async () => {
-        const projectRole = await vesting.methods.PROJECT_ROLE().call();
-        expect(await vesting.methods.hasRole(projectRole, projectWallet).call()).to.equal(true);
       });
     });
 
@@ -470,15 +481,15 @@ describe("VestingV1", () => {
 
   describe("emergency release", () => {
     it("cannot emergency release if not activated", async () => {
-      await expectRevert(async () => vesting.methods.emergencyRelease().send({ from: daoWallet }), Error.NotActivated);
+      await expectRevert(async () => vesting.methods.emergencyRelease().send({ from: deployer }), Error.NotActivated);
     });
 
     it("cannot emergency release twice", async () => {
       await setAmountForUser1();
       await approveProjectTokenToVesting();
       await activateAndReachStartTime();
-      await vesting.methods.emergencyRelease().send({ from: daoWallet });
-      await expectRevert(async () => vesting.methods.emergencyRelease().send({ from: daoWallet }), Error.EmergencyReleased);
+      await vesting.methods.emergencyRelease().send({ from: deployer });
+      await expectRevert(async () => vesting.methods.emergencyRelease().send({ from: deployer }), Error.EmergencyReleased);
     });
 
     [
@@ -490,7 +501,7 @@ describe("VestingV1", () => {
           await setAmountForUser1();
           await approveProjectTokenToVesting();
           await activateAndReachStartTime();
-          await vesting.methods.emergencyRelease().send({ from: daoWallet });
+          await vesting.methods.emergencyRelease().send({ from: deployer });
           await vesting.methods.emergencyClaim(user1).send({ from: isProject ? projectWallet : user1 });
           expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
         });
@@ -505,7 +516,7 @@ describe("VestingV1", () => {
             (await projectToken.amount(TOKENS_PER_USER)).dividedBy(4),
             await projectToken.amount(0.1)
           );
-          await vesting.methods.emergencyRelease().send({ from: daoWallet });
+          await vesting.methods.emergencyRelease().send({ from: deployer });
           await vesting.methods.emergencyClaim(user1).send({ from: isProject ? projectWallet : user1 });
           expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
         });
@@ -521,7 +532,7 @@ describe("VestingV1", () => {
             (await projectToken.amount(TOKENS_PER_USER)).dividedBy(4),
             await projectToken.amount(0.1)
           );
-          await vesting.methods.emergencyRelease().send({ from: daoWallet });
+          await vesting.methods.emergencyRelease().send({ from: deployer });
           await vesting.methods.emergencyClaim(user1).send({ from: isProject ? projectWallet : user1 });
           expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
           await vesting.methods.emergencyClaim(user2).send({ from: isProject ? projectWallet : user2 });
@@ -532,7 +543,7 @@ describe("VestingV1", () => {
           await setAmountForUser1();
           await approveProjectTokenToVesting();
           await activateAndReachStartTime();
-          await vesting.methods.emergencyRelease().send({ from: daoWallet });
+          await vesting.methods.emergencyRelease().send({ from: deployer });
           await expectRevert(async () => vesting.methods.emergencyClaim(user2).send({ from: isProject ? projectWallet : user2 }), Error.NothingToClaim);
         });
 
@@ -540,7 +551,7 @@ describe("VestingV1", () => {
           await setAmountForUser1();
           await approveProjectTokenToVesting();
           await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
-          await vesting.methods.emergencyRelease().send({ from: daoWallet });
+          await vesting.methods.emergencyRelease().send({ from: deployer });
           await vesting.methods.emergencyClaim(user1).send({ from: isProject ? projectWallet : user1 });
           expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
         });
@@ -549,7 +560,7 @@ describe("VestingV1", () => {
           await setAmountForUser2();
           await approveProjectTokenToVesting();
           await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
-          await vesting.methods.emergencyRelease().send({ from: daoWallet });
+          await vesting.methods.emergencyRelease().send({ from: deployer });
           await vesting.methods.emergencyClaim(user1).send({ from: isProject ? projectWallet : user1 });
           expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
           await vesting.methods.emergencyClaim(user1).send({ from: isProject ? projectWallet : user1 });
@@ -565,9 +576,18 @@ describe("VestingV1", () => {
           await setAmountForUser1();
           await approveProjectTokenToVesting();
           await activateAndReachStartTime();
-          await vesting.methods.emergencyRelease().send({ from: daoWallet });
+          await vesting.methods.emergencyRelease().send({ from: deployer });
           await expectRevert(async () => vesting.methods.claim(user1).send({ from: isProject ? projectWallet : user1 }), Error.EmergencyReleased);
         });
+      });
+    });
+
+    describe("Renounce ownership", () => {
+      it("emergencyRelease, recoverEther, recoverToken should not be callable after renouncing ownership", async () => {
+        await vesting.methods.renounceOwnership().send({ from: deployer });
+        await expectRevert(async () => await vesting.methods.emergencyRelease().send({ from: deployer }), CALLER_NOT_OWNER_REVERT_MSG);
+        await expectRevert(async () => await vesting.methods.recoverEther().send({ from: deployer }), CALLER_NOT_OWNER_REVERT_MSG);
+        await expectRevert(async () => await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }), CALLER_NOT_OWNER_REVERT_MSG);
       });
     });
   });
