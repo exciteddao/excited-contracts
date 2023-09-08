@@ -1,25 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ProjectRole} from "../ownable/ProjectRole.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 // when project calls activate, the contract will:
 // - transfer the necessary amount of tokens required to cover all allocations
 // - set the vesting clock to start at the specified time (no more than 90 days in the future)
 // - lock the contract for any further allocations
-contract VestingV1 is AccessControl {
+contract VestingV1 is Ownable, ProjectRole {
     using SafeERC20 for IERC20;
 
     uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
-    bytes32 public constant DAO_ROLE = keccak256("DAO_ROLE");
-    bytes32 public constant PROJECT_ROLE = keccak256("PROJECT_ROLE");
 
     IERC20 public immutable PROJECT_TOKEN;
     uint256 public immutable VESTING_DURATION_SECONDS;
-    address public immutable DAO_WALLET;
-    address public immutable PROJECT_WALLET;
 
     bool public emergencyReleased = false;
 
@@ -66,18 +63,13 @@ contract VestingV1 is AccessControl {
     }
 
     modifier onlyProjectOrSender(address target) {
-        if (!(hasRole(PROJECT_ROLE, msg.sender) || msg.sender == target)) revert OnlyProjectOrSender();
+        if (!(msg.sender == projectWallet || msg.sender == target)) revert OnlyProjectOrSender();
         _;
     }
 
-    constructor(address projectToken, uint256 vestingDurationSeconds, address daoWallet, address projectWallet) {
-        PROJECT_TOKEN = IERC20(projectToken);
-        VESTING_DURATION_SECONDS = vestingDurationSeconds;
-        DAO_WALLET = daoWallet;
-        PROJECT_WALLET = projectWallet;
-
-        _grantRole(DAO_ROLE, daoWallet);
-        _grantRole(PROJECT_ROLE, projectWallet);
+    constructor(address _projectToken, uint256 _vestingDurationSeconds, address _projectWallet) ProjectRole(_projectWallet) {
+        PROJECT_TOKEN = IERC20(_projectToken);
+        VESTING_DURATION_SECONDS = _vestingDurationSeconds;
     }
 
     // --- Investor functions ---
@@ -94,7 +86,7 @@ contract VestingV1 is AccessControl {
     }
 
     // --- Project only functions ---
-    function setAmount(address target, uint256 amount) external onlyRole(PROJECT_ROLE) onlyBeforeActivation {
+    function setAmount(address target, uint256 amount) external onlyProject onlyBeforeActivation {
         uint256 currentAmountForUser = userVestings[target].amount;
 
         if (amount > currentAmountForUser) {
@@ -108,7 +100,7 @@ contract VestingV1 is AccessControl {
         emit AmountSet(target, amount);
     }
 
-    function activate(uint256 _vestingStartTime) external onlyRole(PROJECT_ROLE) onlyBeforeActivation {
+    function activate(uint256 _vestingStartTime) external onlyProject onlyBeforeActivation {
         if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW))
             revert StartTimeTooLate(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
         if (_vestingStartTime < block.timestamp) revert StartTimeIsInPast(_vestingStartTime);
@@ -123,7 +115,7 @@ contract VestingV1 is AccessControl {
 
     // --- Emergency functions ---
     // TODO(Audit) - ensure with legal/compliance we're ok without an emergency lever to release all tokens here
-    function emergencyRelease() external onlyRole(DAO_ROLE) onlyIfNotEmergencyReleased {
+    function emergencyRelease() external onlyOwner onlyIfNotEmergencyReleased {
         if (vestingStartTime == 0) revert NotActivated();
         emergencyReleased = true;
         emit EmergencyRelease();
@@ -141,7 +133,7 @@ contract VestingV1 is AccessControl {
         emit UserEmergencyClaimed(target, toClaim);
     }
 
-    function recoverToken(address tokenAddress) external onlyRole(DAO_ROLE) {
+    function recoverToken(address tokenAddress) external onlyOwner {
         // Return any balance of the token that's not PROJECT_TOKEN
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
 
@@ -150,14 +142,14 @@ contract VestingV1 is AccessControl {
             tokenBalanceToRecover -= Math.min(totalAllocated, tokenBalanceToRecover);
         }
 
-        IERC20(tokenAddress).safeTransfer(DAO_WALLET, tokenBalanceToRecover);
+        IERC20(tokenAddress).safeTransfer(projectWallet, tokenBalanceToRecover);
 
         emit TokenRecovered(tokenAddress, tokenBalanceToRecover);
     }
 
-    function recoverEther() external onlyRole(DAO_ROLE) {
+    function recoverEther() external onlyOwner {
         uint256 etherToRecover = address(this).balance;
-        Address.sendValue(payable(DAO_WALLET), etherToRecover);
+        Address.sendValue(payable(projectWallet), etherToRecover);
 
         emit EtherRecovered(etherToRecover);
     }
