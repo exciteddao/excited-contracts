@@ -37,11 +37,11 @@ import {
   PROJECT_TOKENS_ON_SALE,
   activateAndReachStartTime,
   getDefaultStartTime,
-  daoWallet,
   differentProjectWallet,
 } from "./fixture";
-import { account, web3, zeroAddress } from "@defi.org/web3-candies";
-import { advanceDays, DAY, getCurrentTimestamp, advanceMonths, MONTH, generateAccessControlErrorMsg } from "../utils";
+import { web3, zeroAddress } from "@defi.org/web3-candies";
+import { advanceDays, DAY, getCurrentTimestamp, advanceMonths, MONTH } from "../utils";
+import { CALLER_NOT_OWNER_REVERT_MSG, OWNER_REVERT_MSG, PROJECT_ROLE_REVERT_MSG } from "../constants";
 
 describe("InsuredVestingV1", () => {
   let snap: SnapshotRestorer;
@@ -469,7 +469,7 @@ describe("InsuredVestingV1", () => {
       it("cannot add funds if emergency released", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1(FUNDING_PER_USER / 2);
-        await insuredVesting.methods.emergencyRelease().send({ from: daoWallet });
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
         await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), Error.EmergencyReleased);
       });
 
@@ -578,7 +578,7 @@ describe("InsuredVestingV1", () => {
       it("cannot set allocation if emergency released", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
-        await insuredVesting.methods.emergencyRelease().send({ from: daoWallet });
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
         await expectRevert(() => insuredVesting.methods.setAllowedAllocation(user1, 1).send({ from: projectWallet }), Error.EmergencyReleased);
       });
     });
@@ -587,7 +587,7 @@ describe("InsuredVestingV1", () => {
       it("lets user emergency claim back all FUNDING_TOKEN balance, no PROJECT_TOKEN has been claimed", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
-        await insuredVesting.methods.emergencyRelease().send({ from: daoWallet });
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
         await insuredVesting.methods.emergencyClaim(user1).send({ from: user1 });
         expect(await fundingToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
       });
@@ -595,14 +595,14 @@ describe("InsuredVestingV1", () => {
       it("lets project emergency claim back all FUNDING_TOKEN balance on behalf of user, no PROJECT_TOKEN has been claimed", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
-        await insuredVesting.methods.emergencyRelease().send({ from: daoWallet });
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
         await insuredVesting.methods.emergencyClaim(user1).send({ from: projectWallet });
         expect(await fundingToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
       });
 
       it("cannot emergency claim if hasn't funded", async () => {
         await setAllowedAllocationForUser1();
-        await insuredVesting.methods.emergencyRelease().send({ from: daoWallet });
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
         await expectRevert(() => insuredVesting.methods.emergencyClaim(user1).send({ from: user1 }), Error.NoFundsAdded);
       });
 
@@ -612,7 +612,7 @@ describe("InsuredVestingV1", () => {
         await activateAndReachStartTime();
         await advanceDays(VESTING_DURATION_DAYS / 10);
         await insuredVesting.methods.claim(user1).send({ from: projectWallet });
-        await insuredVesting.methods.emergencyRelease().send({ from: daoWallet });
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
 
         await insuredVesting.methods.emergencyClaim(user1).send({ from: user1 });
         expect(await fundingToken.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
@@ -625,7 +625,7 @@ describe("InsuredVestingV1", () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
         await activateAndReachStartTime();
-        await insuredVesting.methods.emergencyRelease().send({ from: daoWallet });
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
         await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.EmergencyReleased);
       });
 
@@ -634,22 +634,22 @@ describe("InsuredVestingV1", () => {
         await addFundingFromUser1();
         await setAllowedAllocationForUser2();
         await addFundingFromUser2();
-        await insuredVesting.methods.emergencyRelease().send({ from: daoWallet });
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
         await insuredVesting.methods.emergencyClaim(user1).send({ from: user1 });
         expect(await fundingToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
         await insuredVesting.methods.emergencyClaim(user1).send({ from: user1 });
         expect(await fundingToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
       });
 
-      it("cannot emergency claim if dao hasn't released", async () => {
+      it("cannot emergency claim if owner hasn't released", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
         await expectRevert(() => insuredVesting.methods.emergencyClaim(user1).send({ from: user1 }), Error.EmergencyNotReleased);
       });
 
       it("cannot emergency release twice", async () => {
-        await insuredVesting.methods.emergencyRelease().send({ from: daoWallet });
-        await expectRevert(() => insuredVesting.methods.emergencyRelease().send({ from: daoWallet }), Error.EmergencyReleased);
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
+        await expectRevert(() => insuredVesting.methods.emergencyRelease().send({ from: deployer }), Error.EmergencyReleased);
       });
 
       it("recovers all remaining PROJECT_TOKEN balance if emergency released", async () => {
@@ -658,10 +658,10 @@ describe("InsuredVestingV1", () => {
         await transferProjectTokenToVesting(FUNDING_PER_USER * 2 * FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO);
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user2 });
-        await insuredVesting.methods.emergencyRelease().send({ from: daoWallet });
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
 
         await setBalancesForDelta();
-        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: daoWallet });
+        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         // Recover all but the tokens allocated to users, backed by funding
         expect(await projectToken.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(0);
         await expectProjectBalanceDelta("projectToken", (await projectToken.amount(FUNDING_PER_USER * 2)).multipliedBy(FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO));
@@ -669,64 +669,56 @@ describe("InsuredVestingV1", () => {
       });
     });
 
-    describe("update project wallet address", () => {
-      it("should only be updatable by project", async () => {
+    describe("transfer project role", () => {
+      it("should only be transferable by project wallet", async () => {
         expect(await insuredVesting.methods.projectWallet().call()).to.be.eq(projectWallet);
-        await insuredVesting.methods.setProjectWalletAddress(differentProjectWallet).send({ from: projectWallet });
+        await insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
         expect(await insuredVesting.methods.projectWallet().call()).to.be.eq(differentProjectWallet);
       });
 
       it("should not be updatable to zero address", async () => {
-        await expectRevert(() => insuredVesting.methods.setProjectWalletAddress(zeroAddress).send({ from: projectWallet }), Error.ZeroAddress);
+        await expectRevert(
+          () => insuredVesting.methods.transferProjectRole(zeroAddress).send({ from: projectWallet }),
+          "ProjectRole: new project wallet is the zero address"
+        );
       });
 
-      it(`should emit '${Event.ProjectWalletAddressChanged}' event upon updating`, async () => {
-        await insuredVesting.methods.setProjectWalletAddress(differentProjectWallet).send({ from: projectWallet });
-        const events = await insuredVesting.getPastEvents(Event.ProjectWalletAddressChanged);
-        expect(events[0].returnValues.oldAddress).to.be.eq(projectWallet);
-        expect(events[0].returnValues.newAddress).to.be.eq(differentProjectWallet);
+      it(`should emit '${Event.ProjectRoleTransferred}' event upon updating`, async () => {
+        await insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
+        const events = await insuredVesting.getPastEvents(Event.ProjectRoleTransferred);
+        expect(events[0].returnValues.previousProjectWallet).to.be.eq(projectWallet);
+        expect(events[0].returnValues.newProjectWallet).to.be.eq(differentProjectWallet);
       });
 
-      it("should short circuit if new address is same as old address", async () => {
-        await expectRevert(() => insuredVesting.methods.setProjectWalletAddress(projectWallet).send({ from: projectWallet }), Error.SameAddress);
-      });
-
-      it("project role permissions should be available to new project wallet address after update", async () => {
+      it("project role permissions should be available to new project wallet address after role transfer", async () => {
         await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
         await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
-        await insuredVesting.methods.setProjectWalletAddress(differentProjectWallet).send({ from: projectWallet });
+        await insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
         await advanceDays(10);
         await insuredVesting.methods.claim(user1).send({ from: differentProjectWallet });
       });
 
-      it("old wallet should not have project role permissions after update", async () => {
-        const projectRole = await insuredVesting.methods.PROJECT_ROLE().call();
-
+      it("old wallet should not have project role permissions after ownership transfer", async () => {
         await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
-        await insuredVesting.methods.setProjectWalletAddress(differentProjectWallet).send({ from: projectWallet });
+        await insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
 
         await expectRevert(
           async () => await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet }),
-          generateAccessControlErrorMsg(projectWallet, projectRole)
+          PROJECT_ROLE_REVERT_MSG
         );
 
         await expectRevert(async () => await insuredVesting.methods.claim(user1).send({ from: projectWallet }), Error.OnlyProjectOrSender);
       });
 
-      it('old wallet address should not be able to call "setProjectWalletAddress" after update', async () => {
-        const setProjectWalletRole = await insuredVesting.methods.SET_PROJECT_WALLET_ROLE().call();
-
+      it("old wallet address should not be able to call transfer role again after initial transfer", async () => {
         await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
 
-        await insuredVesting.methods.setProjectWalletAddress(differentProjectWallet).send({ from: projectWallet });
+        await insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
 
-        await expectRevert(
-          async () => await insuredVesting.methods.setProjectWalletAddress(projectWallet).send({ from: projectWallet }),
-          generateAccessControlErrorMsg(projectWallet, setProjectWalletRole)
-        );
+        await expectRevert(async () => await insuredVesting.methods.transferProjectRole(projectWallet).send({ from: projectWallet }), PROJECT_ROLE_REVERT_MSG);
       });
     });
 
@@ -736,14 +728,14 @@ describe("InsuredVestingV1", () => {
         const startingBalance = await web3().eth.getBalance(projectWallet);
         expect(await web3().eth.getBalance(insuredVesting.options.address)).to.bignumber.eq(0);
         await setBalance(insuredVesting.options.address, BN(12345 * 1e18));
-        await insuredVesting.methods.recoverEther().send({ from: daoWallet });
+        await insuredVesting.methods.recoverEther().send({ from: deployer });
         expect(await web3().eth.getBalance(insuredVesting.options.address)).to.be.bignumber.zero;
         expect(await web3().eth.getBalance(projectWallet)).to.bignumber.closeTo(BN(12345 * 1e18).plus(startingBalance), BN(0.1e18));
       });
 
       it("recovers other tokens", async () => {
         await someOtherToken.methods.transfer(insuredVesting.options.address, BN(12345 * 1e18)).send({ from: deployer });
-        await insuredVesting.methods.recoverToken(someOtherToken.options.address).send({ from: daoWallet });
+        await insuredVesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
         expect(await someOtherToken.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.zero;
       });
 
@@ -754,7 +746,7 @@ describe("InsuredVestingV1", () => {
         await transferProjectTokenToVesting();
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user2 });
-        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: daoWallet });
+        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         // Recover all but the tokens allocated to users, backed by funding
         expect(await projectToken.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(
           (await projectToken.amount(FUNDING_PER_USER * 2)).multipliedBy(FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO)
@@ -767,7 +759,7 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user2 });
         await projectToken.methods.transfer(insuredVesting.options.address, await projectToken.amount(100)).send({ from: projectWallet });
-        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: daoWallet });
+        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         // Retains tokens in the contract, nothing to recover
         expect(await projectToken.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(100));
       });
@@ -783,7 +775,7 @@ describe("InsuredVestingV1", () => {
 
         let initiaProjectBalance = await projectToken.methods.balanceOf(projectWallet).call();
         await setBalancesForDelta();
-        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: daoWallet });
+        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
 
         expect(await projectToken.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(
           (await projectToken.amount(FUNDING_PER_USER * 2)).multipliedBy(FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO)
@@ -806,7 +798,7 @@ describe("InsuredVestingV1", () => {
         );
 
         initiaProjectBalance = await projectToken.methods.balanceOf(projectWallet).call();
-        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: daoWallet });
+        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(await projectToken.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(0);
         expect(await projectToken.methods.balanceOf(projectWallet).call()).to.be.bignumber.eq(
           BN(initiaProjectBalance).plus((await projectToken.amount(FUNDING_PER_USER * 2)).multipliedBy(FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO))
@@ -827,7 +819,7 @@ describe("InsuredVestingV1", () => {
           await fundFundingTokenFromWhale(BN(extraFundingToPass), [insuredVesting.options.address]);
 
           await setBalancesForDelta();
-          await insuredVesting.methods.recoverToken(fundingToken.options.address).send({ from: daoWallet });
+          await insuredVesting.methods.recoverToken(fundingToken.options.address).send({ from: deployer });
           await expectProjectBalanceDelta("projectToken", 0);
           await expectProjectBalanceDelta("fundingToken", await fundingToken.amount(extraFundingToPass));
         });
@@ -837,14 +829,9 @@ describe("InsuredVestingV1", () => {
     describe("access control", () => {
       describe("only project", () => {
         it("can call activate", async () => {
-          const projectRole = await insuredVesting.methods.PROJECT_ROLE().call();
-
-          const expectedInvalidUsers = [daoWallet, deployer];
+          const expectedInvalidUsers = [deployer];
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(
-              async () => insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: invalidUser }),
-              generateAccessControlErrorMsg(invalidUser, projectRole)
-            );
+            await expectRevert(async () => insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: invalidUser }), PROJECT_ROLE_REVERT_MSG);
           }
 
           await setAllowedAllocationForUser1(FUNDING_PER_USER);
@@ -854,7 +841,7 @@ describe("InsuredVestingV1", () => {
         });
 
         it("can claim on behalf of a user", async () => {
-          const expectedInvalidUsers = [daoWallet, user2];
+          const expectedInvalidUsers = [user2];
 
           for (const invalidUser of expectedInvalidUsers) {
             await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: invalidUser }), Error.OnlyProjectOrSender);
@@ -867,7 +854,7 @@ describe("InsuredVestingV1", () => {
         });
 
         it("can emergency claim on behalf of a user", async () => {
-          const expectedInvalidUsers = [daoWallet, user2, deployer];
+          const expectedInvalidUsers = [user2, deployer];
 
           for (const invalidUser of expectedInvalidUsers) {
             await expectRevert(async () => insuredVesting.methods.emergencyClaim(user1).send({ from: invalidUser }), Error.OnlyProjectOrSender);
@@ -876,106 +863,80 @@ describe("InsuredVestingV1", () => {
           await setAllowedAllocationForUser1();
           await addFundingFromUser1();
           await activateAndReachStartTime();
-          await insuredVesting.methods.emergencyRelease().send({ from: daoWallet });
+          await insuredVesting.methods.emergencyRelease().send({ from: deployer });
           await insuredVesting.methods.emergencyClaim(user1).send({ from: projectWallet });
         });
 
         it("can set allowed allocation", async () => {
-          const projectRole = await insuredVesting.methods.PROJECT_ROLE().call();
-
-          const expectedInvalidUsers = [daoWallet, deployer, user1];
+          const expectedInvalidUsers = [deployer, user1];
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(
-              async () => insuredVesting.methods.setAllowedAllocation(user1, 1).send({ from: invalidUser }),
-              generateAccessControlErrorMsg(invalidUser, projectRole)
-            );
+            await expectRevert(async () => insuredVesting.methods.setAllowedAllocation(user1, 1).send({ from: invalidUser }), PROJECT_ROLE_REVERT_MSG);
           }
 
           await insuredVesting.methods.setAllowedAllocation(user1, 1).send({ from: projectWallet });
         });
 
-        it("can set new project wallet address", async () => {
-          const setProjectWalletRole = await insuredVesting.methods.SET_PROJECT_WALLET_ROLE().call();
-
-          const expectedInvalidUsers = [daoWallet, deployer, user1];
+        it("can transfer project role", async () => {
+          const expectedInvalidUsers = [deployer, user1];
           for (const invalidUser of expectedInvalidUsers) {
             await expectRevert(
-              async () => insuredVesting.methods.setProjectWalletAddress(differentProjectWallet).send({ from: invalidUser }),
-              generateAccessControlErrorMsg(invalidUser, setProjectWalletRole)
+              async () => insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: invalidUser }),
+              PROJECT_ROLE_REVERT_MSG
             );
           }
 
-          await insuredVesting.methods.setProjectWalletAddress(differentProjectWallet).send({ from: projectWallet });
+          await insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
         });
       });
 
-      describe("only dao", () => {
+      describe("only owner", () => {
         it("can emergency release", async () => {
-          const daoRole = await insuredVesting.methods.DAO_ROLE().call();
-
           await setAllowedAllocationForUser1();
           await addFundingFromUser1();
 
-          const expectedInvalidUsers = [projectWallet, deployer, user1, user2];
+          const expectedInvalidUsers = [projectWallet, user1, user2];
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(
-              async () => insuredVesting.methods.emergencyRelease().send({ from: invalidUser }),
-              generateAccessControlErrorMsg(invalidUser, daoRole)
-            );
+            await expectRevert(async () => insuredVesting.methods.emergencyRelease().send({ from: invalidUser }), OWNER_REVERT_MSG);
           }
 
-          await insuredVesting.methods.emergencyRelease().send({ from: daoWallet });
+          await insuredVesting.methods.emergencyRelease().send({ from: deployer });
         });
 
         it("can recover ether", async () => {
-          const daoRole = await insuredVesting.methods.DAO_ROLE().call();
-
           await setAllowedAllocationForUser1();
           await addFundingFromUser1();
 
-          const expectedInvalidUsers = [projectWallet, deployer, user1, anyUser];
+          const expectedInvalidUsers = [projectWallet, user1, anyUser];
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(
-              async () => insuredVesting.methods.recoverEther().send({ from: invalidUser }),
-              generateAccessControlErrorMsg(invalidUser, daoRole)
-            );
+            await expectRevert(async () => insuredVesting.methods.recoverEther().send({ from: invalidUser }), OWNER_REVERT_MSG);
           }
 
-          await insuredVesting.methods.recoverEther().send({ from: daoWallet });
+          await insuredVesting.methods.recoverEther().send({ from: deployer });
         });
 
         it("can recover token", async () => {
-          const daoRole = await insuredVesting.methods.DAO_ROLE().call();
-
           await setAllowedAllocationForUser1();
           await addFundingFromUser1();
 
           const expectedInvalidUsers = [projectWallet, anyUser];
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(
-              async () => insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: invalidUser }),
-              generateAccessControlErrorMsg(invalidUser, daoRole)
-            );
+            await expectRevert(async () => insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: invalidUser }), OWNER_REVERT_MSG);
           }
 
-          await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: daoWallet });
+          await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         });
       });
+    });
 
-      it("the daoWallet address should be set to the DAO_ROLE", async () => {
-        const daoRole = await insuredVesting.methods.DAO_ROLE().call();
-        expect(await insuredVesting.methods.hasRole(daoRole, daoWallet).call()).to.equal(true);
-      });
-
-      it("the projectWallet address should be set to the PROJECT_ROLE", async () => {
-        const projectRole = await insuredVesting.methods.PROJECT_ROLE().call();
-        expect(await insuredVesting.methods.hasRole(projectRole, projectWallet).call()).to.equal(true);
-      });
-
-      it("the projectWallet address should be set to the SET_PROJECT_WALLET_ROLE", async () => {
-        const setProjectWalletRole = await insuredVesting.methods.SET_PROJECT_WALLET_ROLE().call();
-
-        expect(await insuredVesting.methods.hasRole(setProjectWalletRole, projectWallet).call()).to.equal(true);
+    describe("Renounce ownership", () => {
+      it("emergencyRelease, recoverEther, recoverToken should not be callable after renouncing ownership", async () => {
+        await insuredVesting.methods.renounceOwnership().send({ from: deployer });
+        await expectRevert(async () => await insuredVesting.methods.emergencyRelease().send({ from: deployer }), CALLER_NOT_OWNER_REVERT_MSG);
+        await expectRevert(async () => await insuredVesting.methods.recoverEther().send({ from: deployer }), CALLER_NOT_OWNER_REVERT_MSG);
+        await expectRevert(
+          async () => await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }),
+          CALLER_NOT_OWNER_REVERT_MSG
+        );
       });
     });
 

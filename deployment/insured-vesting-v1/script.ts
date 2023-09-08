@@ -16,21 +16,16 @@ export const deployInsuredVestingV1 = async (
     throw new Error("XCTD address cannot be zero");
   }
 
-  // TODO: check real DAO address
-  if (config[2] === "0x0000000000000000000000000000000000000000") {
-    throw new Error("DAO address cannot be zero");
-  }
-
   // TODO: check real project address
-  if (config[3] === "0x0000000000000000000000000000000000000000") {
+  if (config[2] === "0x0000000000000000000000000000000000000000") {
     throw new Error("Project address cannot be zero");
   }
 
-  if (config[4].toString() !== "20000000") {
+  if (config[3].toString() !== "20000000") {
     throw new Error("Wrong XCTD to USDC rate");
   }
 
-  if (config[5] !== 63_072_000) {
+  if (config[4] !== 63_072_000) {
     throw new Error("Wrong vesting duration");
   }
 

@@ -15,7 +15,6 @@ export let user1: string;
 export let user2: string;
 export let additionalUsers: string[] = [];
 export let anyUser: string;
-export let daoWallet: string;
 export let projectWallet: string;
 export let differentProjectWallet: string;
 
@@ -36,7 +35,6 @@ export async function setup() {
   user1 = await account(0);
   user2 = await account(3);
   anyUser = await account(1);
-  daoWallet = await account(4);
   projectWallet = await account(5);
   differentProjectWallet = await account(6);
 
@@ -44,13 +42,13 @@ export async function setup() {
   tag(user1, "user1");
   tag(user2, "user2");
   tag(anyUser, "anyUser");
-  tag(daoWallet, "daoWallet");
   tag(projectWallet, "projectWallet");
   tag(differentProjectWallet, "differentProjectWallet");
 }
 
 export enum Event {
   ProjectWalletAddressChanged = "ProjectWalletAddressChanged",
+  ProjectRoleTransferred = "ProjectRoleTransferred",
 }
 
 export enum Error {
@@ -75,8 +73,7 @@ export async function withFixture() {
   // TODO TEMPORARY: until having production project token address & project wallet address
   const testConfig = [...config];
   testConfig[1] = projectToken.options.address;
-  testConfig[2] = daoWallet;
-  testConfig[3] = projectWallet;
+  testConfig[2] = projectWallet;
   // END TEMPORARY
 
   insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);

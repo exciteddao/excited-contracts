@@ -4,7 +4,6 @@ import { bn18, bn6, zeroAddress } from "@defi.org/web3-candies";
 export interface Config {
   usdcAddress: string;
   xctdAddress: string;
-  daoWalletAddress: string;
   projectWalletAddress: string;
   xctdToUsdcRate: BN;
   durationSeconds: number;
@@ -20,21 +19,12 @@ export const _config: Config = {
   // TODO: replace with real address
   xctdAddress: zeroAddress,
   // TODO: replace with real address
-  daoWalletAddress: zeroAddress,
-  // TODO: replace with real address
   projectWalletAddress: zeroAddress,
   // (1e6 * 1e20) / 1e18 * 0.2 = 20000000
   xctdToUsdcRate: BN(USDC_DECIMALS).multipliedBy(PRECISION).dividedBy(XCTD_DECIMALS).multipliedBy(STRIKE_PRICE).integerValue(),
   durationSeconds: 60 * 60 * 24 * 365 * 2,
 };
 
-export type ConfigTuple = [string, string, string, string, BN, number];
+export type ConfigTuple = [string, string, string, BN, number];
 
-export const config: ConfigTuple = [
-  _config.usdcAddress,
-  _config.xctdAddress,
-  _config.daoWalletAddress,
-  _config.projectWalletAddress,
-  _config.xctdToUsdcRate,
-  _config.durationSeconds,
-];
+export const config: ConfigTuple = [_config.usdcAddress, _config.xctdAddress, _config.projectWalletAddress, _config.xctdToUsdcRate, _config.durationSeconds];
