@@ -5,8 +5,6 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ProjectRole} from "../ownable/ProjectRole.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-// import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import "hardhat/console.sol";
 
 // when project calls activate, the contract will:
 // - transfer the necessary amount of tokens required to cover all funded tokens

@@ -21,9 +21,3 @@ export function advanceDays(days: number): Promise<BlockInfo> {
 export function advanceMonths(months: number): Promise<BlockInfo> {
   return mineBlock(months * MONTH);
 }
-
-/**
- * Helper to create formatted access control revert message
- **/
-export const generateAccessControlErrorMsg = (account: string, role: string) =>
-  `VM Exception while processing transaction: reverted with reason string 'AccessControl: account ${account.toLowerCase()} is missing role ${role}'`;
