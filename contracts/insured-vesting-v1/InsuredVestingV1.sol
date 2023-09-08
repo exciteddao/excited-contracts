@@ -4,25 +4,32 @@ pragma solidity 0.8.19;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import "hardhat/console.sol";
 
-// when owner calls activate, the contract will:
+// when project calls activate, the contract will:
 // - transfer the necessary amount of tokens required to cover all funded tokens
 // - set the vesting clock to start at the specified time (no more than 90 days in the future)
 // - lock the contract for any further allowed allocations settings
 // - lock the contract for any further fundings
-contract InsuredVestingV1 is Ownable {
+contract InsuredVestingV1 is AccessControl {
     using SafeERC20 for IERC20;
 
     uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
     uint256 public constant TOKEN_RATE_PRECISION = 1e20;
+    bytes32 public constant DAO_ROLE = keccak256("DAO_ROLE");
+    bytes32 public constant PROJECT_ROLE = keccak256("PROJECT_ROLE");
+    bytes32 public constant SET_PROJECT_WALLET_ROLE = keccak256("SET_PROJECT_WALLET_ROLE");
 
     IERC20 public immutable FUNDING_TOKEN;
     IERC20 public immutable PROJECT_TOKEN;
     uint256 public immutable PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE;
     uint256 public immutable VESTING_DURATION_SECONDS;
+    address public immutable DAO_WALLET;
+
+    address public projectWallet;
 
     bool public emergencyReleased = false;
-    address public projectWallet;
 
     uint256 public vestingStartTime;
     uint256 public totalFundingTokenFunded;
@@ -30,7 +37,7 @@ contract InsuredVestingV1 is Ownable {
     struct UserVesting {
         // Actual FUNDING_TOKEN amount funded by user
         uint256 fundingTokenFunded;
-        // Investment allocation, set by owner
+        // Investment allocation, set by project
         uint256 fundingTokenAllocation;
         // true - user will get FUNDING_TOKEN back, false - user will get PROJECT_TOKEN
         bool shouldRefund;
@@ -55,6 +62,7 @@ contract InsuredVestingV1 is Ownable {
 
     // --- Errors ---
     error ZeroAddress();
+    error SameAddress(address oldAddress, address newAddress);
     error AlreadyActivated();
     error VestingNotStarted();
     error AllowedAllocationExceeded(uint256 amount);
@@ -62,7 +70,7 @@ contract InsuredVestingV1 is Ownable {
     error NoFundsAdded();
     error EmergencyReleased();
     error EmergencyNotReleased();
-    error OnlyOwnerOrSender();
+    error OnlyProjectOrSender();
     error StartTimeTooLate(uint256 vestingStartTime, uint256 maxStartTime);
     error StartTimeIsInPast(uint256 vestingStartTime);
 
@@ -72,8 +80,8 @@ contract InsuredVestingV1 is Ownable {
         _;
     }
 
-    modifier onlyOwnerOrSender(address target) {
-        if (!(msg.sender == owner() || msg.sender == target)) revert OnlyOwnerOrSender();
+    modifier onlyProjectOrSender(address target) {
+        if (!(hasRole(PROJECT_ROLE, msg.sender) || msg.sender == target)) revert OnlyProjectOrSender();
         _;
     }
 
@@ -85,6 +93,7 @@ contract InsuredVestingV1 is Ownable {
     constructor(
         address _fundingToken,
         address _projectToken,
+        address _daoWallet,
         address _projectWallet,
         uint256 _projectTokenToFundingTokenRate,
         uint256 _vestingDurationSeconds
@@ -96,7 +105,12 @@ contract InsuredVestingV1 is Ownable {
         // how many Project tokens you get per each 1 Funding token
         PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE = _projectTokenToFundingTokenRate;
 
+        DAO_WALLET = _daoWallet;
         projectWallet = _projectWallet;
+
+        _grantRole(DAO_ROLE, DAO_WALLET);
+        _grantRole(PROJECT_ROLE, projectWallet);
+        _grantRole(SET_PROJECT_WALLET_ROLE, projectWallet);
     }
 
     // --- User functions ---
@@ -110,7 +124,7 @@ contract InsuredVestingV1 is Ownable {
         emit FundsAdded(msg.sender, amount);
     }
 
-    function claim(address target) external onlyOwnerOrSender(target) onlyIfNotEmergencyReleased {
+    function claim(address target) external onlyProjectOrSender(target) onlyIfNotEmergencyReleased {
         if (!isVestingStarted()) revert VestingNotStarted();
 
         UserVesting storage userStatus = userVestings[target];
@@ -146,9 +160,12 @@ contract InsuredVestingV1 is Ownable {
         emit DecisionChanged(msg.sender, _shouldRefund);
     }
 
-    // --- Owner functions ---
+    // --- Project functions ---
 
-    function setAllowedAllocation(address target, uint256 _fundingTokenAllocation) external onlyOwner onlyBeforeActivation onlyIfNotEmergencyReleased {
+    function setAllowedAllocation(
+        address target,
+        uint256 _fundingTokenAllocation
+    ) external onlyRole(PROJECT_ROLE) onlyBeforeActivation onlyIfNotEmergencyReleased {
         // Update user allocation
         userVestings[target].fundingTokenAllocation = _fundingTokenAllocation;
 
@@ -163,7 +180,7 @@ contract InsuredVestingV1 is Ownable {
         emit AllowedAllocationSet(target, _fundingTokenAllocation);
     }
 
-    function activate(uint256 _vestingStartTime) external onlyOwner onlyBeforeActivation {
+    function activate(uint256 _vestingStartTime) external onlyRole(PROJECT_ROLE) onlyBeforeActivation {
         if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW))
             revert StartTimeTooLate(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
         if (_vestingStartTime < block.timestamp) revert StartTimeIsInPast(_vestingStartTime);
@@ -179,50 +196,32 @@ contract InsuredVestingV1 is Ownable {
     }
 
     // TODO - revisit this with Tal
-    function setProjectAddress(address newProject) external onlyOwner {
-        if (newProject == address(0)) revert ZeroAddress();
+    // TODO - make revocable
+    function setProjectWalletAddress(address newProjectWallet) external onlyRole(SET_PROJECT_WALLET_ROLE) {
+        if (newProjectWallet == address(0)) revert ZeroAddress();
+        if (newProjectWallet == projectWallet) revert SameAddress(projectWallet, newProjectWallet);
 
-        address oldProjectAddress = projectWallet;
-        projectWallet = newProject;
+        address oldProjectWallet = projectWallet;
 
-        emit ProjectWalletAddressChanged(oldProjectAddress, newProject);
+        _grantRole(PROJECT_ROLE, newProjectWallet);
+        _grantRole(SET_PROJECT_WALLET_ROLE, newProjectWallet);
+
+        projectWallet = newProjectWallet;
+
+        _revokeRole(PROJECT_ROLE, oldProjectWallet);
+        _revokeRole(SET_PROJECT_WALLET_ROLE, oldProjectWallet);
+
+        emit ProjectWalletAddressChanged(oldProjectWallet, newProjectWallet);
     }
 
     // --- Emergency functions ---
     // Used to allow users to claim back FUNDING_TOKEN if anything goes wrong
-    function emergencyRelease() external onlyOwner onlyIfNotEmergencyReleased {
+    function emergencyRelease() external onlyRole(DAO_ROLE) onlyIfNotEmergencyReleased {
         emergencyReleased = true;
         emit EmergencyRelease();
     }
 
-    /*
-    TODO(audit)
-    
-    two roles -> foundation and project
-
-    1. add modifiers for project
-    2. add project address to uninsured
-
-    Vesting(uninsured):
-        - dao (owner) 
-            - recover
-        - project 
-            - setAmount
-            - claimOnBehalf
-            - activate
-            - setProjectWalletAddress (non-revocable)
-
-    InsuredVesting:
-        - dao
-            - emergencyRelease
-            - recover
-        - project
-            - claimOnBehalf
-            - emergencyClaimOnBehalf
-            - setAllowedAllocation?
-            - setProjectWalletAddress (non-revocable)
-     */
-    function emergencyClaim(address target) external onlyOwnerOrSender(target) {
+    function emergencyClaim(address target) external onlyProjectOrSender(target) {
         UserVesting storage userStatus = userVestings[target];
         if (!emergencyReleased) revert EmergencyNotReleased();
         if (userStatus.fundingTokenFunded == 0) revert NoFundsAdded();
@@ -234,8 +233,7 @@ contract InsuredVestingV1 is Ownable {
         emit UserEmergencyClaimed(target, toClaim);
     }
 
-    // TODO(audit) - separate to recoverEth as in VestingV1
-    function recoverToken(address tokenAddress) external onlyOwner {
+    function recoverToken(address tokenAddress) external onlyRole(DAO_ROLE) {
         // Return any balance of the token that's not projectToken
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
         // // in case of PROJECT_TOKEN, we also need to retain the total locked amount in the contract
@@ -253,7 +251,7 @@ contract InsuredVestingV1 is Ownable {
         emit TokenRecovered(tokenAddress, tokenBalanceToRecover);
     }
 
-    function recoverEther() external onlyOwner {
+    function recoverEther() external onlyRole(DAO_ROLE) {
         uint256 etherToRecover = address(this).balance;
         Address.sendValue(payable(projectWallet), etherToRecover);
 

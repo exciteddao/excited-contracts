@@ -15,7 +15,9 @@ export let user1: string;
 export let user2: string;
 export let additionalUsers: string[] = [];
 export let anyUser: string;
+export let daoWallet: string;
 export let projectWallet: string;
+export let differentProjectWallet: string;
 
 export let projectToken: Token;
 export let fundingToken: Token;
@@ -33,12 +35,18 @@ export async function setup() {
   deployer = await account(9);
   user1 = await account(0);
   user2 = await account(3);
-  projectWallet = await account(4);
   anyUser = await account(1);
+  daoWallet = await account(4);
+  projectWallet = await account(5);
+  differentProjectWallet = await account(6);
+
   tag(deployer, "deployer");
   tag(user1, "user1");
   tag(user2, "user2");
   tag(anyUser, "anyUser");
+  tag(daoWallet, "daoWallet");
+  tag(projectWallet, "projectWallet");
+  tag(differentProjectWallet, "differentProjectWallet");
 }
 
 export enum Event {
@@ -47,6 +55,7 @@ export enum Event {
 
 export enum Error {
   ZeroAddress = "ZeroAddress",
+  SameAddress = "SameAddress",
   VestingNotStarted = "VestingNotStarted",
   StartTimeTooLate = "StartTimeTooLate",
   StartTimeIsInPast = "StartTimeIsInPast",
@@ -55,18 +64,19 @@ export enum Error {
   NoFundsAdded = "NoFundsAdded",
   EmergencyReleased = "EmergencyReleased",
   EmergencyNotReleased = "EmergencyNotReleased",
-  OnlyOwnerOrSender = "OnlyOwnerOrSender",
+  OnlyProjectOrSender = "OnlyProjectOrSender",
   AlreadyActivated = "AlreadyActivated",
 }
 
 export async function withFixture() {
+  projectToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: projectWallet }, [bn18(1e9), "ProjectToken"])).options.address);
   someOtherToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "SomeOtherToken"])).options.address);
-  projectToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "ProjectToken"])).options.address);
 
   // TODO TEMPORARY: until having production project token address & project wallet address
   const testConfig = [...config];
   testConfig[1] = projectToken.options.address;
-  testConfig[2] = projectWallet;
+  testConfig[2] = daoWallet;
+  testConfig[3] = projectWallet;
   // END TEMPORARY
 
   insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
@@ -84,8 +94,8 @@ export async function withFixture() {
     await fundingToken.methods.approve(insuredVesting.options.address, await fundingToken.amount(FUNDING_PER_USER)).send({ from: target });
   }
 
-  await projectToken.methods.transfer(projectWallet, bn18(1e9)).send({ from: deployer });
-  await projectToken.methods.approve(projectWallet, bn18(1e9)).send({ from: deployer });
+  await projectToken.methods.transfer(projectWallet, bn18(1e9)).send({ from: projectWallet });
+  await projectToken.methods.approve(projectWallet, bn18(1e9)).send({ from: projectWallet });
 }
 
 export async function transferProjectTokenToVesting(amount = PROJECT_TOKENS_ON_SALE) {
@@ -111,7 +121,7 @@ export async function addFundingFromUser1(amount = FUNDING_PER_USER) {
 }
 
 export async function setAllowedAllocationForUser1(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(amount)).send({ from: deployer });
+  await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(amount)).send({ from: projectWallet });
 }
 
 export async function addFundingFromUser2(amount = FUNDING_PER_USER) {
@@ -119,7 +129,7 @@ export async function addFundingFromUser2(amount = FUNDING_PER_USER) {
 }
 
 export async function setAllowedAllocationForUser2(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(amount)).send({ from: deployer });
+  await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(amount)).send({ from: projectWallet });
 }
 
 export const balances = {
@@ -181,6 +191,6 @@ export async function fundFundingTokenFromWhale(amount: BN, targets: string[]) {
 }
 
 export async function activateAndReachStartTime() {
-  await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: deployer });
+  await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
   await advanceDays(3);
 }

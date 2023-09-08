@@ -28,6 +28,7 @@ describe("InsuredVestingV1 deployment config", () => {
       const testConfig = [...config];
       testConfig[1] = xctd.options.address;
       testConfig[2] = await account(4);
+      testConfig[3] = await account(5);
       // END TEMPORARY
 
       insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
@@ -42,6 +43,7 @@ describe("InsuredVestingV1 deployment config", () => {
         const testConfig = [...config];
         testConfig[1] = xctd.options.address;
         testConfig[2] = await account(4);
+        testConfig[3] = await account(5);
         // END TEMPORARY
 
         insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
@@ -65,6 +67,11 @@ describe("InsuredVestingV1 deployment config", () => {
       it("usdc must have 6 decimals", async () => {
         const usdc = await insuredVesting.methods.FUNDING_TOKEN().call();
         expect(await erc20("FUNDING_TOKEN", usdc).decimals()).to.equal(6);
+      });
+
+      it("dao wallet address cannot be zero", async () => {
+        const daoWallet = await insuredVesting.methods.DAO_WALLET().call();
+        expect(daoWallet.toLowerCase()).to.not.match(/^0x0+$/);
       });
 
       it("project wallet address cannot be zero", async () => {
@@ -105,11 +112,24 @@ describe("InsuredVestingV1 deployment config", () => {
 
       describe("Error handling", () => {
         const testCases: { config: ConfigTuple; errorMessage: string }[] = [
-          { config: [randomEthAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, durationSeconds], errorMessage: "Wrong USDC address" },
-          { config: [usdcAddress, zeroAddress, randomEthAddress, xctdToUsdcRate, durationSeconds], errorMessage: "XCTD address cannot be zero" },
-          { config: [usdcAddress, randomEthAddress, zeroAddress, xctdToUsdcRate, durationSeconds], errorMessage: "Project address cannot be zero" },
-          { config: [usdcAddress, randomEthAddress, randomEthAddress, bn18(), durationSeconds], errorMessage: "Wrong XCTD to USDC rate" },
-          { config: [usdcAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, 10000], errorMessage: "Wrong vesting duration" },
+          {
+            config: [randomEthAddress, randomEthAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, durationSeconds],
+            errorMessage: "Wrong USDC address",
+          },
+          {
+            config: [usdcAddress, zeroAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, durationSeconds],
+            errorMessage: "XCTD address cannot be zero",
+          },
+          {
+            config: [usdcAddress, randomEthAddress, zeroAddress, randomEthAddress, xctdToUsdcRate, durationSeconds],
+            errorMessage: "DAO address cannot be zero",
+          },
+          {
+            config: [usdcAddress, randomEthAddress, randomEthAddress, zeroAddress, xctdToUsdcRate, durationSeconds],
+            errorMessage: "Project address cannot be zero",
+          },
+          { config: [usdcAddress, randomEthAddress, randomEthAddress, randomEthAddress, bn18(), durationSeconds], errorMessage: "Wrong XCTD to USDC rate" },
+          { config: [usdcAddress, randomEthAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, 10000], errorMessage: "Wrong vesting duration" },
         ];
 
         for (const { config, errorMessage } of testCases) {
@@ -128,14 +148,14 @@ describe("InsuredVestingV1 deployment config", () => {
         it("should deploy", async () => {
           await deployInsuredVestingV1(
             web3CandiesStub.deploy,
-            [usdcAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, durationSeconds],
+            [usdcAddress, randomEthAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, durationSeconds],
             new BN(10),
             new BN(10)
           );
           expect(web3CandiesStub.deploy.calledOnce).to.be.true;
           expect(web3CandiesStub.deploy.firstCall.args[0]).to.deep.equal({
             contractName: "InsuredVestingV1",
-            args: [usdcAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, durationSeconds],
+            args: [usdcAddress, randomEthAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, durationSeconds],
             maxFeePerGas: new BN(10),
             maxPriorityFeePerGas: new BN(10),
           });

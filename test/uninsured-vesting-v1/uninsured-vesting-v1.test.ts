@@ -25,7 +25,7 @@ import {
   projectWallet,
 } from "./fixture";
 import { web3 } from "@defi.org/web3-candies";
-import { advanceDays, DAY, getCurrentTimestamp, MONTH } from "../utils";
+import { advanceDays, DAY, generateAccessControlErrorMsg, getCurrentTimestamp, MONTH } from "../utils";
 import { VESTING_DURATION_DAYS } from "../insured-vesting-v1/fixture";
 
 describe("VestingV1", () => {
@@ -182,6 +182,7 @@ describe("VestingV1", () => {
         await someOtherToken.methods.transfer(vesting.options.address, BN(12345 * 1e18)).send({ from: deployer });
         await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: daoWallet });
         expect(await someOtherToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.zero;
+        // TODO: assert balance of daoWallet / projectWallet
       });
 
       it("recovers excess projectToken, some allocations set", async () => {
@@ -234,9 +235,6 @@ describe("VestingV1", () => {
     });
 
     describe("access control", () => {
-      const generateAccessControlErrorMsg = (account: string, role: string) =>
-        `VM Exception while processing transaction: reverted with reason string 'AccessControl: account ${account.toLowerCase()} is missing role ${role}'`;
-
       describe("only project", () => {
         it("can activate", async () => {
           const projectRole = await vesting.methods.PROJECT_ROLE().call();
