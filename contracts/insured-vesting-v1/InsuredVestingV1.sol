@@ -2,15 +2,16 @@
 pragma solidity 0.8.19;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ProjectRole} from "../ownable/ProjectRole.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-// when owner calls activate, the contract will:
+// when project calls activate, the contract will:
 // - transfer the necessary amount of tokens required to cover all funded tokens
 // - set the vesting clock to start at the specified time (no more than 90 days in the future)
 // - lock the contract for any further allowed allocations settings
 // - lock the contract for any further fundings
-contract InsuredVestingV1 is Ownable {
+contract InsuredVestingV1 is Ownable, ProjectRole {
     using SafeERC20 for IERC20;
 
     uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
@@ -22,7 +23,6 @@ contract InsuredVestingV1 is Ownable {
     uint256 public immutable VESTING_DURATION_SECONDS;
 
     bool public emergencyReleased = false;
-    address public projectWallet;
 
     uint256 public vestingStartTime;
     uint256 public totalFundingTokenFunded;
@@ -30,7 +30,7 @@ contract InsuredVestingV1 is Ownable {
     struct UserVesting {
         // Actual FUNDING_TOKEN amount funded by user
         uint256 fundingTokenFunded;
-        // Investment allocation, set by owner
+        // Investment allocation, set by project
         uint256 fundingTokenAllocation;
         // true - user will get FUNDING_TOKEN back, false - user will get PROJECT_TOKEN
         bool shouldRefund;
@@ -55,6 +55,7 @@ contract InsuredVestingV1 is Ownable {
 
     // --- Errors ---
     error ZeroAddress();
+    error SameAddress(address oldAddress, address newAddress);
     error AlreadyActivated();
     error VestingNotStarted();
     error AllowedAllocationExceeded(uint256 amount);
@@ -62,7 +63,7 @@ contract InsuredVestingV1 is Ownable {
     error NoFundsAdded();
     error EmergencyReleased();
     error EmergencyNotReleased();
-    error OnlyOwnerOrSender();
+    error OnlyProjectOrSender();
     error StartTimeTooLate(uint256 vestingStartTime, uint256 maxStartTime);
     error StartTimeIsInPast(uint256 vestingStartTime);
 
@@ -72,8 +73,8 @@ contract InsuredVestingV1 is Ownable {
         _;
     }
 
-    modifier onlyOwnerOrSender(address target) {
-        if (!(msg.sender == owner() || msg.sender == target)) revert OnlyOwnerOrSender();
+    modifier onlyProjectOrSender(address target) {
+        if (!(msg.sender == projectWallet || msg.sender == target)) revert OnlyProjectOrSender();
         _;
     }
 
@@ -88,15 +89,13 @@ contract InsuredVestingV1 is Ownable {
         address _projectWallet,
         uint256 _projectTokenToFundingTokenRate,
         uint256 _vestingDurationSeconds
-    ) {
+    ) ProjectRole(_projectWallet) {
         FUNDING_TOKEN = IERC20(_fundingToken);
         PROJECT_TOKEN = IERC20(_projectToken);
 
         VESTING_DURATION_SECONDS = _vestingDurationSeconds;
         // how many Project tokens you get per each 1 Funding token
         PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE = _projectTokenToFundingTokenRate;
-
-        projectWallet = _projectWallet;
     }
 
     // --- User functions ---
@@ -110,7 +109,7 @@ contract InsuredVestingV1 is Ownable {
         emit FundsAdded(msg.sender, amount);
     }
 
-    function claim(address target) external onlyOwnerOrSender(target) onlyIfNotEmergencyReleased {
+    function claim(address target) external onlyProjectOrSender(target) onlyIfNotEmergencyReleased {
         if (!isVestingStarted()) revert VestingNotStarted();
 
         UserVesting storage userStatus = userVestings[target];
@@ -146,9 +145,9 @@ contract InsuredVestingV1 is Ownable {
         emit DecisionChanged(msg.sender, _shouldRefund);
     }
 
-    // --- Owner functions ---
+    // --- Project functions ---
 
-    function setAllowedAllocation(address target, uint256 _fundingTokenAllocation) external onlyOwner onlyBeforeActivation onlyIfNotEmergencyReleased {
+    function setAllowedAllocation(address target, uint256 _fundingTokenAllocation) external onlyProject onlyBeforeActivation onlyIfNotEmergencyReleased {
         // Update user allocation
         userVestings[target].fundingTokenAllocation = _fundingTokenAllocation;
 
@@ -163,7 +162,7 @@ contract InsuredVestingV1 is Ownable {
         emit AllowedAllocationSet(target, _fundingTokenAllocation);
     }
 
-    function activate(uint256 _vestingStartTime) external onlyOwner onlyBeforeActivation {
+    function activate(uint256 _vestingStartTime) external onlyProject onlyBeforeActivation {
         if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW))
             revert StartTimeTooLate(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
         if (_vestingStartTime < block.timestamp) revert StartTimeIsInPast(_vestingStartTime);
@@ -178,16 +177,6 @@ contract InsuredVestingV1 is Ownable {
         emit Activated(vestingStartTime, delta);
     }
 
-    // TODO - revisit this with Tal
-    function setProjectAddress(address newProject) external onlyOwner {
-        if (newProject == address(0)) revert ZeroAddress();
-
-        address oldProjectAddress = projectWallet;
-        projectWallet = newProject;
-
-        emit ProjectWalletAddressChanged(oldProjectAddress, newProject);
-    }
-
     // --- Emergency functions ---
     // Used to allow users to claim back FUNDING_TOKEN if anything goes wrong
     function emergencyRelease() external onlyOwner onlyIfNotEmergencyReleased {
@@ -195,34 +184,7 @@ contract InsuredVestingV1 is Ownable {
         emit EmergencyRelease();
     }
 
-    /*
-    TODO(audit)
-    
-    two roles -> foundation and project
-
-    1. add modifiers for project
-    2. add project address to uninsured
-
-    Vesting(uninsured):
-        - dao (owner) 
-            - recover
-        - project 
-            - setAmount
-            - claimOnBehalf
-            - activate
-            - setProjectWalletAddress (non-revocable)
-
-    InsuredVesting:
-        - dao
-            - emergencyRelease
-            - recover
-        - project
-            - claimOnBehalf
-            - emergencyClaimOnBehalf
-            - setAllowedAllocation?
-            - setProjectWalletAddress (non-revocable)
-     */
-    function emergencyClaim(address target) external onlyOwnerOrSender(target) {
+    function emergencyClaim(address target) external onlyProjectOrSender(target) {
         UserVesting storage userStatus = userVestings[target];
         if (!emergencyReleased) revert EmergencyNotReleased();
         if (userStatus.fundingTokenFunded == 0) revert NoFundsAdded();
@@ -234,7 +196,6 @@ contract InsuredVestingV1 is Ownable {
         emit UserEmergencyClaimed(target, toClaim);
     }
 
-    // TODO(audit) - separate to recoverEth as in VestingV1
     function recoverToken(address tokenAddress) external onlyOwner {
         // Return any balance of the token that's not projectToken
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));

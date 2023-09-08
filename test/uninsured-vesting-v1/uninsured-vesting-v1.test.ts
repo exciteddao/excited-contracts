@@ -182,6 +182,7 @@ describe("VestingV1", () => {
         await someOtherToken.methods.transfer(vesting.options.address, BN(12345 * 1e18)).send({ from: deployer });
         await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: daoWallet });
         expect(await someOtherToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.zero;
+        // TODO: assert balance of daoWallet / projectWallet
       });
 
       it("recovers excess projectToken, some allocations set", async () => {

@@ -37,9 +37,11 @@ import {
   PROJECT_TOKENS_ON_SALE,
   activateAndReachStartTime,
   getDefaultStartTime,
+  differentProjectWallet,
 } from "./fixture";
 import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { advanceDays, DAY, getCurrentTimestamp, advanceMonths, MONTH } from "../utils";
+import { CALLER_NOT_OWNER_REVERT_MSG, OWNER_REVERT_MSG, PROJECT_ROLE_REVERT_MSG } from "../constants";
 
 describe("InsuredVestingV1", () => {
   let snap: SnapshotRestorer;
@@ -78,7 +80,7 @@ describe("InsuredVestingV1", () => {
       it("does not vest before start time", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
-        await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: deployer });
+        await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
         await advanceDays(1);
         expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.zero;
         await advanceDays(3);
@@ -91,7 +93,7 @@ describe("InsuredVestingV1", () => {
       it("starts vesting if activated with current time stamp", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
-        await insuredVesting.methods.activate(BN(await getCurrentTimestamp()).plus(1)).send({ from: deployer });
+        await insuredVesting.methods.activate(BN(await getCurrentTimestamp()).plus(1)).send({ from: projectWallet });
         await advanceDays(1);
         await insuredVesting.methods.claim(user1).send({ from: user1 });
 
@@ -127,7 +129,7 @@ describe("InsuredVestingV1", () => {
 
         for (const user of additionalUsers) {
           const amountToAllocate = 10 + Math.round(Math.random() * (FUNDING_PER_USER - 10));
-          await insuredVesting.methods.setAllowedAllocation(user, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
+          await insuredVesting.methods.setAllowedAllocation(user, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
           const amountToFund = 10 + Math.round(Math.random() * (amountToAllocate - 10));
           await insuredVesting.methods.addFunds(await fundingToken.amount(amountToFund)).send({ from: user });
           additionalUsersFunding.push(amountToFund);
@@ -210,7 +212,7 @@ describe("InsuredVestingV1", () => {
       it("cannot claim tokens before starting period - activated", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
-        await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: deployer });
+        await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
         await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.VestingNotStarted);
         await advanceDays(1);
         await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.VestingNotStarted);
@@ -257,13 +259,13 @@ describe("InsuredVestingV1", () => {
         await expectProjectBalanceDelta("projectToken", 0);
       });
 
-      it("owner can claim on behalf of user", async () => {
+      it("project can claim on behalf of user", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
         await activateAndReachStartTime();
         await setBalancesForDelta();
         await advanceDays(77);
-        await insuredVesting.methods.claim(user1).send({ from: deployer });
+        await insuredVesting.methods.claim(user1).send({ from: projectWallet });
         await expectProjectBalanceDelta("fundingToken", await vestedAmount(77, "fundingToken"));
         await expectProjectBalanceDelta("projectToken", 0);
       });
@@ -274,7 +276,7 @@ describe("InsuredVestingV1", () => {
         await addFundingFromUser1();
         await activateAndReachStartTime();
         await advanceDays(77);
-        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), Error.OnlyOwnerOrSender);
+        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: anyUser }), Error.OnlyProjectOrSender);
       });
 
       it("claim according to updated funding if allocation was updated", async () => {
@@ -460,7 +462,7 @@ describe("InsuredVestingV1", () => {
       it("cannot add funds after activation", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1(FUNDING_PER_USER / 2);
-        await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: deployer });
+        await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
         await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), Error.AlreadyActivated);
       });
 
@@ -473,7 +475,7 @@ describe("InsuredVestingV1", () => {
 
       it("fails if user does not have enough balance", async () => {
         const amount = FUNDING_PER_USER + 1;
-        await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(amount)).send({ from: deployer });
+        await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(amount)).send({ from: projectWallet });
         await expectRevert(
           async () => insuredVesting.methods.addFunds(await fundingToken.amount(amount)).send({ from: user1 }),
           "ERC20: transfer amount exceeds allowance"
@@ -486,9 +488,9 @@ describe("InsuredVestingV1", () => {
         it("cannot set allowed allocation after activation", async () => {
           await setAllowedAllocationForUser1(FUNDING_PER_USER / 4);
           await addFundingFromUser1(FUNDING_PER_USER / 4);
-          await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: deployer });
+          await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
           await expectRevert(
-            async () => insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer }),
+            async () => insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet }),
             Error.AlreadyActivated
           );
         });
@@ -503,7 +505,7 @@ describe("InsuredVestingV1", () => {
             await setBalancesForDelta();
             const newAmount = FUNDING_PER_USER / 3;
             const newAllowedAllocation = await fundingToken.amount(newAmount);
-            await insuredVesting.methods.setAllowedAllocation(user1, newAllowedAllocation).send({ from: deployer });
+            await insuredVesting.methods.setAllowedAllocation(user1, newAllowedAllocation).send({ from: projectWallet });
 
             // // check user FUNDING_TOKEN balance reflects refunded amount
             await expectUserBalanceDelta("fundingToken", await fundingToken.amount(FUNDING_PER_USER - newAmount), 1);
@@ -521,43 +523,43 @@ describe("InsuredVestingV1", () => {
             {
               description: "single user",
               setAllowedAllocationsFn: async () =>
-                await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer }),
+                await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet }),
               expectedAllocation: BN(FUNDING_PER_USER),
             },
             {
               description: "multiple users, smaller allocation added",
               setAllowedAllocationsFn: async () => {
-                await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
-                await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER / 5)).send({ from: deployer });
-                await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER / 2)).send({ from: deployer });
+                await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
+                await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER / 5)).send({ from: projectWallet });
+                await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER / 2)).send({ from: projectWallet });
               },
               expectedAllocation: BN(FUNDING_PER_USER / 2),
             },
             {
               description: "multiple users, larger allocation added",
               setAllowedAllocationsFn: async () => {
-                await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER / 2)).send({ from: deployer });
-                await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
-                await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
+                await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER / 2)).send({ from: projectWallet });
+                await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
+                await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
               },
               expectedAllocation: BN(FUNDING_PER_USER),
             },
             {
               description: "multiple users, allocation removed",
               setAllowedAllocationsFn: async () => {
-                await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER / 2)).send({ from: deployer });
-                await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
-                await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(0)).send({ from: deployer });
+                await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER / 2)).send({ from: projectWallet });
+                await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
+                await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(0)).send({ from: projectWallet });
               },
               expectedAllocation: BN(FUNDING_PER_USER),
             },
             {
               description: "allocation increased after funding",
               setAllowedAllocationsFn: async () => {
-                await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
-                await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
+                await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
+                await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
                 await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
-                await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER * 2)).send({ from: deployer });
+                await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER * 2)).send({ from: projectWallet });
               },
               expectedAllocation: BN(FUNDING_PER_USER * 2),
             },
@@ -577,7 +579,7 @@ describe("InsuredVestingV1", () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
-        await expectRevert(() => insuredVesting.methods.setAllowedAllocation(user1, 1).send({ from: deployer }), Error.EmergencyReleased);
+        await expectRevert(() => insuredVesting.methods.setAllowedAllocation(user1, 1).send({ from: projectWallet }), Error.EmergencyReleased);
       });
     });
 
@@ -590,11 +592,11 @@ describe("InsuredVestingV1", () => {
         expect(await fundingToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
       });
 
-      it("lets owner emergency claim back all FUNDING_TOKEN balance on behalf of user, no PROJECT_TOKEN has been claimed", async () => {
+      it("lets project emergency claim back all FUNDING_TOKEN balance on behalf of user, no PROJECT_TOKEN has been claimed", async () => {
         await setAllowedAllocationForUser1();
         await addFundingFromUser1();
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
-        await insuredVesting.methods.emergencyClaim(user1).send({ from: deployer });
+        await insuredVesting.methods.emergencyClaim(user1).send({ from: projectWallet });
         expect(await fundingToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
       });
 
@@ -609,7 +611,7 @@ describe("InsuredVestingV1", () => {
         await addFundingFromUser1();
         await activateAndReachStartTime();
         await advanceDays(VESTING_DURATION_DAYS / 10);
-        await insuredVesting.methods.claim(user1).send({ from: deployer });
+        await insuredVesting.methods.claim(user1).send({ from: projectWallet });
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
 
         await insuredVesting.methods.emergencyClaim(user1).send({ from: user1 });
@@ -645,29 +647,14 @@ describe("InsuredVestingV1", () => {
         await expectRevert(() => insuredVesting.methods.emergencyClaim(user1).send({ from: user1 }), Error.EmergencyNotReleased);
       });
 
-      it("only owner or user can emergency claim", async () => {
-        await setAllowedAllocationForUser1();
-        await addFundingFromUser1();
-        await setAllowedAllocationForUser2();
-        await addFundingFromUser2();
-        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
-        await expectRevert(() => insuredVesting.methods.emergencyClaim(user1).send({ from: user2 }), Error.OnlyOwnerOrSender);
-      });
-
-      it("only owner can emergency release", async () => {
-        await setAllowedAllocationForUser1();
-        await addFundingFromUser1();
-        await expectRevert(() => insuredVesting.methods.emergencyRelease().send({ from: user1 }), "Ownable: caller is not the owner");
-      });
-
       it("cannot emergency release twice", async () => {
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
         await expectRevert(() => insuredVesting.methods.emergencyRelease().send({ from: deployer }), Error.EmergencyReleased);
       });
 
       it("recovers all remaining PROJECT_TOKEN balance if emergency released", async () => {
-        await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
-        await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
+        await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
+        await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
         await transferProjectTokenToVesting(FUNDING_PER_USER * 2 * FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO);
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user2 });
@@ -682,29 +669,56 @@ describe("InsuredVestingV1", () => {
       });
     });
 
-    describe("update project wallet address", () => {
-      it("should only be updatable by owner", async () => {
+    describe("transfer project role", () => {
+      it("should only be transferable by project wallet", async () => {
         expect(await insuredVesting.methods.projectWallet().call()).to.be.eq(projectWallet);
-        const newProjectWalletAddress = "0x148A0353F50Ba5683Ab0513CF6bda4E4fD43d7D4";
-        await insuredVesting.methods.setProjectAddress(newProjectWalletAddress).send({ from: deployer });
-        expect(await insuredVesting.methods.projectWallet().call()).to.be.eq(newProjectWalletAddress);
-      });
-
-      it("should not be updatable by non-owner", async () => {
-        const newProjectAddress = "0x148A0353F50Ba5683Ab0513CF6bda4E4fD43d7D4";
-        await expectRevert(() => insuredVesting.methods.setProjectAddress(newProjectAddress).send({ from: user1 }), "Ownable: caller is not the owner");
+        await insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
+        expect(await insuredVesting.methods.projectWallet().call()).to.be.eq(differentProjectWallet);
       });
 
       it("should not be updatable to zero address", async () => {
-        await expectRevert(() => insuredVesting.methods.setProjectAddress(zeroAddress).send({ from: deployer }), Error.ZeroAddress);
+        await expectRevert(
+          () => insuredVesting.methods.transferProjectRole(zeroAddress).send({ from: projectWallet }),
+          "ProjectRole: new project wallet is the zero address"
+        );
       });
 
-      it(`should emit '${Event.ProjectWalletAddressChanged}' event upon updating`, async () => {
-        const newProjectAddress = "0x148A0353F50Ba5683Ab0513CF6bda4E4fD43d7D4";
-        await insuredVesting.methods.setProjectAddress(newProjectAddress).send({ from: deployer });
-        const events = await insuredVesting.getPastEvents(Event.ProjectWalletAddressChanged);
-        expect(events[0].returnValues.oldAddress).to.be.eq(projectWallet);
-        expect(events[0].returnValues.newAddress).to.be.eq(newProjectAddress);
+      it(`should emit '${Event.ProjectRoleTransferred}' event upon updating`, async () => {
+        await insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
+        const events = await insuredVesting.getPastEvents(Event.ProjectRoleTransferred);
+        expect(events[0].returnValues.previousProjectWallet).to.be.eq(projectWallet);
+        expect(events[0].returnValues.newProjectWallet).to.be.eq(differentProjectWallet);
+      });
+
+      it("project role permissions should be available to new project wallet address after role transfer", async () => {
+        await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
+        await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
+        await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
+        await insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
+        await advanceDays(10);
+        await insuredVesting.methods.claim(user1).send({ from: differentProjectWallet });
+      });
+
+      it("old wallet should not have project role permissions after ownership transfer", async () => {
+        await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
+        await insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
+        await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
+
+        await expectRevert(
+          async () => await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet }),
+          PROJECT_ROLE_REVERT_MSG
+        );
+
+        await expectRevert(async () => await insuredVesting.methods.claim(user1).send({ from: projectWallet }), Error.OnlyProjectOrSender);
+      });
+
+      it("old wallet address should not be able to call transfer role again after initial transfer", async () => {
+        await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
+
+        await insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
+        await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
+
+        await expectRevert(async () => await insuredVesting.methods.transferProjectRole(projectWallet).send({ from: projectWallet }), PROJECT_ROLE_REVERT_MSG);
       });
     });
 
@@ -727,8 +741,8 @@ describe("InsuredVestingV1", () => {
 
       // TODO does retrieiving PROJECT_TOKEN work only based off allocations or do we have the option to cancel before vesting started.
       it("recovers excess PROJECT_TOKEN (fully funded) ", async () => {
-        await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
-        await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
+        await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
+        await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
         await transferProjectTokenToVesting();
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user2 });
@@ -740,8 +754,8 @@ describe("InsuredVestingV1", () => {
       });
 
       it("recovers excess PROJECT_TOKEN (underfunded)", async () => {
-        await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
-        await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
+        await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
+        await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user2 });
         await projectToken.methods.transfer(insuredVesting.options.address, await projectToken.amount(100)).send({ from: projectWallet });
@@ -753,8 +767,8 @@ describe("InsuredVestingV1", () => {
       // TODO refactor balance deltas
       // todo expectbalancedelta shouldn't run token.amount(...)
       it("recovers by zeroing out allocations (pre-activation)", async () => {
-        await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
-        await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER)).send({ from: deployer });
+        await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
+        await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user2 });
         await transferProjectTokenToVesting();
@@ -774,8 +788,8 @@ describe("InsuredVestingV1", () => {
 
         const user1FundingTokenBalanceBefore = await fundingToken.methods.balanceOf(user1).call();
         const user2FundingTokenBalanceBefore = await fundingToken.methods.balanceOf(user2).call();
-        await insuredVesting.methods.setAllowedAllocation(user1, 0).send({ from: deployer });
-        await insuredVesting.methods.setAllowedAllocation(user2, 0).send({ from: deployer });
+        await insuredVesting.methods.setAllowedAllocation(user1, 0).send({ from: projectWallet });
+        await insuredVesting.methods.setAllowedAllocation(user2, 0).send({ from: projectWallet });
         expect(BN(await fundingToken.methods.balanceOf(user1).call()).minus(user1FundingTokenBalanceBefore)).to.be.bignumber.eq(
           await fundingToken.amount(FUNDING_PER_USER)
         );
@@ -813,23 +827,116 @@ describe("InsuredVestingV1", () => {
     });
 
     describe("access control", () => {
-      it("cannot add allowed allocations if not owner", async () => {
-        await expectRevert(async () => insuredVesting.methods.setAllowedAllocation(user1, 1).send({ from: anyUser }), "Ownable: caller is not the owner");
+      describe("only project", () => {
+        it("can call activate", async () => {
+          const expectedInvalidUsers = [deployer];
+          for (const invalidUser of expectedInvalidUsers) {
+            await expectRevert(async () => insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: invalidUser }), PROJECT_ROLE_REVERT_MSG);
+          }
+
+          await setAllowedAllocationForUser1(FUNDING_PER_USER);
+          await addFundingFromUser1(FUNDING_PER_USER / 4);
+          await approveProjectTokenToVesting();
+          await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
+        });
+
+        it("can claim on behalf of a user", async () => {
+          const expectedInvalidUsers = [user2];
+
+          for (const invalidUser of expectedInvalidUsers) {
+            await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: invalidUser }), Error.OnlyProjectOrSender);
+          }
+
+          await setAllowedAllocationForUser1(FUNDING_PER_USER);
+          await addFundingFromUser1(FUNDING_PER_USER / 4);
+          await activateAndReachStartTime();
+          await insuredVesting.methods.claim(user1).send({ from: projectWallet });
+        });
+
+        it("can emergency claim on behalf of a user", async () => {
+          const expectedInvalidUsers = [user2, deployer];
+
+          for (const invalidUser of expectedInvalidUsers) {
+            await expectRevert(async () => insuredVesting.methods.emergencyClaim(user1).send({ from: invalidUser }), Error.OnlyProjectOrSender);
+          }
+
+          await setAllowedAllocationForUser1();
+          await addFundingFromUser1();
+          await activateAndReachStartTime();
+          await insuredVesting.methods.emergencyRelease().send({ from: deployer });
+          await insuredVesting.methods.emergencyClaim(user1).send({ from: projectWallet });
+        });
+
+        it("can set allowed allocation", async () => {
+          const expectedInvalidUsers = [deployer, user1];
+          for (const invalidUser of expectedInvalidUsers) {
+            await expectRevert(async () => insuredVesting.methods.setAllowedAllocation(user1, 1).send({ from: invalidUser }), PROJECT_ROLE_REVERT_MSG);
+          }
+
+          await insuredVesting.methods.setAllowedAllocation(user1, 1).send({ from: projectWallet });
+        });
+
+        it("can transfer project role", async () => {
+          const expectedInvalidUsers = [deployer, user1];
+          for (const invalidUser of expectedInvalidUsers) {
+            await expectRevert(
+              async () => insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: invalidUser }),
+              PROJECT_ROLE_REVERT_MSG
+            );
+          }
+
+          await insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
+        });
       });
 
-      it("cannot recover ether if not owner", async () => {
-        await expectRevert(async () => insuredVesting.methods.recoverEther().send({ from: anyUser }), "Ownable: caller is not the owner");
-      });
+      describe("only owner", () => {
+        it("can emergency release", async () => {
+          await setAllowedAllocationForUser1();
+          await addFundingFromUser1();
 
-      it("cannot recover token if not owner", async () => {
+          const expectedInvalidUsers = [projectWallet, user1, user2];
+          for (const invalidUser of expectedInvalidUsers) {
+            await expectRevert(async () => insuredVesting.methods.emergencyRelease().send({ from: invalidUser }), OWNER_REVERT_MSG);
+          }
+
+          await insuredVesting.methods.emergencyRelease().send({ from: deployer });
+        });
+
+        it("can recover ether", async () => {
+          await setAllowedAllocationForUser1();
+          await addFundingFromUser1();
+
+          const expectedInvalidUsers = [projectWallet, user1, anyUser];
+          for (const invalidUser of expectedInvalidUsers) {
+            await expectRevert(async () => insuredVesting.methods.recoverEther().send({ from: invalidUser }), OWNER_REVERT_MSG);
+          }
+
+          await insuredVesting.methods.recoverEther().send({ from: deployer });
+        });
+
+        it("can recover token", async () => {
+          await setAllowedAllocationForUser1();
+          await addFundingFromUser1();
+
+          const expectedInvalidUsers = [projectWallet, anyUser];
+          for (const invalidUser of expectedInvalidUsers) {
+            await expectRevert(async () => insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: invalidUser }), OWNER_REVERT_MSG);
+          }
+
+          await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
+        });
+      });
+    });
+
+    describe("Renounce ownership", () => {
+      it("emergencyRelease, recoverEther, recoverToken should not be callable after renouncing ownership", async () => {
+        await insuredVesting.methods.renounceOwnership().send({ from: deployer });
+        await expectRevert(async () => await insuredVesting.methods.emergencyRelease().send({ from: deployer }), CALLER_NOT_OWNER_REVERT_MSG);
+        await expectRevert(async () => await insuredVesting.methods.recoverEther().send({ from: deployer }), CALLER_NOT_OWNER_REVERT_MSG);
         await expectRevert(
-          async () => insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: anyUser }),
-          "Ownable: caller is not the owner"
+          async () => await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }),
+          CALLER_NOT_OWNER_REVERT_MSG
         );
-      });
-
-      it("cannot trigger emergency release if not owner", async () => {
-        await expectRevert(async () => insuredVesting.methods.emergencyRelease().send({ from: anyUser }), "Ownable: caller is not the owner");
       });
     });
 
@@ -861,10 +968,13 @@ describe("InsuredVestingV1", () => {
           await addFundingFromUser1(FUNDING_PER_USER);
           await activateAndReachStartTime();
           await advanceDays(30);
-          await insuredVesting.methods.claim(user1).send({ from: deployer });
+          await insuredVesting.methods.claim(user1).send({ from: projectWallet });
           expect(await insuredVesting.methods.fundingTokenClaimableFor(user1).call()).to.be.bignumber.zero;
           await advanceDays(30);
-          expect(await insuredVesting.methods.fundingTokenClaimableFor(user1).call()).to.be.bignumber.eq(await vestedAmount(30, "fundingToken"));
+          expect(await insuredVesting.methods.fundingTokenClaimableFor(user1).call()).to.be.bignumber.closeTo(
+            await vestedAmount(30, "fundingToken"),
+            await fundingToken.amount(0.1)
+          );
           expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.closeTo(
             await vestedAmount(60, "fundingToken"),
             await fundingToken.amount(0.1)
@@ -902,7 +1012,7 @@ describe("InsuredVestingV1", () => {
           await addFundingFromUser1(FUNDING_PER_USER);
           await activateAndReachStartTime();
           await advanceDays(30);
-          await insuredVesting.methods.claim(user1).send({ from: deployer });
+          await insuredVesting.methods.claim(user1).send({ from: projectWallet });
           expect(await insuredVesting.methods.projectTokenClaimableFor(user1).call()).to.be.bignumber.zero;
           await advanceDays(30);
           expect(await insuredVesting.methods.projectTokenClaimableFor(user1).call()).to.be.bignumber.closeTo(
@@ -921,20 +1031,23 @@ describe("InsuredVestingV1", () => {
   describe("activate", () => {
     it("fails if start time is in the past", async () => {
       const timeInPast = BN(await getCurrentTimestamp()).minus(1);
-      await expectRevert(async () => insuredVesting.methods.activate(timeInPast).send({ from: deployer }), Error.StartTimeIsInPast);
+      await expectRevert(async () => insuredVesting.methods.activate(timeInPast).send({ from: projectWallet }), Error.StartTimeIsInPast);
     });
 
     it("fails if start time is too far in to the future", async () => {
       const timeInDistantFuture = BN(await getCurrentTimestamp())
         .plus(MONTH * 3)
         .plus(DAY);
-      await expectRevert(async () => insuredVesting.methods.activate(timeInDistantFuture).send({ from: deployer }), Error.StartTimeTooLate);
+      await expectRevert(async () => insuredVesting.methods.activate(timeInDistantFuture).send({ from: projectWallet }), Error.StartTimeTooLate);
     });
 
     it("fails if there isn't enough PROJECT_TOKEN allowance to cover funded FUNDING_TOKEN", async () => {
       await setAllowedAllocationForUser1(FUNDING_PER_USER);
       await addFundingFromUser1(FUNDING_PER_USER);
-      await expectRevert(async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: deployer }), "ERC20: insufficient allowance");
+      await expectRevert(
+        async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet }),
+        "ERC20: insufficient allowance"
+      );
     });
 
     it("fails if there isn't enough PROJECT_TOKEN balance to cover funded FUNDING_TOKEN", async () => {
@@ -944,7 +1057,7 @@ describe("InsuredVestingV1", () => {
       // Get rid of all balance
       await projectToken.methods.transfer(anyUser, await projectToken.amount(1e9)).send({ from: projectWallet });
       await expectRevert(
-        async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: deployer }),
+        async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet }),
         "ERC20: transfer amount exceeds balance"
       );
     });
@@ -957,7 +1070,7 @@ describe("InsuredVestingV1", () => {
 
       await approveProjectTokenToVesting();
 
-      await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: deployer });
+      await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
 
       const contractProjectTokenBalance = await projectToken.methods.balanceOf(insuredVesting.options.address).call();
 
@@ -973,7 +1086,7 @@ describe("InsuredVestingV1", () => {
       await projectToken.methods.transfer(insuredVesting.options.address, await projectToken.amount(FUNDING_PER_USER * 10)).send({ from: projectWallet });
 
       const initialContractProjectTokenBalance = await projectToken.methods.balanceOf(insuredVesting.options.address).call();
-      await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: deployer });
+      await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
       const contractProjectTokenBalance = await projectToken.methods.balanceOf(insuredVesting.options.address).call();
 
       expect(initialContractProjectTokenBalance).to.be.bignumber.eq(contractProjectTokenBalance);
@@ -989,7 +1102,7 @@ describe("InsuredVestingV1", () => {
 
       await projectToken.methods.transfer(insuredVesting.options.address, await projectToken.amount(FUNDING_PER_USER / 3)).send({ from: projectWallet });
 
-      await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: deployer });
+      await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
 
       const contractProjectTokenBalance = await projectToken.methods.balanceOf(insuredVesting.options.address).call();
 
@@ -1001,20 +1114,13 @@ describe("InsuredVestingV1", () => {
       await addFundingFromUser1(FUNDING_PER_USER);
       await approveProjectTokenToVesting();
 
-      await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: deployer });
+      await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
 
-      await expectRevert(async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: deployer }), Error.AlreadyActivated);
-    });
-
-    it("fails if not owner", async () => {
-      await setAllowedAllocationForUser1(FUNDING_PER_USER);
-      await addFundingFromUser1(FUNDING_PER_USER);
-
-      await expectRevert(async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: anyUser }), "Ownable: caller is not the owner");
+      await expectRevert(async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet }), Error.AlreadyActivated);
     });
 
     it("fails if not funded", async () => {
-      await expectRevert(async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: deployer }), Error.NoFundsAdded);
+      await expectRevert(async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet }), Error.NoFundsAdded);
     });
 
     it("activates", async () => {
@@ -1022,7 +1128,7 @@ describe("InsuredVestingV1", () => {
       await addFundingFromUser1(FUNDING_PER_USER);
       await approveProjectTokenToVesting();
 
-      await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: deployer });
+      await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
 
       expect(await insuredVesting.methods.vestingStartTime().call()).to.be.bignumber.closeTo(await getCurrentTimestamp(), 1);
     });
@@ -1036,7 +1142,7 @@ describe("InsuredVestingV1", () => {
       await setAllowedAllocationForUser2(FUNDING_PER_USER / 2);
 
       await approveProjectTokenToVesting((FUNDING_PER_USER + FUNDING_PER_USER / 2) * FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO);
-      await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: deployer });
+      await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
     });
   });
 });
