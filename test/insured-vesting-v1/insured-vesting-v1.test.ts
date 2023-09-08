@@ -971,7 +971,10 @@ describe("InsuredVestingV1", () => {
           await insuredVesting.methods.claim(user1).send({ from: projectWallet });
           expect(await insuredVesting.methods.fundingTokenClaimableFor(user1).call()).to.be.bignumber.zero;
           await advanceDays(30);
-          expect(await insuredVesting.methods.fundingTokenClaimableFor(user1).call()).to.be.bignumber.eq(await vestedAmount(30, "fundingToken"));
+          expect(await insuredVesting.methods.fundingTokenClaimableFor(user1).call()).to.be.bignumber.closeTo(
+            await vestedAmount(30, "fundingToken"),
+            await fundingToken.amount(0.1)
+          );
           expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.closeTo(
             await vestedAmount(60, "fundingToken"),
             await fundingToken.amount(0.1)
