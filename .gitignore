@@ -426,5 +426,3 @@ zsdoc/data
 # End of https://www.toptal.com/developers/gitignore/api/zsh,node,macos,intellij+all,solidity,soliditytruffle,sublimetext
 
 coverage.json
-
-.vscode/settings.json
