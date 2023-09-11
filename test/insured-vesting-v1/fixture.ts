@@ -54,9 +54,10 @@ export enum Event {
 export enum Error {
   ZeroAddress = "ZeroAddress",
   SameAddress = "SameAddress",
-  VestingNotStarted = "VestingNotStarted",
+  VestingDurationTooLong = "VestingDurationTooLong",
   StartTimeTooDistant = "StartTimeTooDistant",
   StartTimeInPast = "StartTimeInPast",
+  VestingNotStarted = "VestingNotStarted",
   AllocationExceeded = "AllocationExceeded",
   NothingToClaim = "NothingToClaim",
   NoFundsAdded = "NoFundsAdded",
