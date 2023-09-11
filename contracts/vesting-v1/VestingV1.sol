@@ -39,7 +39,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
 
     // --- Events ---
     event AmountSet(address indexed target, uint256 amount); // TODO(audit) - add old amount
-    event Activated(uint256 tokensTransferred);
+    event Activated();
     event Claimed(address indexed target, uint256 amount); // TODO(audit) - isClaimedByProject
     event EmergencyRelease(); // TODO(audit) - rename to past tense
     event EmergencyClaimed(address indexed target, uint256 amount, bool indexed isClaimedByProject);
@@ -118,12 +118,9 @@ contract VestingV1 is OwnerRole, ProjectRole {
 
         vestingStartTime = _vestingStartTime;
 
-        // TODO(audit) - remove delta capability and just transfer totalAmount (also applies to InsuredVesingV1)
-        //               add a test that ensures that recover would work in that case
-        uint256 delta = totalAmount - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalAmount);
-        PROJECT_TOKEN.safeTransferFrom(msg.sender, address(this), delta);
+        PROJECT_TOKEN.safeTransferFrom(msg.sender, address(this), totalAmount);
 
-        emit Activated(delta);
+        emit Activated();
     }
 
     // --- Emergency functions ---
