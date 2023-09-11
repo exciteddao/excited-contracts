@@ -55,9 +55,9 @@ export enum Error {
   ZeroAddress = "ZeroAddress",
   SameAddress = "SameAddress",
   VestingNotStarted = "VestingNotStarted",
-  StartTimeTooLate = "StartTimeTooLate",
-  StartTimeIsInPast = "StartTimeIsInPast",
-  AllowedAllocationExceeded = "AllowedAllocationExceeded",
+  StartTimeTooDistant = "StartTimeTooDistant",
+  StartTimeInPast = "StartTimeInPast",
+  AllocationExceeded = "AllocationExceeded",
   NothingToClaim = "NothingToClaim",
   NoFundsAdded = "NoFundsAdded",
   EmergencyReleased = "EmergencyReleased",
@@ -117,16 +117,16 @@ export async function addFundingFromUser1(amount = FUNDING_PER_USER) {
   await insuredVesting.methods.addFunds(await fundingToken.amount(amount)).send({ from: user1 });
 }
 
-export async function setAllowedAllocationForUser1(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.setAllowedAllocation(user1, await fundingToken.amount(amount)).send({ from: projectWallet });
+export async function setAllocationForUser1(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.setAllocation(user1, await fundingToken.amount(amount)).send({ from: projectWallet });
 }
 
 export async function addFundingFromUser2(amount = FUNDING_PER_USER) {
   await insuredVesting.methods.addFunds(await fundingToken.amount(amount)).send({ from: user2 });
 }
 
-export async function setAllowedAllocationForUser2(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.setAllowedAllocation(user2, await fundingToken.amount(amount)).send({ from: projectWallet });
+export async function setAllocationForUser2(amount = FUNDING_PER_USER) {
+  await insuredVesting.methods.setAllocation(user2, await fundingToken.amount(amount)).send({ from: projectWallet });
 }
 
 export const balances = {

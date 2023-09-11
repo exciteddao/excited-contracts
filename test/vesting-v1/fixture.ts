@@ -61,7 +61,7 @@ export enum Error {
   VestingNotStarted = "VestingNotStarted",
   AlreadyActivated = "AlreadyActivated",
   NothingToClaim = "NothingToClaim",
-  NoAllocationsAdded = "NoAllocationsAdded",
+  TotalAmountZero = "TotalAmountZero",
   OnlyProjectOrSender = "OnlyProjectOrSender",
   NotActivated = "NotActivated",
   EmergencyReleased = "EmergencyReleased",

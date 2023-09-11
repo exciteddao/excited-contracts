@@ -7,9 +7,9 @@ import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/ut
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 // when project calls activate, the contract will:
-// - transfer the necessary amount of project tokens required to cover all allocations
+// - transfer the necessary amount of project tokens required to cover user vestings
 // - set the vesting clock to start at the specified time (no more than 90 days in the future)
-// - lock allocations (project cannot add or update allocations anymore)
+// - lock amounts (project cannot add or update amounts anymore)
 contract VestingV1 is OwnerRole, ProjectRole {
     using SafeERC20 for IERC20;
 
@@ -24,7 +24,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
     bool public emergencyReleased = false;
 
     uint256 public vestingStartTime;
-    uint256 public totalAmountAllocated;
+    uint256 public totalAmount;
 
     struct UserVesting {
         uint256 amount;
@@ -47,7 +47,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
     error StartTimeInPast(uint256 vestingStartTime);
     error VestingNotStarted();
     error NothingToClaim();
-    error NoAllocationsAdded();
+    error TotalAmountZero();
     error OnlyProjectOrSender();
     error AlreadyActivated();
     error NotActivated();
@@ -92,9 +92,9 @@ contract VestingV1 is OwnerRole, ProjectRole {
         uint256 amount = userVestings[target].amount;
 
         if (newAmount > amount) {
-            totalAmountAllocated += (newAmount - amount);
+            totalAmount += (newAmount - amount);
         } else {
-            totalAmountAllocated -= (amount - newAmount);
+            totalAmount -= (amount - newAmount);
         }
 
         userVestings[target].amount = newAmount;
@@ -108,10 +108,10 @@ contract VestingV1 is OwnerRole, ProjectRole {
 
         if (_vestingStartTime < block.timestamp) revert StartTimeInPast(_vestingStartTime);
 
-        if (totalAmountAllocated == 0) revert NoAllocationsAdded();
+        if (totalAmount == 0) revert TotalAmountZero();
 
         vestingStartTime = _vestingStartTime;
-        uint256 delta = totalAmountAllocated - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalAmountAllocated);
+        uint256 delta = totalAmount - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalAmount);
         PROJECT_TOKEN.safeTransferFrom(msg.sender, address(this), delta);
 
         emit Activated(delta);
@@ -146,7 +146,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
 
         // Recover only project tokens that were sent by accident (tokens assigned to investors will NOT be recovered)
         if (tokenAddress == address(PROJECT_TOKEN)) {
-            tokenBalanceToRecover -= Math.min(totalAmountAllocated, tokenBalanceToRecover);
+            tokenBalanceToRecover -= Math.min(totalAmount, tokenBalanceToRecover);
         }
 
         IERC20(tokenAddress).safeTransfer(projectWallet, tokenBalanceToRecover);
