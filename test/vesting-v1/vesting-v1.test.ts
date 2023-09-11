@@ -317,7 +317,7 @@ describe("VestingV1", () => {
     describe("access control", () => {
       describe("only project", () => {
         it("can activate", async () => {
-          await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+          await projectToken.methods.approve(vesting.options.address, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
           const expectedInvalidUsers = [user1, deployer, anyUser];
 
           for (const invalidUser of expectedInvalidUsers) {
@@ -389,7 +389,7 @@ describe("VestingV1", () => {
     describe("set amount", () => {
       it("cannot set amount after activation", async () => {
         await setAmountForUser1();
-        await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await projectToken.methods.approve(vesting.options.address, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
         await vesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
         await expectRevert(async () => await setAmountForUser2(), Error.AlreadyActivated);
       });
@@ -479,20 +479,28 @@ describe("VestingV1", () => {
       expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
     });
 
-    it("does not transfer PROJECT_TOKEN if already funded sufficiently", async () => {
+    it("transfers the allocated amount of PROJECT_TOKEN even if already funded sufficiently, able to recover", async () => {
       await setAmountForUser1();
       await approveProjectTokenToVesting();
-      await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+
+      // excess
+      await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(12_345)).send({ from: projectWallet });
+
+      await projectToken.methods.approve(vesting.options.address, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
       const initialContractProjectTokenBalance = await projectToken.methods.balanceOf(vesting.options.address).call();
       await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
       const currentContractBalance = await projectToken.methods.balanceOf(vesting.options.address).call();
-      expect(initialContractProjectTokenBalance).to.be.bignumber.eq(currentContractBalance);
+      expect(BN(currentContractBalance).minus(initialContractProjectTokenBalance)).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
+
+      const initialProjectWalletBalance = await projectToken.methods.balanceOf(projectWallet).call();
+      await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
+      const currentProjectWalletBalance = await projectToken.methods.balanceOf(projectWallet).call();
+      expect(BN(currentProjectWalletBalance).minus(initialProjectWalletBalance)).to.be.bignumber.eq(await projectToken.amount(12_345));
     });
 
     it("transfers PROJECT_TOKEN required to back FUNDING_TOKEN funding (partially pre-funded)", async () => {
       await setAmountForUser1();
       await approveProjectTokenToVesting();
-      await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER / 4)).send({ from: projectWallet });
       await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
       const contractProjectTokenBalance = await projectToken.methods.balanceOf(vesting.options.address).call();
       expect(contractProjectTokenBalance).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
