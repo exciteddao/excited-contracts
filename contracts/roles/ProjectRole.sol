@@ -22,12 +22,13 @@ abstract contract ProjectRole is Context {
         _;
     }
 
-    function transferProjectRole(address newProjectWallet) public virtual onlyProject {
-        require(newProjectWallet != address(0), "ProjectRole: new project wallet is the zero address");
+    function transferProjectRole(address newProjectWallet) public onlyProject {
         _transferProjectRole(newProjectWallet);
     }
 
-    function _transferProjectRole(address newProjectWallet) internal virtual {
+    // TODO(audit) switch internal to private
+    function _transferProjectRole(address newProjectWallet) internal {
+        require(newProjectWallet != address(0), "ProjectRole: new project wallet is the zero address");
         address oldProjectWallet = projectWallet;
         projectWallet = newProjectWallet;
         emit ProjectRoleTransferred(oldProjectWallet, newProjectWallet);
