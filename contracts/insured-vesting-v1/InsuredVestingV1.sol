@@ -6,10 +6,10 @@ import {ProjectRole} from "../roles/ProjectRole.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-// this contract distributes a project's tokens to users proportionally over a specified period of time, such that tokens are vested
+// This contract distributes a project's tokens to users proportionally over a specified period of time, such that tokens are vested
 // based on the amount of funding token sent by the user, and the exchange rate as specified by PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE
 
-// roles:
+// Roles:
 // - owner: can accelerate (emergency release) vesting in case of a critical bug; can recover tokens and ether sent to the contract by mistake.
 //          this role is revocable
 // - project: can activate (initiate vesting); can set the allocation of funding token users can send to the contract; can claim on behalf of users

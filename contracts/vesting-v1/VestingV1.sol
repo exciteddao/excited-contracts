@@ -7,6 +7,7 @@ import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/ut
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 // This contract distributes a project's tokens to users proportionally over a specified period of time, such that tokens are vested.
+
 // Roles:
 // - owner: can accelerate (emergency release) vesting in case of a critical bug; can recover tokens and ether sent to the contract by mistake.
 //          this role is revocable
