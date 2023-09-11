@@ -6,6 +6,7 @@ import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 /**
  * @dev Taken from OpenZeppelin Contracts (access/Ownable.sol).
  * Represents the project owner entity of a given project.
+ * The `renounce` functionality has been removed to prevent accidental revoking.
  */
 abstract contract ProjectRole is Context {
     address public projectWallet;

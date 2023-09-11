@@ -1,3 +1,4 @@
 {
-  "editor.formatOnSave": true
+  "editor.formatOnSave": true,
+  "editor.fontFamily": "monospace, Menlo, Monaco, 'Courier New', monospace"
 }
