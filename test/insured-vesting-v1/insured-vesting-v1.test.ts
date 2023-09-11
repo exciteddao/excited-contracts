@@ -739,8 +739,7 @@ describe("InsuredVestingV1", () => {
         expect(await someOtherToken.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.zero;
       });
 
-      // TODO does retrieiving PROJECT_TOKEN work only based off allocations or do we have the option to cancel before vesting started.
-      it("recovers excess PROJECT_TOKEN (fully funded) ", async () => {
+      it("recovers excess PROJECT_TOKEN (overfunded) ", async () => {
         await insuredVesting.methods.setAllocation(user1, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
         await insuredVesting.methods.setAllocation(user2, await fundingToken.amount(FUNDING_PER_USER)).send({ from: projectWallet });
         await transferProjectTokenToVesting();
@@ -759,9 +758,7 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user2 });
         await projectToken.methods.transfer(insuredVesting.options.address, await projectToken.amount(100)).send({ from: projectWallet });
-        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
-        // Retains tokens in the contract, nothing to recover
-        expect(await projectToken.methods.balanceOf(insuredVesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(100));
+        await expectRevert(() => insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }), Error.NothingToClaim);
       });
 
       // TODO refactor balance deltas
@@ -805,24 +802,79 @@ describe("InsuredVestingV1", () => {
         );
       });
 
-      [
-        ["minimally overfunded", 1],
-        ["overfunded", FUNDING_PER_USER * 3],
-        ["exactly funded", 0],
-      ].forEach(([scenario, extraFundingToPass]) => {
-        it(`does not recover funded fundingToken (${scenario})`, async () => {
-          await setAllocationForUser1();
-          await setAllocationForUser2();
-          await addFundingFromUser1();
-          await addFundingFromUser2();
+      it(`does not recover funded fundingToken (overFunded)`, async () => {
+        await setAllocationForUser1();
+        await setAllocationForUser2();
+        await addFundingFromUser1();
+        await addFundingFromUser2();
 
-          await fundFundingTokenFromWhale(BN(extraFundingToPass), [insuredVesting.options.address]);
+        await fundFundingTokenFromWhale(BN(FUNDING_PER_USER * 3), [insuredVesting.options.address]);
 
-          await setBalancesForDelta();
-          await insuredVesting.methods.recoverToken(fundingToken.options.address).send({ from: deployer });
-          await expectProjectBalanceDelta("projectToken", 0);
-          await expectProjectBalanceDelta("fundingToken", await fundingToken.amount(extraFundingToPass));
-        });
+        await setBalancesForDelta();
+        await insuredVesting.methods.recoverToken(fundingToken.options.address).send({ from: deployer });
+        await expectProjectBalanceDelta("projectToken", 0);
+        await expectProjectBalanceDelta("fundingToken", await fundingToken.amount(FUNDING_PER_USER * 3));
+      });
+
+      it(`does not recover funded fundingToken (exactly funded)`, async () => {
+        await setAllocationForUser1();
+        await setAllocationForUser2();
+        await addFundingFromUser1();
+        await addFundingFromUser2();
+
+        await setBalancesForDelta();
+        await expectRevert(() => insuredVesting.methods.recoverToken(fundingToken.options.address).send({ from: deployer }), Error.NothingToClaim);
+      });
+
+      it("recovers with claim", async () => {
+        // Users fund
+        await setAllocationForUser1(FUNDING_PER_USER / 4);
+        await addFundingFromUser1(FUNDING_PER_USER / 4);
+        await setAllocationForUser2(FUNDING_PER_USER / 4);
+        await addFundingFromUser2(FUNDING_PER_USER / 4);
+        await approveProjectTokenToVesting();
+        await activateAndReachStartTime();
+
+        // quarter of vesting period passed and user1 claims, there are 0 tokens to recover
+        await advanceDays(VESTING_DURATION_DAYS / 4);
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
+        await setBalancesForDelta();
+        await expectRevert(() => insuredVesting.methods.recoverToken(fundingToken.options.address).send({ from: deployer }), Error.NothingToClaim);
+        await expectRevert(() => insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }), Error.NothingToClaim);
+        await expectProjectBalanceDelta("fundingToken", 0);
+
+        // excess tokens are transferred, we ensure that all are recovered
+        await fundFundingTokenFromWhale(BN(12_345), [insuredVesting.options.address]);
+        await setBalancesForDelta();
+        await insuredVesting.methods.recoverToken(fundingToken.options.address).send({ from: deployer });
+        await expectProjectBalanceDelta("fundingToken", await fundingToken.amount(12_345));
+
+        // excess project tokens are transferred, we ensure that all are recovered
+        await transferProjectTokenToVesting(12_345);
+        await setBalancesForDelta();
+        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
+        await expectProjectBalanceDelta("projectToken", await projectToken.amount(12_345));
+
+        // Remaining period passes, both users claim, nothing to recover
+        await advanceDays((VESTING_DURATION_DAYS * 3) / 4);
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
+        await insuredVesting.methods.claim(user2).send({ from: user2 });
+        await setBalancesForDelta();
+        await expectRevert(() => insuredVesting.methods.recoverToken(fundingToken.options.address).send({ from: deployer }), Error.NothingToClaim);
+        await expectRevert(() => insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }), Error.NothingToClaim);
+        await expectProjectBalanceDelta("fundingToken", 0);
+
+        // excess tokens are transferred, we ensure that all are recovered
+        await fundFundingTokenFromWhale(BN(12_345), [insuredVesting.options.address]);
+        await setBalancesForDelta();
+        await insuredVesting.methods.recoverToken(fundingToken.options.address).send({ from: deployer });
+        await expectProjectBalanceDelta("fundingToken", await fundingToken.amount(12_345));
+
+        // excess project tokens are transferred, we ensure that all are recovered
+        await transferProjectTokenToVesting(12_345);
+        await setBalancesForDelta();
+        await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
+        await expectProjectBalanceDelta("projectToken", await projectToken.amount(12_345));
       });
     });
 
@@ -920,10 +972,10 @@ describe("InsuredVestingV1", () => {
 
           const expectedInvalidUsers = [projectWallet, anyUser];
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(async () => insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: invalidUser }), OWNER_REVERT_MSG);
+            await expectRevert(async () => insuredVesting.methods.recoverToken(someOtherToken.options.address).send({ from: invalidUser }), OWNER_REVERT_MSG);
           }
 
-          await insuredVesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
+          await insuredVesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
         });
       });
     });
