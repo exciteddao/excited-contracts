@@ -624,12 +624,15 @@ describe("InsuredVestingV1", () => {
         );
       });
 
-      it("cannot regularly claim once emergency released", async () => {
+      it("can regularly claim even if emergency released", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
         await activateAndReachStartTime();
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
-        await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.EmergencyReleased);
+        await advanceDays(VESTING_DURATION_DAYS / 4);
+        await setBalancesForDelta();
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
+        await expectUserBalanceDelta("projectToken", await vestedAmount(VESTING_DURATION_DAYS / 4, "projectToken"));
       });
 
       it("cannot emergency claim twice", async () => {

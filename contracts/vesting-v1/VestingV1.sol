@@ -67,11 +67,6 @@ contract VestingV1 is OwnerRole, ProjectRole {
         _;
     }
 
-    modifier onlyIfNotEmergencyReleased() {
-        if (emergencyReleased) revert EmergencyReleased();
-        _;
-    }
-
     modifier onlyProjectOrSender(address target) {
         if (!(msg.sender == projectWallet || msg.sender == target)) revert OnlyProjectOrSender();
         _;
@@ -84,8 +79,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
     }
 
     // --- User only functions ---
-    // TODO(audit) - remove onlyIfNotEmergencyReleased
-    function claim(address user) external onlyProjectOrSender(user) onlyIfNotEmergencyReleased {
+    function claim(address user) external onlyProjectOrSender(user) {
         if (!isVestingStarted()) revert VestingNotStarted();
         uint256 claimable = claimableFor(user);
         if (claimable == 0) revert NothingToClaim();
@@ -129,8 +123,8 @@ contract VestingV1 is OwnerRole, ProjectRole {
 
     // --- Emergency functions ---
     // TODO(Audit) - ensure with legal/compliance we're ok without an emergency lever to release all tokens here
-    // TODO(audit) - remove onlyIfNotEmergencyReleased, this becomes idempotent (or inline)
-    function emergencyRelease() external onlyOwner onlyIfNotEmergencyReleased {
+    function emergencyRelease() external onlyOwner {
+        if (emergencyReleased) revert EmergencyReleased();
         // If not activated, the contract does not hold any tokens, so there's nothing to release
         if (!isActivated()) revert NotActivated();
 
