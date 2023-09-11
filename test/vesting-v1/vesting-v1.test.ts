@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import BN from "bignumber.js";
-import { expectRevert, setBalance } from "@defi.org/web3-candies/dist/hardhat";
+import { deployArtifact, expectRevert, setBalance } from "@defi.org/web3-candies/dist/hardhat";
 import {
   anyUser,
   user1,
@@ -26,6 +26,8 @@ import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { advanceDays, DAY, getCurrentTimestamp, MONTH } from "../utils";
 import { VESTING_DURATION_DAYS } from "../insured-vesting-v1/fixture";
 import { CALLER_NOT_OWNER_REVERT_MSG, OWNER_REVERT_MSG, PROJECT_ROLE_REVERT_MSG } from "../constants";
+import { config } from "../../deployment/vesting-v1";
+import { VestingV1 } from "../../typechain-hardhat/contracts/vesting-v1";
 
 describe("VestingV1", () => {
   before(async () => await setup());
@@ -634,6 +636,27 @@ describe("VestingV1", () => {
     it("returns 0 vested when not activated", async () => {
       await setAmountForUser1();
       expect(await vesting.methods.totalVestedFor(user1).call()).to.be.bignumber.eq(0);
+    });
+  });
+
+  describe("deployment", () => {
+    it("cannot set vesting duration to over 10 years", async () => {
+      // TODO TEMPORARY: until having production PROJECT_TOKEN address
+      const testConfig = [...config];
+      testConfig[0] = projectToken.options.address;
+      testConfig[2] = projectWallet;
+      // END TEMPORARY
+
+      const YEAR = 365 * DAY;
+      for (const duration of [YEAR * 11, YEAR * 100]) {
+        testConfig[1] = duration;
+        await expectRevert(() => deployArtifact<VestingV1>("VestingV1", { from: deployer }, testConfig), Error.VestingDurationTooLong);
+      }
+
+      for (const duration of [0, YEAR * 3, YEAR * 10, YEAR * 9]) {
+        testConfig[1] = duration;
+        await deployArtifact<VestingV1>("VestingV1", { from: deployer }, testConfig);
+      }
     });
   });
 });

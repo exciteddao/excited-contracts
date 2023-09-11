@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import BN from "bignumber.js";
 import { SnapshotRestorer, takeSnapshot } from "@nomicfoundation/hardhat-network-helpers";
-import { expectRevert, setBalance } from "@defi.org/web3-candies/dist/hardhat";
+import { deployArtifact, expectRevert, setBalance } from "@defi.org/web3-candies/dist/hardhat";
 import {
   FUNDING_PER_USER,
   LOCKUP_MONTHS,
@@ -42,6 +42,8 @@ import {
 import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { advanceDays, DAY, getCurrentTimestamp, advanceMonths, MONTH } from "../utils";
 import { CALLER_NOT_OWNER_REVERT_MSG, OWNER_REVERT_MSG, PROJECT_ROLE_REVERT_MSG } from "../constants";
+import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
+import { config } from "../../deployment/insured-vesting-v1/config";
 
 describe("InsuredVestingV1", () => {
   let snap: SnapshotRestorer;
@@ -1143,6 +1145,27 @@ describe("InsuredVestingV1", () => {
 
       await approveProjectTokenToVesting((FUNDING_PER_USER + FUNDING_PER_USER / 2) * FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO);
       await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
+    });
+  });
+
+  describe("deployment", () => {
+    it("cannot set vesting duration to over 10 years", async () => {
+      // TODO TEMPORARY: until having production project token address & project wallet address
+      const testConfig = [...config];
+      testConfig[1] = projectToken.options.address;
+      testConfig[2] = projectWallet;
+      // END TEMPORARY
+
+      const YEAR = 365 * DAY;
+      for (const duration of [YEAR * 11, YEAR * 100]) {
+        testConfig[4] = duration;
+        await expectRevert(() => deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig), Error.VestingDurationTooLong);
+      }
+
+      for (const duration of [0, YEAR * 3, YEAR * 10, YEAR * 9]) {
+        testConfig[4] = duration;
+        await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
+      }
     });
   });
 });

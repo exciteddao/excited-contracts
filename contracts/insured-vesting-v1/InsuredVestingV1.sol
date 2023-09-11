@@ -18,6 +18,8 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     // This is to prevent the project from locking up tokens for a long time in the future, mostly in case of human error
     uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
 
+    uint256 public constant MAX_VESTING_DURATION_SECONDS = 10 * 365 days;
+
     // An arbitrary precision number used for token rate calculations, including any decimal differences that may exist
     // between funding and project tokens:
     // 1e(FUNDING_TOKEN_DECIMALS) * PRECISION / 1e(PROJECT_TOKEN_DECIMALS) * strikePrice
@@ -64,6 +66,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     event Activated(uint256 startTime, uint256 projectTokenTransferredToContract);
 
     // --- Errors ---
+    error VestingDurationTooLong(uint256 vestingPeriodSeconds);
     error StartTimeTooDistant(uint256 vestingStartTime, uint256 maxStartTime);
     error StartTimeInPast(uint256 vestingStartTime);
     error ZeroAddress();
@@ -100,6 +103,8 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         uint256 _projectTokenToFundingTokenRate,
         uint256 _vestingDurationSeconds
     ) ProjectRole(_projectWallet) {
+        if (_vestingDurationSeconds > MAX_VESTING_DURATION_SECONDS) revert VestingDurationTooLong(_vestingDurationSeconds);
+
         FUNDING_TOKEN = IERC20(_fundingToken);
         PROJECT_TOKEN = IERC20(_projectToken);
 
