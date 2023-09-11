@@ -42,6 +42,7 @@ import {
 import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { advanceDays, DAY, getCurrentTimestamp, advanceMonths, MONTH } from "../utils";
 import { CALLER_NOT_OWNER_REVERT_MSG, OWNER_REVERT_MSG, PROJECT_ROLE_REVERT_MSG } from "../constants";
+import { VESTING_DURATION_DAYS } from "./fixture";
 
 describe("InsuredVestingV1", () => {
   let snap: SnapshotRestorer;
@@ -621,12 +622,15 @@ describe("InsuredVestingV1", () => {
         );
       });
 
-      it("cannot regularly claim once emergency released", async () => {
+      it("can regularly claim even if emergency released", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
         await activateAndReachStartTime();
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
-        await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.EmergencyReleased);
+        await advanceDays(VESTING_DURATION_DAYS / 4);
+        await setBalancesForDelta();
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
+        await expectUserBalanceDelta("projectToken", await vestedAmount(VESTING_DURATION_DAYS / 4, "projectToken"));
       });
 
       it("cannot emergency claim twice", async () => {

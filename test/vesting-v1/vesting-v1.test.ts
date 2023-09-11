@@ -610,12 +610,17 @@ describe("VestingV1", () => {
           await activateAndReachStartTime();
           await expectRevert(async () => vesting.methods.emergencyClaim(user1).send({ from: isProject ? projectWallet : user1 }), Error.EmergencyNotReleased);
         });
-        it("cannot regularly claim if emergency released", async () => {
+        it("can regularly claim even if emergency released", async () => {
           await setAmountForUser1();
           await approveProjectTokenToVesting();
           await activateAndReachStartTime();
+          await advanceDays(VESTING_DURATION_DAYS / 4);
           await vesting.methods.emergencyRelease().send({ from: deployer });
-          await expectRevert(async () => vesting.methods.claim(user1).send({ from: isProject ? projectWallet : user1 }), Error.EmergencyReleased);
+          await vesting.methods.claim(user1).send({ from: isProject ? projectWallet : user1 });
+          expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
+            (await projectToken.amount(TOKENS_PER_USER)).dividedBy(4),
+            await projectToken.amount(0.1)
+          );
         });
       });
     });

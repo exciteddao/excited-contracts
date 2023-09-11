@@ -89,7 +89,6 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     }
 
     modifier onlyIfNotEmergencyReleased() {
-        if (emergencyReleased) revert EmergencyReleased();
         _;
     }
 
@@ -118,7 +117,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         emit FundsAdded(msg.sender, amount);
     }
 
-    function claim(address target) external onlyProjectOrSender(target) onlyIfNotEmergencyReleased {
+    function claim(address target) external onlyProjectOrSender(target) {
         if (!isVestingStarted()) revert VestingNotStarted();
 
         UserVesting storage userStatus = userVestings[target];
