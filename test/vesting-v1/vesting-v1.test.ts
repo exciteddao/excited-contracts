@@ -253,9 +253,7 @@ describe("VestingV1", () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER / 4)).send({ from: projectWallet });
         await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER / 4));
-        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
-        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
-        expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER / 4));
+        await expectRevert(() => vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }), Error.NothingToClaim);
       });
 
       it("recovers correct amount of token not accounted for if part was claimed", async () => {
@@ -265,8 +263,8 @@ describe("VestingV1", () => {
         await advanceDays(VESTING_DURATION_DAYS / 4);
         await vesting.methods.claim(user1).send({ from: user1 });
         let startingBalance = await projectToken.methods.balanceOf(projectWallet).call();
-        // First recover, no excess tokens to be recoved
-        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
+        // First recover, no excess tokens to be recovered
+        await expectRevert(() => vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }), Error.NothingToClaim);
         expect(BN(await projectToken.methods.balanceOf(projectWallet).call()).minus(startingBalance)).to.be.bignumber.zero;
 
         // Transfer excess tokens and try to recover them
@@ -299,8 +297,7 @@ describe("VestingV1", () => {
       it("handles zero token balance gracefully", async () => {
         const startingBalance = await projectToken.methods.balanceOf(vesting.options.address).call();
         expect(startingBalance).to.be.bignumber.zero;
-        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
-        expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.zero;
+        await expectRevert(() => vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }), Error.NothingToClaim);
       });
 
       it("tries to recover project token when allocations are larger than project token balance", async () => {
@@ -369,10 +366,10 @@ describe("VestingV1", () => {
           const expectedInvalidUsers = [projectWallet, anyUser, user2];
 
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(async () => await vesting.methods.recoverToken(projectToken.options.address).send({ from: invalidUser }), OWNER_REVERT_MSG);
+            await expectRevert(async () => await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: invalidUser }), OWNER_REVERT_MSG);
           }
 
-          await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
+          await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
         });
 
         it("can emergency release", async () => {
