@@ -36,6 +36,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
 
     uint256 public vestingStartTime;
     uint256 public totalFundingTokenAmount; // todo better name this?
+    uint256 public totalFundingTokenClaimed;
 
     struct UserVesting {
         // FUNDING_TOKEN amount transferred to contract by user
@@ -129,6 +130,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
 
         if (claimableFundingToken == 0) revert NothingToClaim();
         userStatus.fundingTokenClaimed += claimableFundingToken;
+        totalFundingTokenClaimed += claimableFundingToken;
 
         if (!userStatus.shouldRefund) {
             PROJECT_TOKEN.safeTransfer(target, claimableProjectToken);
@@ -197,6 +199,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
 
         uint256 toClaim = userStatus.fundingTokenAmount - userStatus.fundingTokenClaimed;
         userStatus.fundingTokenClaimed += toClaim;
+        totalFundingTokenClaimed += toClaim;
         FUNDING_TOKEN.safeTransfer(target, toClaim);
 
         emit UserEmergencyClaimed(target, toClaim);
@@ -205,14 +208,17 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     function recoverToken(address tokenAddress) external onlyOwner {
         // Return any balance of the token that's not projectToken
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
-        // in case of PROJECT_TOKEN, we also need to retain the total locked amount in the contract
 
+        // in case of PROJECT_TOKEN, we also need to retain the total locked amount in the contract
         if (tokenAddress == address(PROJECT_TOKEN) && !emergencyReleased) {
-            tokenBalanceToRecover -= Math.min(fundingTokenToProjectToken(totalFundingTokenAmount), tokenBalanceToRecover);
+            uint256 projectTokensAccountedFor = fundingTokenToProjectToken(totalFundingTokenAmount - totalFundingTokenClaimed);
+            if (projectTokensAccountedFor >= tokenBalanceToRecover) revert NothingToClaim();
+            tokenBalanceToRecover -= projectTokensAccountedFor;
         }
 
         if (tokenAddress == address(FUNDING_TOKEN)) {
-            tokenBalanceToRecover -= Math.min(totalFundingTokenAmount, tokenBalanceToRecover);
+            if (totalFundingTokenAmount - totalFundingTokenClaimed >= tokenBalanceToRecover) revert NothingToClaim();
+            tokenBalanceToRecover -= totalFundingTokenAmount - totalFundingTokenClaimed;
         }
 
         IERC20(tokenAddress).safeTransfer(projectWallet, tokenBalanceToRecover);
