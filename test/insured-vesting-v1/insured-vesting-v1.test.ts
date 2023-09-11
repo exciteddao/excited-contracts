@@ -1078,7 +1078,7 @@ describe("InsuredVestingV1", () => {
       expect(contractProjectTokenBalance).to.be.bignumber.eq(requiredProjectToken);
     });
 
-    it("transfer allocated amount PROJECT_TOKEN even if already funded sufficiently", async () => {
+    it("transfers allocated amount PROJECT_TOKEN even if already funded sufficiently", async () => {
       await setAllocationForUser1(FUNDING_PER_USER);
       await addFundingFromUser1(FUNDING_PER_USER);
 
