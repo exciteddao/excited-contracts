@@ -221,8 +221,8 @@ describe("VestingV1", () => {
       it("does not recover ether if recovering token", async () => {
         expect(await web3().eth.getBalance(vesting.options.address)).to.bignumber.eq(0);
         await setBalance(vesting.options.address, BN(12345 * 1e18));
-        await projectToken.methods.transfer(vesting.options.address, BN(12345 * 1e18)).send({ from: projectWallet });
-        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
+        await someOtherToken.methods.transfer(vesting.options.address, BN(12345 * 1e18)).send({ from: deployer });
+        await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
         expect(await web3().eth.getBalance(vesting.options.address)).to.bignumber.closeTo(BN(12345 * 1e18), BN(0.1e18));
       });
 
@@ -256,13 +256,6 @@ describe("VestingV1", () => {
         await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER / 4));
-      });
-
-      it("handles zero token balance gracefully", async () => {
-        const startingBalance = await projectToken.methods.balanceOf(vesting.options.address).call();
-        expect(startingBalance).to.be.bignumber.zero;
-        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
-        expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.zero;
       });
 
       it("recovers correct amount of token not accounted for if part was claimed", async () => {
@@ -301,6 +294,13 @@ describe("VestingV1", () => {
         expect(BN(await projectToken.methods.balanceOf(projectWallet).call()).minus(startingBalance)).to.be.bignumber.eq(
           await projectToken.amount(TOKENS_PER_USER * 3)
         );
+      });
+
+      it("handles zero token balance gracefully", async () => {
+        const startingBalance = await projectToken.methods.balanceOf(vesting.options.address).call();
+        expect(startingBalance).to.be.bignumber.zero;
+        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
+        expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.zero;
       });
 
       it("tries to recover project token when allocations are larger than project token balance", async () => {
