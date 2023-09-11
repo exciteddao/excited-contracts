@@ -89,6 +89,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     }
 
     modifier onlyIfNotEmergencyReleased() {
+        if (emergencyReleased) revert EmergencyReleased();
         _;
     }
 
