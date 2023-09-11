@@ -473,7 +473,7 @@ describe("InsuredVestingV1", () => {
         await setAllocationForUser1();
         await addFundingFromUser1(FUNDING_PER_USER / 2);
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
-        await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), Error.EmergencyReleased);
+        await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), Error.EmergencyReleaseActive);
       });
 
       it("fails if user does not have enough balance", async () => {
@@ -582,7 +582,7 @@ describe("InsuredVestingV1", () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
-        await expectRevert(() => insuredVesting.methods.setAllocation(user1, 1).send({ from: projectWallet }), Error.EmergencyReleased);
+        await expectRevert(() => insuredVesting.methods.setAllocation(user1, 1).send({ from: projectWallet }), Error.EmergencyReleaseActive);
       });
     });
 
@@ -650,12 +650,12 @@ describe("InsuredVestingV1", () => {
       it("cannot emergency claim if owner hasn't released", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
-        await expectRevert(() => insuredVesting.methods.emergencyClaim(user1).send({ from: user1 }), Error.EmergencyNotReleased);
+        await expectRevert(() => insuredVesting.methods.emergencyClaim(user1).send({ from: user1 }), Error.NotEmergencyReleased);
       });
 
       it("cannot emergency release twice", async () => {
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
-        await expectRevert(() => insuredVesting.methods.emergencyRelease().send({ from: deployer }), Error.EmergencyReleased);
+        await expectRevert(() => insuredVesting.methods.emergencyRelease().send({ from: deployer }), Error.EmergencyReleaseActive);
       });
 
       it("recovers all remaining PROJECT_TOKEN balance if emergency released", async () => {

@@ -61,8 +61,8 @@ export enum Error {
   AllocationExceeded = "AllocationExceeded",
   NothingToClaim = "NothingToClaim",
   NoFundsAdded = "NoFundsAdded",
-  EmergencyReleased = "EmergencyReleased",
-  EmergencyNotReleased = "EmergencyNotReleased",
+  EmergencyReleaseActive = "EmergencyReleaseActive",
+  NotEmergencyReleased = "NotEmergencyReleased",
   OnlyProjectOrSender = "OnlyProjectOrSender",
   AlreadyActivated = "AlreadyActivated",
 }
