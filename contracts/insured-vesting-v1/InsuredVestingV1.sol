@@ -61,7 +61,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     event TokenRecovered(address indexed token, uint256 tokenAmount);
     event EtherRecovered(uint256 etherAmount);
     event ProjectWalletAddressChanged(address indexed oldAddress, address indexed newAddress);
-    event Activated(uint256 startTime, uint256 projectTokenTransferredToContract);
+    event Activated(uint256 startTime);
 
     // --- Errors ---
     error StartTimeTooDistant(uint256 vestingStartTime, uint256 maxStartTime);
@@ -177,11 +177,10 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         vestingStartTime = _vestingStartTime;
 
         uint256 totalRequiredProjectToken = fundingTokenToProjectToken(totalFundingTokenAmount);
-        uint256 delta = totalRequiredProjectToken - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalRequiredProjectToken);
 
-        PROJECT_TOKEN.safeTransferFrom(projectWallet, address(this), delta);
+        PROJECT_TOKEN.safeTransferFrom(projectWallet, address(this), totalRequiredProjectToken);
 
-        emit Activated(vestingStartTime, delta);
+        emit Activated(vestingStartTime);
     }
 
     // --- Emergency functions ---
