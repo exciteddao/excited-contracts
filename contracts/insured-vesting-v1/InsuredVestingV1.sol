@@ -2,39 +2,50 @@
 pragma solidity 0.8.19;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {ProjectRole} from "../ownable/ProjectRole.sol";
+import {ProjectRole} from "../roles/ProjectRole.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 // when project calls activate, the contract will:
 // - transfer the necessary amount of tokens required to cover all funded tokens
 // - set the vesting clock to start at the specified time (no more than 90 days in the future)
-// - lock the contract for any further allowed allocations settings
-// - lock the contract for any further fundings
+// - lock allocations (project cannot add or update allocations anymore)
+// - lock funding (users cannot send more funding tokens to the contract)
 contract InsuredVestingV1 is Ownable, ProjectRole {
     using SafeERC20 for IERC20;
 
+    // Protection mechanism for limiting the start time to a relatively close date in the future
+    // This is to prevent the project from locking up tokens for a long time in the future, mostly in case of a human error
     uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
+
+    // An arbitrary precision number used for token rate calculations, including any decimal differences that may exist
+    // between funding and project tokens:
+    //
+    // 1e(FUNDING_TOKEN_DECIMALS) * PRECISION / 1e(PROJECT_TOKEN_DECIMALS) * strikePrice
+    //
+    // For example, if each PROJECT TOKEN (18 decimals) costs 0.2 FUNDING TOKEN (6 decimals):
+    // e.g., PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE = 1e6 * 1e20 / 1e18 * 0.2 = 20_000_000
     uint256 public constant TOKEN_RATE_PRECISION = 1e20;
 
+    // Set in constructor
+    uint256 public immutable PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE;
     IERC20 public immutable FUNDING_TOKEN;
     IERC20 public immutable PROJECT_TOKEN;
-    uint256 public immutable PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE;
     uint256 public immutable VESTING_DURATION_SECONDS;
 
     bool public emergencyReleased = false;
 
     uint256 public vestingStartTime;
-    uint256 public totalFundingTokenFunded;
+    uint256 public totalFundingTokenFunded; // todo better name this?
 
     struct UserVesting {
-        // Actual FUNDING_TOKEN amount funded by user
-        uint256 fundingTokenFunded;
+        // FUNDING_TOKEN amount transferred to contract by user
+        uint256 fundingTokenFunded; // todo better name this?
         // Investment allocation, set by project
         uint256 fundingTokenAllocation;
-        // true - user will get FUNDING_TOKEN back, false - user will get PROJECT_TOKEN
+        // true - upon claiming, user will get FUNDING_TOKEN back, false - user will get PROJECT_TOKEN
         bool shouldRefund;
-        // Amount of FUNDING_TOKEN claimed by user (PROJECT_TOKEN is computed from that)
+        // Amount of FUNDING_TOKEN claimed by user (PROJECT_TOKEN is computed based on that)
         uint256 fundingTokenClaimed;
     }
 
@@ -94,7 +105,6 @@ contract InsuredVestingV1 is Ownable, ProjectRole {
         PROJECT_TOKEN = IERC20(_projectToken);
 
         VESTING_DURATION_SECONDS = _vestingDurationSeconds;
-        // how many Project tokens you get per each 1 Funding token
         PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE = _projectTokenToFundingTokenRate;
     }
 
@@ -146,7 +156,6 @@ contract InsuredVestingV1 is Ownable, ProjectRole {
     }
 
     // --- Project functions ---
-
     function setAllowedAllocation(address target, uint256 _fundingTokenAllocation) external onlyProject onlyBeforeActivation onlyIfNotEmergencyReleased {
         // Update user allocation
         userVestings[target].fundingTokenAllocation = _fundingTokenAllocation;
@@ -199,7 +208,7 @@ contract InsuredVestingV1 is Ownable, ProjectRole {
     function recoverToken(address tokenAddress) external onlyOwner {
         // Return any balance of the token that's not projectToken
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
-        // // in case of PROJECT_TOKEN, we also need to retain the total locked amount in the contract
+        // in case of PROJECT_TOKEN, we also need to retain the total locked amount in the contract
 
         if (tokenAddress == address(PROJECT_TOKEN) && !emergencyReleased) {
             tokenBalanceToRecover -= Math.min(fundingTokenToProjectToken(totalFundingTokenFunded), tokenBalanceToRecover);
