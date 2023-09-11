@@ -75,7 +75,6 @@ contract VestingV1 is OwnerRole, ProjectRole {
     }
 
     // --- User only functions ---
-    // TODO(audit) - remove onlyIfNotEmergencyReleased
     function claim(address user) external onlyProjectOrSender(user) {
         if (!isVestingStarted()) revert VestingNotStarted();
         uint256 claimable = claimableFor(user);
