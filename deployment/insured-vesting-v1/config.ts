@@ -20,7 +20,7 @@ export const _config: Config = {
   xctdAddress: zeroAddress,
   // TODO: replace with real address
   projectWalletAddress: zeroAddress,
-  // (1e6 * 1e20) / 1e18 * 0.2 = 20000000
+  // (1e6 * 1e20) / 1e18 * 0.2 = 20_000_000
   xctdToUsdcRate: BN(USDC_DECIMALS).multipliedBy(PRECISION).dividedBy(XCTD_DECIMALS).multipliedBy(STRIKE_PRICE).integerValue(),
   durationSeconds: 60 * 60 * 24 * 365 * 2,
 };

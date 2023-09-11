@@ -2,19 +2,22 @@
 pragma solidity 0.8.19;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {ProjectRole} from "../ownable/ProjectRole.sol";
+import {ProjectRole} from "../roles/ProjectRole.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 // when project calls activate, the contract will:
-// - transfer the necessary amount of tokens required to cover all allocations
+// - transfer the necessary amount of project tokens required to cover all allocations
 // - set the vesting clock to start at the specified time (no more than 90 days in the future)
-// - lock the contract for any further allocations
+// - lock allocations (project cannot add or update allocations anymore)
 contract VestingV1 is Ownable, ProjectRole {
     using SafeERC20 for IERC20;
 
+    // Protection mechanism for limiting the start time to a relatively close date in the future
+    // This is to prevent the project from locking up tokens for a long time in the future, mostly in case of a human error
     uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
 
+    // Set in constructor
     IERC20 public immutable PROJECT_TOKEN;
     uint256 public immutable VESTING_DURATION_SECONDS;
 
@@ -74,7 +77,6 @@ contract VestingV1 is Ownable, ProjectRole {
 
     // --- Investor functions ---
     function claim(address target) external onlyProjectOrSender(target) onlyIfNotEmergencyReleased {
-        // TODO ensure that we indeed want to apply this restriction (to enable vaults / auto-compounding)
         if (!isVestingStarted()) revert VestingNotStarted();
         uint256 claimable = claimableFor(target);
         if (claimable == 0) revert NothingToClaim();
@@ -86,24 +88,26 @@ contract VestingV1 is Ownable, ProjectRole {
     }
 
     // --- Project only functions ---
-    function setAmount(address target, uint256 amount) external onlyProject onlyBeforeActivation {
-        uint256 currentAmountForUser = userVestings[target].amount;
+    function setAmount(address target, uint256 newAmount) external onlyProject onlyBeforeActivation {
+        uint256 amount = userVestings[target].amount;
 
-        if (amount > currentAmountForUser) {
-            totalAllocated += (amount - currentAmountForUser);
+        if (newAmount > amount) {
+            totalAllocated += (newAmount - amount);
         } else {
-            totalAllocated -= (currentAmountForUser - amount);
+            totalAllocated -= (amount - newAmount);
         }
 
-        userVestings[target].amount = amount;
+        userVestings[target].amount = newAmount;
 
-        emit AmountSet(target, amount);
+        emit AmountSet(target, newAmount);
     }
 
     function activate(uint256 _vestingStartTime) external onlyProject onlyBeforeActivation {
         if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW))
             revert StartTimeTooLate(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
+
         if (_vestingStartTime < block.timestamp) revert StartTimeIsInPast(_vestingStartTime);
+
         if (totalAllocated == 0) revert NoAllocationsAdded();
 
         vestingStartTime = _vestingStartTime;
@@ -116,7 +120,9 @@ contract VestingV1 is Ownable, ProjectRole {
     // --- Emergency functions ---
     // TODO(Audit) - ensure with legal/compliance we're ok without an emergency lever to release all tokens here
     function emergencyRelease() external onlyOwner onlyIfNotEmergencyReleased {
+        // If not activated, the contract does not hold any tokens, so there's nothing to release
         if (vestingStartTime == 0) revert NotActivated();
+
         emergencyReleased = true;
         emit EmergencyRelease();
     }
@@ -126,7 +132,7 @@ contract VestingV1 is Ownable, ProjectRole {
         if (!emergencyReleased) revert EmergencyNotReleased();
         if (userStatus.amount == 0) revert NothingToClaim(); // TODO different error?
 
-        uint256 toClaim = userStatus.amount - userStatus.totalClaimed;
+        uint256 toClaim = userStatus.amount - userStatus.totalClaimed; // TODO if 0 , revert with error?
         userStatus.totalClaimed += toClaim;
         PROJECT_TOKEN.safeTransfer(target, toClaim);
 
