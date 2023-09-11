@@ -68,10 +68,6 @@ export enum Error {
   EmergencyNotReleased = "EmergencyNotReleased",
 }
 
-export async function transferProjectTokenToVesting() {
-  await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(PROJECT_TOKENS_ON_SALE)).send({ from: projectWallet });
-}
-
 export async function approveProjectTokenToVesting(amount = PROJECT_TOKENS_ON_SALE) {
   await projectToken.methods.approve(vesting.options.address, await projectToken.amount(amount)).send({ from: projectWallet });
 }
