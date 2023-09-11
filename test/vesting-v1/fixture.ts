@@ -64,8 +64,8 @@ export enum Error {
   TotalAmountZero = "TotalAmountZero",
   OnlyProjectOrSender = "OnlyProjectOrSender",
   NotActivated = "NotActivated",
-  EmergencyReleased = "EmergencyReleased",
-  EmergencyNotReleased = "EmergencyNotReleased",
+  EmergencyReleaseActive = "EmergencyReleaseActive",
+  NotEmergencyReleased = "NotEmergencyReleased",
 }
 
 export async function approveProjectTokenToVesting(amount = PROJECT_TOKENS_ON_SALE) {

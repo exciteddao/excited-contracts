@@ -42,7 +42,6 @@ import {
 import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { advanceDays, DAY, getCurrentTimestamp, advanceMonths, MONTH } from "../utils";
 import { CALLER_NOT_OWNER_REVERT_MSG, OWNER_REVERT_MSG, PROJECT_ROLE_REVERT_MSG } from "../constants";
-import { VESTING_DURATION_DAYS } from "./fixture";
 
 describe("InsuredVestingV1", () => {
   let snap: SnapshotRestorer;
@@ -471,7 +470,7 @@ describe("InsuredVestingV1", () => {
         await setAllocationForUser1();
         await addFundingFromUser1(FUNDING_PER_USER / 2);
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
-        await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), Error.EmergencyReleased);
+        await expectRevert(async () => insuredVesting.methods.addFunds(1).send({ from: user1 }), Error.EmergencyReleaseActive);
       });
 
       it("fails if user does not have enough balance", async () => {
@@ -580,7 +579,7 @@ describe("InsuredVestingV1", () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
-        await expectRevert(() => insuredVesting.methods.setAllocation(user1, 1).send({ from: projectWallet }), Error.EmergencyReleased);
+        await expectRevert(() => insuredVesting.methods.setAllocation(user1, 1).send({ from: projectWallet }), Error.EmergencyReleaseActive);
       });
     });
 
@@ -648,12 +647,12 @@ describe("InsuredVestingV1", () => {
       it("cannot emergency claim if owner hasn't released", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
-        await expectRevert(() => insuredVesting.methods.emergencyClaim(user1).send({ from: user1 }), Error.EmergencyNotReleased);
+        await expectRevert(() => insuredVesting.methods.emergencyClaim(user1).send({ from: user1 }), Error.NotEmergencyReleased);
       });
 
       it("cannot emergency release twice", async () => {
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
-        await expectRevert(() => insuredVesting.methods.emergencyRelease().send({ from: deployer }), Error.EmergencyReleased);
+        await expectRevert(() => insuredVesting.methods.emergencyRelease().send({ from: deployer }), Error.EmergencyReleaseActive);
       });
 
       it("recovers all remaining PROJECT_TOKEN balance if emergency released", async () => {

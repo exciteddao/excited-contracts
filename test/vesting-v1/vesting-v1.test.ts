@@ -528,7 +528,7 @@ describe("VestingV1", () => {
       await approveProjectTokenToVesting();
       await activateAndReachStartTime();
       await vesting.methods.emergencyRelease().send({ from: deployer });
-      await expectRevert(async () => vesting.methods.emergencyRelease().send({ from: deployer }), Error.EmergencyReleased);
+      await expectRevert(async () => vesting.methods.emergencyRelease().send({ from: deployer }), Error.EmergencyReleaseActive);
     });
 
     [
@@ -608,7 +608,7 @@ describe("VestingV1", () => {
           await setAmountForUser1();
           await approveProjectTokenToVesting();
           await activateAndReachStartTime();
-          await expectRevert(async () => vesting.methods.emergencyClaim(user1).send({ from: isProject ? projectWallet : user1 }), Error.EmergencyNotReleased);
+          await expectRevert(async () => vesting.methods.emergencyClaim(user1).send({ from: isProject ? projectWallet : user1 }), Error.NotEmergencyReleased);
         });
         it("can regularly claim even if emergency released", async () => {
           await setAmountForUser1();

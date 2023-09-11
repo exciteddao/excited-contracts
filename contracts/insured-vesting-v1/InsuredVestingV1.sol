@@ -6,6 +6,15 @@ import {ProjectRole} from "../roles/ProjectRole.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
+// this contract distributes a project's tokens to users proportionally over a specified period of time, such that tokens are vested
+// based on the amount of funding token sent by the user, and the exchange rate as specified by PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE
+
+// roles:
+// - owner: can accelerate (emergency release) vesting in case of a critical bug; can recover tokens and ether sent to the contract by mistake.
+//          this role is revocable
+// - project: can activate (initiate vesting); can set the allocation of funding token users can send to the contract; can claim on behalf of users
+// - user: can fund the contract according to allocation; can claim their tokens once the vesting period has started
+
 // when project calls activate, the contract will:
 // - transfer the necessary amount of tokens required to cover all funded tokens
 // - set the vesting clock to start at the specified time (no more than 90 days in the future)
@@ -53,10 +62,10 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     // --- Events ---
     event UserClaimed(address indexed target, uint256 fundingTokenAmount, uint256 projectTokenAmount);
     event UserEmergencyClaimed(address indexed target, uint256 fundingTokenAmount);
-    event ProjectClaimed(address indexed target, uint256 fundingTokenAmount, uint256 projectTokenAmount);
+    event ProjectClaimed(address indexed target, uint256 fundingTokenAmount, uint256 projectTokenAmount); // TODO note that this does not mean "initiated by project" in context of msg.sender
     event AllocationSet(address indexed target, uint256 amount);
     event FundsAdded(address indexed target, uint256 amount);
-    event EmergencyRelease();
+    event EmergencyReleased();
     event DecisionChanged(address indexed target, bool shouldRefund);
     event TokenRecovered(address indexed token, uint256 tokenAmount);
     event EtherRecovered(uint256 etherAmount);
@@ -74,8 +83,8 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     error OnlyProjectOrSender();
     error AlreadyActivated();
     error VestingNotStarted();
-    error EmergencyReleased();
-    error EmergencyNotReleased();
+    error EmergencyReleaseActive();
+    error NotEmergencyReleased();
 
     // --- Modifiers ---
     modifier onlyBeforeActivation() {
@@ -89,7 +98,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     }
 
     modifier onlyIfNotEmergencyReleased() {
-        if (emergencyReleased) revert EmergencyReleased();
+        if (emergencyReleased) revert EmergencyReleaseActive();
         _;
     }
 
@@ -188,12 +197,12 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     // Used to allow users to claim back FUNDING_TOKEN if anything goes wrong
     function emergencyRelease() external onlyOwner onlyIfNotEmergencyReleased {
         emergencyReleased = true;
-        emit EmergencyRelease();
+        emit EmergencyReleased();
     }
 
     function emergencyClaim(address target) external onlyProjectOrSender(target) {
         UserVesting storage userStatus = userVestings[target];
-        if (!emergencyReleased) revert EmergencyNotReleased();
+        if (!emergencyReleased) revert NotEmergencyReleased();
         if (userStatus.fundingTokenAmount == 0) revert NoFundsAdded();
 
         uint256 toClaim = userStatus.fundingTokenAmount - userStatus.fundingTokenClaimed;

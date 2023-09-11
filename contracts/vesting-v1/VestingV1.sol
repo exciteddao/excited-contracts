@@ -6,8 +6,12 @@ import {ProjectRole} from "../roles/ProjectRole.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-// TODO(audit) - add a a general comment on what the contract does
-// TODO(audit) - explain roles and their capabilities, which is revocable (also explain "user" role)
+// This contract distributes a project's tokens to users proportionally over a specified period of time, such that tokens are vested.
+// Roles:
+// - owner: can accelerate (emergency release) vesting in case of a critical bug; can recover tokens and ether sent to the contract by mistake.
+//          this role is revocable
+// - project: can activate (initiate vesting); can set the amount of tokens to be distributed to each user; can claim on behalf of users
+// - user: can claim their tokens once the vesting period has started
 
 // when project calls activate(), the contract will:
 // - transfer the necessary amount of project tokens required to cover user vestings, to fund itself
@@ -23,7 +27,8 @@ contract VestingV1 is OwnerRole, ProjectRole {
     IERC20 public immutable PROJECT_TOKEN;
     uint256 public immutable VESTING_DURATION_SECONDS;
 
-    // TODO(audit) - add comment explaining emergency release (make sure it says that users still get their tokens)
+    // When the contract is emergency released, users can claim all their unclaimed tokens immediately,
+    // (the project can also claim on behalf of users)
     bool public emergencyReleased = false;
 
     uint256 public vestingStartTime;
@@ -31,17 +36,17 @@ contract VestingV1 is OwnerRole, ProjectRole {
     uint256 public totalClaimed;
 
     struct UserVesting {
-        uint256 amount; // TODO(audit) explain this isn't remaining amount, but initial/etc.
+        uint256 amount; // total amount of tokens to be vested for the user
         uint256 claimed;
     }
 
     mapping(address => UserVesting) public userVestings;
 
     // --- Events ---
-    event AmountSet(address indexed target, uint256 amount); // TODO(audit) - add old amount
+    event AmountSet(address indexed target, uint256 newAmount, uint256 oldAmount);
     event Activated(uint256 tokensTransferred);
-    event Claimed(address indexed target, uint256 amount); // TODO(audit) - isClaimedByProject
-    event EmergencyRelease(); // TODO(audit) - rename to past tense
+    event Claimed(address indexed target, uint256 amount, bool isClaimedByProject);
+    event EmergencyReleased();
     event EmergencyClaimed(address indexed target, uint256 amount, bool indexed isClaimedByProject);
     event TokenRecovered(address indexed token, uint256 amount);
     event EtherRecovered(uint256 amount);
@@ -55,8 +60,8 @@ contract VestingV1 is OwnerRole, ProjectRole {
     error AlreadyActivated();
     error NothingToClaim();
     error TotalAmountZero();
-    error EmergencyReleased(); // TODO(audit) - rename (avoid conflict with event)
-    error EmergencyNotReleased(); // TODO(audit) - NotEmergencyReleased
+    error EmergencyReleaseActive();
+    error NotEmergencyReleased();
 
     // --- Modifiers ---
     modifier onlyBeforeActivation() {
@@ -84,7 +89,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
         totalClaimed += claimable;
         PROJECT_TOKEN.safeTransfer(user, claimable);
 
-        emit Claimed(user, claimable);
+        emit Claimed(user, claimable, msg.sender == projectWallet);
     }
 
     // --- Project only functions ---
@@ -99,7 +104,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
 
         userVestings[user].amount = newAmount;
 
-        emit AmountSet(user, newAmount);
+        emit AmountSet(user, newAmount, amount);
     }
 
     function activate(uint256 _vestingStartTime) external onlyProject onlyBeforeActivation {
@@ -123,16 +128,16 @@ contract VestingV1 is OwnerRole, ProjectRole {
     // --- Emergency functions ---
     // TODO(Audit) - ensure with legal/compliance we're ok without an emergency lever to release all tokens here
     function emergencyRelease() external onlyOwner {
-        if (emergencyReleased) revert EmergencyReleased();
+        if (emergencyReleased) revert EmergencyReleaseActive();
         // If not activated, the contract does not hold any tokens, so there's nothing to release
         if (!isActivated()) revert NotActivated();
 
         emergencyReleased = true;
-        emit EmergencyRelease();
+        emit EmergencyReleased();
     }
 
     function emergencyClaim(address user) external onlyProjectOrSender(user) {
-        if (!emergencyReleased) revert EmergencyNotReleased();
+        if (!emergencyReleased) revert NotEmergencyReleased();
 
         UserVesting storage userStatus = userVestings[user];
         uint256 claimable = userStatus.amount - userStatus.claimed;
