@@ -156,7 +156,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
 
         // Recover only project tokens that were sent by accident (tokens allocated to users will NOT be recovered)
         if (tokenAddress == address(PROJECT_TOKEN)) {
-            if (totalAmount - totalClaimed > tokenBalanceToRecover) revert NothingToClaim();
+            if (totalAmount - totalClaimed >= tokenBalanceToRecover) revert NothingToClaim();
             tokenBalanceToRecover -= totalAmount - totalClaimed;
         }
 

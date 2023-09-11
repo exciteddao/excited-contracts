@@ -308,6 +308,13 @@ describe("VestingV1", () => {
         await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER / 3)).send({ from: projectWallet });
         await expectRevert(() => vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }), Error.NothingToClaim);
       });
+
+      it("tries to recover project token when allocations are equal to projet token balance", async () => {
+        await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await approveProjectTokenToVesting(TOKENS_PER_USER);
+        await activateAndReachStartTime();
+        await expectRevert(() => vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }), Error.NothingToClaim);
+      });
     });
 
     describe("access control", () => {
