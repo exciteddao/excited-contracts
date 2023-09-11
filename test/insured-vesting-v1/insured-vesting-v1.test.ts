@@ -38,6 +38,7 @@ import {
   activateAndReachStartTime,
   getDefaultStartTime,
   differentProjectWallet,
+  fundingTokenToProjectToken,
 } from "./fixture";
 import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { advanceDays, DAY, getCurrentTimestamp, advanceMonths, MONTH } from "../utils";
@@ -1129,7 +1130,7 @@ describe("InsuredVestingV1", () => {
       expect(contractProjectTokenBalance).to.be.bignumber.eq(requiredProjectToken);
     });
 
-    it("does not transfer PROJECT_TOKEN if already funded sufficiently", async () => {
+    it("transfers allocated amount PROJECT_TOKEN even if already funded sufficiently", async () => {
       await setAllocationForUser1(FUNDING_PER_USER);
       await addFundingFromUser1(FUNDING_PER_USER);
 
@@ -1141,10 +1142,10 @@ describe("InsuredVestingV1", () => {
       await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
       const contractProjectTokenBalance = await projectToken.methods.balanceOf(insuredVesting.options.address).call();
 
-      expect(initialContractProjectTokenBalance).to.be.bignumber.eq(contractProjectTokenBalance);
+      expect(BN(contractProjectTokenBalance).minus(initialContractProjectTokenBalance)).to.be.bignumber.eq(fundingTokenToProjectToken(BN(FUNDING_PER_USER)));
     });
 
-    it("transfers PROJECT_TOKEN required to back FUNDING_TOKEN funding (partially pre-funded)", async () => {
+    it("transfers PROJECT_TOKEN required to cover FUNDING_TOKEN funding (partially pre-funded)", async () => {
       await setAllocationForUser1(FUNDING_PER_USER);
       await addFundingFromUser1(FUNDING_PER_USER);
 
@@ -1154,11 +1155,11 @@ describe("InsuredVestingV1", () => {
 
       await projectToken.methods.transfer(insuredVesting.options.address, await projectToken.amount(FUNDING_PER_USER / 3)).send({ from: projectWallet });
 
+      const initialProjectTokenBalance = await projectToken.methods.balanceOf(insuredVesting.options.address).call();
       await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
-
       const contractProjectTokenBalance = await projectToken.methods.balanceOf(insuredVesting.options.address).call();
 
-      expect(contractProjectTokenBalance).to.be.bignumber.eq(requiredProjectToken);
+      expect(BN(contractProjectTokenBalance).minus(initialProjectTokenBalance)).to.be.bignumber.eq(requiredProjectToken);
     });
 
     it("fails if already activated", async () => {
