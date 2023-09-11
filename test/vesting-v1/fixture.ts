@@ -56,12 +56,12 @@ export async function withFixture() {
 
 export enum Error {
   ZeroAddress = "ZeroAddress",
-  StartTimeTooLate = "StartTimeTooLate",
-  StartTimeIsInPast = "StartTimeIsInPast",
+  StartTimeTooDistant = "StartTimeTooDistant",
+  StartTimeInPast = "StartTimeInPast",
   VestingNotStarted = "VestingNotStarted",
   AlreadyActivated = "AlreadyActivated",
   NothingToClaim = "NothingToClaim",
-  NoAllocationsAdded = "NoAllocationsAdded",
+  TotalAmountZero = "TotalAmountZero",
   OnlyProjectOrSender = "OnlyProjectOrSender",
   NotActivated = "NotActivated",
   EmergencyReleased = "EmergencyReleased",

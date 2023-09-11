@@ -357,20 +357,20 @@ describe("VestingV1", () => {
 
       describe("per user and global amounts are accurate", () => {
         it("no users", async () => {
-          expect(await vesting.methods.totalAllocated().call()).to.be.bignumber.zero;
+          expect(await vesting.methods.totalAmount().call()).to.be.bignumber.zero;
         });
 
         it("single user", async () => {
           await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
           expect((await vesting.methods.userVestings(user1).call()).amount).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
-          expect(await vesting.methods.totalAllocated().call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
+          expect(await vesting.methods.totalAmount().call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
         });
 
         it("single user, amount updated to same amount as previously", async () => {
           await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
           await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
           expect((await vesting.methods.userVestings(user1).call()).amount).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
-          expect(await vesting.methods.totalAllocated().call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
+          expect(await vesting.methods.totalAmount().call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
         });
 
         it("multiple users", async () => {
@@ -378,7 +378,7 @@ describe("VestingV1", () => {
           await vesting.methods.setAmount(user2, await projectToken.amount(1_000)).send({ from: projectWallet });
           expect((await vesting.methods.userVestings(user1).call()).amount).to.be.bignumber.eq(await projectToken.amount(3_500));
           expect((await vesting.methods.userVestings(user2).call()).amount).to.be.bignumber.eq(await projectToken.amount(1_000));
-          expect(await vesting.methods.totalAllocated().call()).to.be.bignumber.eq(
+          expect(await vesting.methods.totalAmount().call()).to.be.bignumber.eq(
             await (await projectToken.amount(3_500)).plus(await projectToken.amount(1_000))
           );
         });
@@ -389,7 +389,7 @@ describe("VestingV1", () => {
           await vesting.methods.setAmount(user1, await projectToken.amount(3_000)).send({ from: projectWallet });
           expect((await vesting.methods.userVestings(user1).call()).amount).to.be.bignumber.eq(await projectToken.amount(3_000));
           expect((await vesting.methods.userVestings(user2).call()).amount).to.be.bignumber.eq(await projectToken.amount(10_000));
-          expect(await vesting.methods.totalAllocated().call()).to.be.bignumber.eq(await await projectToken.amount(13_000));
+          expect(await vesting.methods.totalAmount().call()).to.be.bignumber.eq(await await projectToken.amount(13_000));
         });
 
         it("multiple users, amount reduced to zero", async () => {
@@ -398,7 +398,7 @@ describe("VestingV1", () => {
           await vesting.methods.setAmount(user2, await projectToken.amount(0)).send({ from: projectWallet });
           expect((await vesting.methods.userVestings(user1).call()).amount).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
           expect((await vesting.methods.userVestings(user2).call()).amount).to.be.bignumber.eq(await projectToken.amount(0));
-          expect(await vesting.methods.totalAllocated().call()).to.be.bignumber.eq(await await projectToken.amount(TOKENS_PER_USER));
+          expect(await vesting.methods.totalAmount().call()).to.be.bignumber.eq(await await projectToken.amount(TOKENS_PER_USER));
         });
       });
     });
@@ -407,14 +407,14 @@ describe("VestingV1", () => {
   describe("activate", () => {
     it("fails if start time is in the past", async () => {
       const timeInPast = BN(await getCurrentTimestamp()).minus(1);
-      await expectRevert(async () => vesting.methods.activate(timeInPast).send({ from: projectWallet }), Error.StartTimeIsInPast);
+      await expectRevert(async () => vesting.methods.activate(timeInPast).send({ from: projectWallet }), Error.StartTimeInPast);
     });
 
     it("fails if start time is too far in to the future", async () => {
       const timeInDistantFuture = BN(await getCurrentTimestamp())
         .plus(MONTH * 3)
         .plus(DAY);
-      await expectRevert(async () => vesting.methods.activate(timeInDistantFuture).send({ from: projectWallet }), Error.StartTimeTooLate);
+      await expectRevert(async () => vesting.methods.activate(timeInDistantFuture).send({ from: projectWallet }), Error.StartTimeTooDistant);
     });
 
     it("fails if there isn't enough PROJECT_TOKEN allowance to cover total allocated", async () => {
@@ -467,7 +467,7 @@ describe("VestingV1", () => {
     });
 
     it("fails if no allocations added", async () => {
-      await expectRevert(async () => vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet }), Error.NoAllocationsAdded);
+      await expectRevert(async () => vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet }), Error.TotalAmountZero);
     });
 
     it("sets start time", async () => {
@@ -563,8 +563,7 @@ describe("VestingV1", () => {
           await vesting.methods.emergencyRelease().send({ from: deployer });
           await vesting.methods.emergencyClaim(user1).send({ from: isProject ? projectWallet : user1 });
           expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
-          await vesting.methods.emergencyClaim(user1).send({ from: isProject ? projectWallet : user1 });
-          expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
+          await expectRevert(() => vesting.methods.emergencyClaim(user1).send({ from: isProject ? projectWallet : user1 }), Error.NothingToClaim);
         });
         it("cannot emergency claim if not released", async () => {
           await setAmountForUser1();

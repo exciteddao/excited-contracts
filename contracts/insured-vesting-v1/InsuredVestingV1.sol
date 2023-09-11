@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Ownable as OwnerRole} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ProjectRole} from "../roles/ProjectRole.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -11,16 +11,15 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 // - set the vesting clock to start at the specified time (no more than 90 days in the future)
 // - lock allocations (project cannot add or update allocations anymore)
 // - lock funding (users cannot send more funding tokens to the contract)
-contract InsuredVestingV1 is Ownable, ProjectRole {
+contract InsuredVestingV1 is OwnerRole, ProjectRole {
     using SafeERC20 for IERC20;
 
     // Protection mechanism for limiting the start time to a relatively close date in the future
-    // This is to prevent the project from locking up tokens for a long time in the future, mostly in case of a human error
+    // This is to prevent the project from locking up tokens for a long time in the future, mostly in case of human error
     uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
 
     // An arbitrary precision number used for token rate calculations, including any decimal differences that may exist
     // between funding and project tokens:
-    //
     // 1e(FUNDING_TOKEN_DECIMALS) * PRECISION / 1e(PROJECT_TOKEN_DECIMALS) * strikePrice
     //
     // For example, if each PROJECT TOKEN (18 decimals) costs 0.2 FUNDING TOKEN (6 decimals):
@@ -28,25 +27,25 @@ contract InsuredVestingV1 is Ownable, ProjectRole {
     uint256 public constant TOKEN_RATE_PRECISION = 1e20;
 
     // Set in constructor
-    uint256 public immutable PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE;
     IERC20 public immutable FUNDING_TOKEN;
     IERC20 public immutable PROJECT_TOKEN;
+    uint256 public immutable PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE;
     uint256 public immutable VESTING_DURATION_SECONDS;
 
     bool public emergencyReleased = false;
 
     uint256 public vestingStartTime;
-    uint256 public totalFundingTokenFunded; // todo better name this?
+    uint256 public totalFundingTokenAmount; // todo better name this?
 
     struct UserVesting {
         // FUNDING_TOKEN amount transferred to contract by user
-        uint256 fundingTokenFunded; // todo better name this?
-        // Investment allocation, set by project
+        uint256 fundingTokenAmount;
+        // Upper bound of funding tokens that user is allowed to send
         uint256 fundingTokenAllocation;
-        // true - upon claiming, user will get FUNDING_TOKEN back, false - user will get PROJECT_TOKEN
-        bool shouldRefund;
         // Amount of FUNDING_TOKEN claimed by user (PROJECT_TOKEN is computed based on that)
         uint256 fundingTokenClaimed;
+        // true - upon claiming, user will get FUNDING_TOKEN back, false - user will get PROJECT_TOKEN
+        bool shouldRefund;
     }
 
     mapping(address => UserVesting) public userVestings;
@@ -55,7 +54,7 @@ contract InsuredVestingV1 is Ownable, ProjectRole {
     event UserClaimed(address indexed target, uint256 fundingTokenAmount, uint256 projectTokenAmount);
     event UserEmergencyClaimed(address indexed target, uint256 fundingTokenAmount);
     event ProjectClaimed(address indexed target, uint256 fundingTokenAmount, uint256 projectTokenAmount);
-    event AllowedAllocationSet(address indexed target, uint256 amount);
+    event AllocationSet(address indexed target, uint256 amount);
     event FundsAdded(address indexed target, uint256 amount);
     event EmergencyRelease();
     event DecisionChanged(address indexed target, bool shouldRefund);
@@ -65,18 +64,18 @@ contract InsuredVestingV1 is Ownable, ProjectRole {
     event Activated(uint256 startTime, uint256 projectTokenTransferredToContract);
 
     // --- Errors ---
+    error StartTimeTooDistant(uint256 vestingStartTime, uint256 maxStartTime);
+    error StartTimeInPast(uint256 vestingStartTime);
     error ZeroAddress();
     error SameAddress(address oldAddress, address newAddress);
-    error AlreadyActivated();
-    error VestingNotStarted();
-    error AllowedAllocationExceeded(uint256 amount);
+    error AllocationExceeded(uint256 amount);
     error NothingToClaim();
     error NoFundsAdded();
+    error OnlyProjectOrSender();
+    error AlreadyActivated();
+    error VestingNotStarted();
     error EmergencyReleased();
     error EmergencyNotReleased();
-    error OnlyProjectOrSender();
-    error StartTimeTooLate(uint256 vestingStartTime, uint256 maxStartTime);
-    error StartTimeIsInPast(uint256 vestingStartTime);
 
     // --- Modifiers ---
     modifier onlyBeforeActivation() {
@@ -110,10 +109,10 @@ contract InsuredVestingV1 is Ownable, ProjectRole {
 
     // --- User functions ---
     function addFunds(uint256 amount) external onlyBeforeActivation onlyIfNotEmergencyReleased {
-        if ((userVestings[msg.sender].fundingTokenAllocation - userVestings[msg.sender].fundingTokenFunded) < amount) revert AllowedAllocationExceeded(amount);
+        if ((userVestings[msg.sender].fundingTokenAllocation - userVestings[msg.sender].fundingTokenAmount) < amount) revert AllocationExceeded(amount);
 
-        userVestings[msg.sender].fundingTokenFunded += amount;
-        totalFundingTokenFunded += amount;
+        userVestings[msg.sender].fundingTokenAmount += amount;
+        totalFundingTokenAmount += amount;
         FUNDING_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
 
         emit FundsAdded(msg.sender, amount);
@@ -123,7 +122,7 @@ contract InsuredVestingV1 is Ownable, ProjectRole {
         if (!isVestingStarted()) revert VestingNotStarted();
 
         UserVesting storage userStatus = userVestings[target];
-        if (userStatus.fundingTokenFunded == 0) revert NoFundsAdded();
+        if (userStatus.fundingTokenAmount == 0) revert NoFundsAdded();
 
         uint256 claimableFundingToken = fundingTokenClaimableFor(target);
         uint256 claimableProjectToken = projectTokenClaimableFor(target);
@@ -131,7 +130,6 @@ contract InsuredVestingV1 is Ownable, ProjectRole {
         if (claimableFundingToken == 0) revert NothingToClaim();
         userStatus.fundingTokenClaimed += claimableFundingToken;
 
-        // TODO consider using ternary conditions for readability
         if (!userStatus.shouldRefund) {
             PROJECT_TOKEN.safeTransfer(target, claimableProjectToken);
             FUNDING_TOKEN.safeTransfer(projectWallet, claimableFundingToken);
@@ -148,7 +146,7 @@ contract InsuredVestingV1 is Ownable, ProjectRole {
     }
 
     function setDecision(bool _shouldRefund) external {
-        if (userVestings[msg.sender].fundingTokenFunded == 0) revert NoFundsAdded();
+        if (userVestings[msg.sender].fundingTokenAmount == 0) revert NoFundsAdded();
         if (userVestings[msg.sender].shouldRefund == _shouldRefund) return;
         userVestings[msg.sender].shouldRefund = _shouldRefund;
 
@@ -156,29 +154,29 @@ contract InsuredVestingV1 is Ownable, ProjectRole {
     }
 
     // --- Project functions ---
-    function setAllowedAllocation(address target, uint256 _fundingTokenAllocation) external onlyProject onlyBeforeActivation onlyIfNotEmergencyReleased {
+    function setAllocation(address target, uint256 _fundingTokenAllocation) external onlyProject onlyBeforeActivation onlyIfNotEmergencyReleased {
         // Update user allocation
         userVestings[target].fundingTokenAllocation = _fundingTokenAllocation;
 
         // Refund user if they have funded more than the new allocation
-        if (userVestings[target].fundingTokenFunded > _fundingTokenAllocation) {
-            uint256 _fundingTokenToRefund = userVestings[target].fundingTokenFunded - _fundingTokenAllocation;
-            userVestings[target].fundingTokenFunded = _fundingTokenAllocation;
-            totalFundingTokenFunded -= _fundingTokenToRefund;
+        if (userVestings[target].fundingTokenAmount > _fundingTokenAllocation) {
+            uint256 _fundingTokenToRefund = userVestings[target].fundingTokenAmount - _fundingTokenAllocation;
+            userVestings[target].fundingTokenAmount = _fundingTokenAllocation;
+            totalFundingTokenAmount -= _fundingTokenToRefund;
             FUNDING_TOKEN.safeTransfer(target, _fundingTokenToRefund);
         }
 
-        emit AllowedAllocationSet(target, _fundingTokenAllocation);
+        emit AllocationSet(target, _fundingTokenAllocation);
     }
 
     function activate(uint256 _vestingStartTime) external onlyProject onlyBeforeActivation {
         if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW))
-            revert StartTimeTooLate(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
-        if (_vestingStartTime < block.timestamp) revert StartTimeIsInPast(_vestingStartTime);
-        if (totalFundingTokenFunded == 0) revert NoFundsAdded();
+            revert StartTimeTooDistant(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
+        if (_vestingStartTime < block.timestamp) revert StartTimeInPast(_vestingStartTime);
+        if (totalFundingTokenAmount == 0) revert NoFundsAdded();
         vestingStartTime = _vestingStartTime;
 
-        uint256 totalRequiredProjectToken = fundingTokenToProjectToken(totalFundingTokenFunded);
+        uint256 totalRequiredProjectToken = fundingTokenToProjectToken(totalFundingTokenAmount);
         uint256 delta = totalRequiredProjectToken - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalRequiredProjectToken);
 
         PROJECT_TOKEN.safeTransferFrom(projectWallet, address(this), delta);
@@ -196,9 +194,9 @@ contract InsuredVestingV1 is Ownable, ProjectRole {
     function emergencyClaim(address target) external onlyProjectOrSender(target) {
         UserVesting storage userStatus = userVestings[target];
         if (!emergencyReleased) revert EmergencyNotReleased();
-        if (userStatus.fundingTokenFunded == 0) revert NoFundsAdded();
+        if (userStatus.fundingTokenAmount == 0) revert NoFundsAdded();
 
-        uint256 toClaim = userStatus.fundingTokenFunded - userStatus.fundingTokenClaimed;
+        uint256 toClaim = userStatus.fundingTokenAmount - userStatus.fundingTokenClaimed;
         userStatus.fundingTokenClaimed += toClaim;
         FUNDING_TOKEN.safeTransfer(target, toClaim);
 
@@ -211,11 +209,11 @@ contract InsuredVestingV1 is Ownable, ProjectRole {
         // in case of PROJECT_TOKEN, we also need to retain the total locked amount in the contract
 
         if (tokenAddress == address(PROJECT_TOKEN) && !emergencyReleased) {
-            tokenBalanceToRecover -= Math.min(fundingTokenToProjectToken(totalFundingTokenFunded), tokenBalanceToRecover);
+            tokenBalanceToRecover -= Math.min(fundingTokenToProjectToken(totalFundingTokenAmount), tokenBalanceToRecover);
         }
 
         if (tokenAddress == address(FUNDING_TOKEN)) {
-            tokenBalanceToRecover -= Math.min(totalFundingTokenFunded, tokenBalanceToRecover);
+            tokenBalanceToRecover -= Math.min(totalFundingTokenAmount, tokenBalanceToRecover);
         }
 
         IERC20(tokenAddress).safeTransfer(projectWallet, tokenBalanceToRecover);
@@ -247,7 +245,7 @@ contract InsuredVestingV1 is Ownable, ProjectRole {
         if (!isVestingStarted()) return 0;
 
         UserVesting storage targetStatus = userVestings[target];
-        return Math.min(targetStatus.fundingTokenFunded, ((block.timestamp - vestingStartTime) * targetStatus.fundingTokenFunded) / VESTING_DURATION_SECONDS);
+        return Math.min(targetStatus.fundingTokenAmount, ((block.timestamp - vestingStartTime) * targetStatus.fundingTokenAmount) / VESTING_DURATION_SECONDS);
     }
 
     function fundingTokenClaimableFor(address target) public view returns (uint256) {
