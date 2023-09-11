@@ -14,11 +14,9 @@ import {
   Error,
   VESTING_DURATION_SECONDS,
   approveProjectTokenToVesting,
-  transferProjectTokenToVesting,
   setAmountForUser1,
   setAmountForUser2,
   setup,
-  vestedAmount,
   getDefaultStartTime,
   activateAndReachStartTime,
   projectWallet,
@@ -34,17 +32,14 @@ describe("VestingV1", () => {
 
   beforeEach(async () => withFixture());
 
-  describe("with projectToken approved to contract", () => {
-    beforeEach(async () => {
-      transferProjectTokenToVesting();
-    });
-
+  describe("TEMP - to remove", () => {
     describe("claim", () => {
       const testCases = [0, 1, 5, 10, 100, 200, 534];
 
       for (const days of testCases) {
         it(`can claim tokens proportional to amount of seconds in ${days} days passed`, async () => {
           await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+          await approveProjectTokenToVesting(TOKENS_PER_USER);
           await activateAndReachStartTime();
           await advanceDays(days);
           await vesting.methods.claim(user1).send({ from: user1 });
@@ -58,6 +53,7 @@ describe("VestingV1", () => {
 
       it("does not vest before start time", async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await approveProjectTokenToVesting(TOKENS_PER_USER);
         await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
         await advanceDays(1);
         expect(await vesting.methods.totalVestedFor(user1).call()).to.be.bignumber.zero;
@@ -70,6 +66,7 @@ describe("VestingV1", () => {
 
       it("starts vesting if activated with current time stamp", async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await approveProjectTokenToVesting(TOKENS_PER_USER);
         await vesting.methods.activate(BN(await getCurrentTimestamp()).plus(1)).send({ from: projectWallet });
         await advanceDays(1);
         await vesting.methods.claim(user1).send({ from: user1 });
@@ -82,6 +79,7 @@ describe("VestingV1", () => {
 
       it(`can claim tokens for the entire period`, async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await approveProjectTokenToVesting(TOKENS_PER_USER);
         await activateAndReachStartTime();
         await advanceDays(VESTING_DURATION_SECONDS);
         await vesting.methods.claim(user1).send({ from: user1 });
@@ -94,6 +92,7 @@ describe("VestingV1", () => {
 
       it(`can claim tokens for the entire period, longer than vesting period has passed`, async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await approveProjectTokenToVesting(TOKENS_PER_USER);
         await activateAndReachStartTime();
         await advanceDays(VESTING_DURATION_SECONDS * 2);
         await vesting.methods.claim(user1).send({ from: user1 });
@@ -106,6 +105,7 @@ describe("VestingV1", () => {
 
       it("cannot double-claim tokens for same period of time", async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await approveProjectTokenToVesting(TOKENS_PER_USER);
         await activateAndReachStartTime();
         const daysToAdvance = 66;
         await advanceDays(daysToAdvance);
@@ -128,6 +128,7 @@ describe("VestingV1", () => {
 
       it("cannot claim tokens before starting period - activated", async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await approveProjectTokenToVesting(TOKENS_PER_USER);
         await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
         await expectRevert(() => vesting.methods.claim(user1).send({ from: user1 }), Error.VestingNotStarted);
         await advanceDays(1);
@@ -136,6 +137,7 @@ describe("VestingV1", () => {
 
       it("cannot claim if there's no eligibility", async () => {
         await vesting.methods.setAmount(user2, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await approveProjectTokenToVesting(TOKENS_PER_USER);
         await activateAndReachStartTime();
         await advanceDays(1);
         await expectRevert(() => vesting.methods.claim(user1).send({ from: user1 }), Error.NothingToClaim);
@@ -143,6 +145,7 @@ describe("VestingV1", () => {
 
       it("project can claim on behalf of user", async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await approveProjectTokenToVesting(TOKENS_PER_USER);
         await activateAndReachStartTime();
         await advanceDays(70);
         await vesting.methods.claim(user1).send({ from: projectWallet });
@@ -155,6 +158,7 @@ describe("VestingV1", () => {
 
       it("cannot claim if not user or project", async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await approveProjectTokenToVesting(TOKENS_PER_USER);
         await activateAndReachStartTime();
         await advanceDays(70);
         await expectRevert(() => vesting.methods.claim(user1).send({ from: anyUser }), Error.OnlyProjectOrSender);
@@ -177,6 +181,7 @@ describe("VestingV1", () => {
 
       it("project role permissions should be available to new project wallet address after role transfer", async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await approveProjectTokenToVesting(TOKENS_PER_USER);
         await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
         await vesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
         await advanceDays(10);
@@ -231,55 +236,88 @@ describe("VestingV1", () => {
       it("recovers excess projectToken, some allocations set", async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
         await vesting.methods.setAmount(user2, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER * 10)).send({ from: projectWallet });
         await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         // Recover all but the tokens allocated to users
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER * 2));
       });
 
       it("recovers excess projectToken, no allocations set", async () => {
+        await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER * 10)).send({ from: projectWallet });
         await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(0));
       });
 
       it("recovers excess projectToken, recovery called multiple times is idempotent", async () => {
+        await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER * 10)).send({ from: projectWallet });
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER / 4)).send({ from: projectWallet });
         await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER / 4));
-        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
-        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
-        expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER / 4));
+        await expectRevert(() => vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }), Error.NothingToClaim);
       });
 
-      it("can still recover excess funds after some already claimed", async () => {
+      it("recovers correct amount of token not accounted for if part was claimed", async () => {
         await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await approveProjectTokenToVesting(TOKENS_PER_USER);
         await activateAndReachStartTime();
-
-        advanceDays(30);
-
-        const currentUserBalance = BN(await projectToken.methods.balanceOf(user1).call());
-
+        await advanceDays(VESTING_DURATION_DAYS / 4);
         await vesting.methods.claim(user1).send({ from: user1 });
+        let startingBalance = await projectToken.methods.balanceOf(projectWallet).call();
+        // First recover, no excess tokens to be recovered
+        await expectRevert(() => vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }), Error.NothingToClaim);
+        expect(BN(await projectToken.methods.balanceOf(projectWallet).call()).minus(startingBalance)).to.be.bignumber.zero;
 
-        expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
-          currentUserBalance.plus(await vestedAmount(30)),
-          await projectToken.amount(0.1)
-        );
-
+        // Transfer excess tokens and try to recover them
+        await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER * 3)).send({ from: projectWallet });
+        startingBalance = await projectToken.methods.balanceOf(projectWallet).call();
         await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
-        expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
+        expect(BN(await projectToken.methods.balanceOf(projectWallet).call()).minus(startingBalance)).to.be.bignumber.eq(
+          await projectToken.amount(TOKENS_PER_USER * 3)
+        );
+      });
+
+      it("recovers correct amount of token not accounted for if all was claimed", async () => {
+        await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await vesting.methods.setAmount(user2, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await approveProjectTokenToVesting(TOKENS_PER_USER * 2);
+        await activateAndReachStartTime();
+        await advanceDays(VESTING_DURATION_DAYS * 1.5); // Pass entire vesting period
+        await vesting.methods.claim(user1).send({ from: user1 });
+        await vesting.methods.claim(user2).send({ from: user2 });
+
+        // Transfer excess tokens and try to recover them
+        await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER * 3)).send({ from: projectWallet });
+        let startingBalance = await projectToken.methods.balanceOf(projectWallet).call();
+        await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
+        expect(BN(await projectToken.methods.balanceOf(projectWallet).call()).minus(startingBalance)).to.be.bignumber.eq(
+          await projectToken.amount(TOKENS_PER_USER * 3)
+        );
       });
 
       it("handles zero token balance gracefully", async () => {
-        const startingBalance = await someOtherToken.methods.balanceOf(vesting.options.address).call();
+        const startingBalance = await projectToken.methods.balanceOf(vesting.options.address).call();
         expect(startingBalance).to.be.bignumber.zero;
-        await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
-        expect(await someOtherToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.zero;
+        await expectRevert(() => vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }), Error.NothingToClaim);
+      });
+
+      it("tries to recover project token when allocations are larger than project token balance", async () => {
+        await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER / 3)).send({ from: projectWallet });
+        await expectRevert(() => vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }), Error.NothingToClaim);
+      });
+
+      it("tries to recover project token when allocations are equal to projet token balance", async () => {
+        await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await approveProjectTokenToVesting(TOKENS_PER_USER);
+        await activateAndReachStartTime();
+        await expectRevert(() => vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer }), Error.NothingToClaim);
       });
     });
 
     describe("access control", () => {
       describe("only project", () => {
         it("can activate", async () => {
+          await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
           const expectedInvalidUsers = [user1, deployer, anyUser];
 
           for (const invalidUser of expectedInvalidUsers) {
@@ -328,10 +366,10 @@ describe("VestingV1", () => {
           const expectedInvalidUsers = [projectWallet, anyUser, user2];
 
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(async () => await vesting.methods.recoverToken(projectToken.options.address).send({ from: invalidUser }), OWNER_REVERT_MSG);
+            await expectRevert(async () => await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: invalidUser }), OWNER_REVERT_MSG);
           }
 
-          await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
+          await vesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
         });
 
         it("can emergency release", async () => {
@@ -351,6 +389,7 @@ describe("VestingV1", () => {
     describe("set amount", () => {
       it("cannot set amount after activation", async () => {
         await setAmountForUser1();
+        await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
         await vesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
         await expectRevert(async () => await setAmountForUser2(), Error.AlreadyActivated);
       });

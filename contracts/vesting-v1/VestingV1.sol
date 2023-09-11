@@ -28,6 +28,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
 
     uint256 public vestingStartTime;
     uint256 public totalAmount;
+    uint256 public totalClaimed;
 
     struct UserVesting {
         uint256 amount; // TODO(audit) explain this isn't remaining amount, but initial/etc.
@@ -86,6 +87,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
         if (claimable == 0) revert NothingToClaim();
 
         userVestings[user].claimed += claimable;
+        totalClaimed += claimable;
         PROJECT_TOKEN.safeTransfer(user, claimable);
 
         emit Claimed(user, claimable);
@@ -143,6 +145,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
         if (claimable == 0) revert NothingToClaim();
 
         userStatus.claimed += claimable;
+        totalClaimed += claimable;
         PROJECT_TOKEN.safeTransfer(user, claimable);
 
         emit EmergencyClaimed(user, claimable, msg.sender == projectWallet);
@@ -151,12 +154,10 @@ contract VestingV1 is OwnerRole, ProjectRole {
     function recoverToken(address tokenAddress) external onlyOwner {
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
 
-        // Recover only project tokens that were sent by accident (tokens assigned to investors will NOT be recovered)
+        // Recover only project tokens that were sent by accident (tokens allocated to users will NOT be recovered)
         if (tokenAddress == address(PROJECT_TOKEN)) {
-            // TODO(audit) - take totalClaimed into account (should be "totalAmount - totalClaimed")
-            // TODO(audit) - add a failing test (also on InsuredVestingV1)
-            // TODO(audit) - if (totalAmount-totalClaimed) > tokenBalanceToRecover, revert("nothing to recover"), lose the Math.min()
-            tokenBalanceToRecover -= Math.min(totalAmount, tokenBalanceToRecover);
+            if (totalAmount - totalClaimed >= tokenBalanceToRecover) revert NothingToClaim();
+            tokenBalanceToRecover -= totalAmount - totalClaimed;
         }
 
         IERC20(tokenAddress).safeTransfer(projectWallet, tokenBalanceToRecover);
