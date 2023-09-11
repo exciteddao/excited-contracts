@@ -19,6 +19,8 @@ contract VestingV1 is OwnerRole, ProjectRole {
     // Prevent project from locking up tokens for a long time in the future, mostly in case of human error
     uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
 
+    uint256 public constant MAX_VESTING_DURATION_SECONDS = 10 * 365 days;
+
     // Set in constructor
     IERC20 public immutable PROJECT_TOKEN;
     uint256 public immutable VESTING_DURATION_SECONDS;
@@ -39,7 +41,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
 
     // --- Events ---
     event AmountSet(address indexed target, uint256 amount); // TODO(audit) - add old amount
-    event Activated(uint256 tokensTransferred);
+    event Activated();
     event Claimed(address indexed target, uint256 amount); // TODO(audit) - isClaimedByProject
     event EmergencyRelease(); // TODO(audit) - rename to past tense
     event EmergencyClaimed(address indexed target, uint256 amount, bool indexed isClaimedByProject);
@@ -47,6 +49,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
     event EtherRecovered(uint256 amount);
 
     // --- Errors ---
+    error VestingDurationTooLong(uint256 vestingPeriodSeconds);
     error StartTimeTooDistant(uint256 vestingStartTime, uint256 maxStartTime);
     error StartTimeInPast(uint256 vestingStartTime);
     error OnlyProjectOrSender();
@@ -70,6 +73,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
     }
 
     constructor(address _projectToken, uint256 _vestingDurationSeconds, address _projectWallet) ProjectRole(_projectWallet) {
+        if (_vestingDurationSeconds > MAX_VESTING_DURATION_SECONDS) revert VestingDurationTooLong(_vestingDurationSeconds);
         PROJECT_TOKEN = IERC20(_projectToken);
         VESTING_DURATION_SECONDS = _vestingDurationSeconds; // TODO(audit) reconsider check no more than 10yrs
     }
@@ -112,12 +116,9 @@ contract VestingV1 is OwnerRole, ProjectRole {
 
         vestingStartTime = _vestingStartTime;
 
-        // TODO(audit) - remove delta capability and just transfer totalAmount (also applies to InsuredVesingV1)
-        //               add a test that ensures that recover would work in that case
-        uint256 delta = totalAmount - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalAmount);
-        PROJECT_TOKEN.safeTransferFrom(msg.sender, address(this), delta);
+        PROJECT_TOKEN.safeTransferFrom(msg.sender, address(this), totalAmount);
 
-        emit Activated(delta);
+        emit Activated();
     }
 
     // --- Emergency functions ---

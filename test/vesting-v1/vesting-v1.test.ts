@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import BN from "bignumber.js";
-import { expectRevert, setBalance } from "@defi.org/web3-candies/dist/hardhat";
+import { deployArtifact, expectRevert, setBalance } from "@defi.org/web3-candies/dist/hardhat";
 import {
   anyUser,
   user1,
@@ -26,6 +26,8 @@ import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { advanceDays, DAY, getCurrentTimestamp, MONTH } from "../utils";
 import { VESTING_DURATION_DAYS } from "../insured-vesting-v1/fixture";
 import { CALLER_NOT_OWNER_REVERT_MSG, OWNER_REVERT_MSG, PROJECT_ROLE_REVERT_MSG } from "../constants";
+import { config } from "../../deployment/vesting-v1";
+import { VestingV1 } from "../../typechain-hardhat/contracts/vesting-v1";
 
 describe("VestingV1", () => {
   before(async () => await setup());
@@ -317,7 +319,7 @@ describe("VestingV1", () => {
     describe("access control", () => {
       describe("only project", () => {
         it("can activate", async () => {
-          await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+          await projectToken.methods.approve(vesting.options.address, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
           const expectedInvalidUsers = [user1, deployer, anyUser];
 
           for (const invalidUser of expectedInvalidUsers) {
@@ -389,7 +391,7 @@ describe("VestingV1", () => {
     describe("set amount", () => {
       it("cannot set amount after activation", async () => {
         await setAmountForUser1();
-        await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+        await projectToken.methods.approve(vesting.options.address, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
         await vesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
         await expectRevert(async () => await setAmountForUser2(), Error.AlreadyActivated);
       });
@@ -479,20 +481,28 @@ describe("VestingV1", () => {
       expect(await projectToken.methods.balanceOf(vesting.options.address).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
     });
 
-    it("does not transfer PROJECT_TOKEN if already funded sufficiently", async () => {
+    it("transfers the allocated amount of PROJECT_TOKEN even if already funded sufficiently, able to recover", async () => {
       await setAmountForUser1();
       await approveProjectTokenToVesting();
-      await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
+
+      // excess
+      await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(12_345)).send({ from: projectWallet });
+
+      await projectToken.methods.approve(vesting.options.address, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
       const initialContractProjectTokenBalance = await projectToken.methods.balanceOf(vesting.options.address).call();
       await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
       const currentContractBalance = await projectToken.methods.balanceOf(vesting.options.address).call();
-      expect(initialContractProjectTokenBalance).to.be.bignumber.eq(currentContractBalance);
+      expect(BN(currentContractBalance).minus(initialContractProjectTokenBalance)).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
+
+      const initialProjectWalletBalance = await projectToken.methods.balanceOf(projectWallet).call();
+      await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
+      const currentProjectWalletBalance = await projectToken.methods.balanceOf(projectWallet).call();
+      expect(BN(currentProjectWalletBalance).minus(initialProjectWalletBalance)).to.be.bignumber.eq(await projectToken.amount(12_345));
     });
 
     it("transfers PROJECT_TOKEN required to back FUNDING_TOKEN funding (partially pre-funded)", async () => {
       await setAmountForUser1();
       await approveProjectTokenToVesting();
-      await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER / 4)).send({ from: projectWallet });
       await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
       const contractProjectTokenBalance = await projectToken.methods.balanceOf(vesting.options.address).call();
       expect(contractProjectTokenBalance).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
@@ -639,6 +649,27 @@ describe("VestingV1", () => {
     it("returns 0 vested when not activated", async () => {
       await setAmountForUser1();
       expect(await vesting.methods.totalVestedFor(user1).call()).to.be.bignumber.eq(0);
+    });
+  });
+
+  describe("deployment", () => {
+    it("cannot set vesting duration to over 10 years", async () => {
+      // TODO TEMPORARY: until having production PROJECT_TOKEN address
+      const testConfig = [...config];
+      testConfig[0] = projectToken.options.address;
+      testConfig[2] = projectWallet;
+      // END TEMPORARY
+
+      const YEAR = 365 * DAY;
+      for (const duration of [YEAR * 11, YEAR * 100]) {
+        testConfig[1] = duration;
+        await expectRevert(() => deployArtifact<VestingV1>("VestingV1", { from: deployer }, testConfig), Error.VestingDurationTooLong);
+      }
+
+      for (const duration of [0, YEAR * 3, YEAR * 10, YEAR * 9]) {
+        testConfig[1] = duration;
+        await deployArtifact<VestingV1>("VestingV1", { from: deployer }, testConfig);
+      }
     });
   });
 });
