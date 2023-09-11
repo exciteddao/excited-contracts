@@ -17,7 +17,6 @@ import {
   setAmountForUser1,
   setAmountForUser2,
   setup,
-  vestedAmount,
   getDefaultStartTime,
   activateAndReachStartTime,
   projectWallet,
@@ -27,9 +26,8 @@ import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { advanceDays, DAY, getCurrentTimestamp, MONTH } from "../utils";
 import { VESTING_DURATION_DAYS } from "../insured-vesting-v1/fixture";
 import { CALLER_NOT_OWNER_REVERT_MSG, OWNER_REVERT_MSG, PROJECT_ROLE_REVERT_MSG } from "../constants";
-import { someOtherToken } from "./fixture";
 
-describe.only("VestingV1", () => {
+describe("VestingV1", () => {
   before(async () => await setup());
 
   beforeEach(async () => withFixture());
