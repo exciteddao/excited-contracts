@@ -9,15 +9,15 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 // This contract distributes a project's tokens to users proportionally over a specified period of time, such that tokens are vested.
 
 // Roles:
-// - owner: can accelerate (emergency release) vesting in case of a critical bug; can help the project recover tokens (including overfunded project tokens) and ether sent to the contract by mistake.
-//          this role is revocable
-// - project: can set the amount of tokens to be distributed to each user; can activate (initiate vesting); can claim on behalf of users
-// - user: can claim their vested tokens, once the vesting period has started
+// - Owner: Can accelerate (emergency release) vesting in case of a critical bug; can help the project recover tokens (including overfunded project tokens) and ether sent to the contract by mistake.
+//          this role is revocable.
+// - Project: Can set the amount of tokens to be distributed to each user; can activate (initiate vesting); can claim on behalf of users (users still get their tokens in this case).
+// - User: can claim their vested tokens, once the vesting period has started.
 
-// when project calls activate(), the contract will:
-// - transfer the necessary amount of project tokens required to cover user vestings, to fund itself
-// - set the vesting clock to start at the specified time (but no more than 90 days in the future)
-// - lock amounts (project cannot add or update token vesting amounts for users anymore)
+// When project calls activate(), the contract will:
+// - Transfer the necessary amount of project tokens required to cover user vestings, to fund itself.
+// - Set the vesting clock to start at the specified time (but no more than 90 days in the future).
+// - Lock amounts (project cannot add or update token vesting amounts for users anymore).
 contract VestingV1 is OwnerRole, ProjectRole {
     using SafeERC20 for IERC20;
 
@@ -31,7 +31,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
     uint256 public immutable VESTING_DURATION_SECONDS;
 
     // When the contract is emergency released, users can claim all their unclaimed tokens immediately,
-    // (the project can also claim on behalf of users)
+    // (the project can also claim on behalf of users. users still get their tokens in this case)
     bool public isEmergencyReleased = false;
 
     uint256 public vestingStartTime;
