@@ -15,7 +15,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 // - project: can activate (initiate vesting); can set the allocation of funding token users can send to the contract; can claim on behalf of users
 // - user: can fund the contract according to allocation; can claim their tokens once the vesting period has started
 
-// when project calls activate, the contract will:
+// when project calls activate(), the contract will:
 // - transfer the necessary amount of tokens required to cover all funded tokens
 // - set the vesting clock to start at the specified time (no more than 90 days in the future)
 // - lock allocations (project cannot add or update allocations anymore)
@@ -49,12 +49,14 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     uint256 public totalFundingTokenAmount; // todo better name this?
     uint256 public totalFundingTokenClaimed;
 
+    // All variables are based on the FUNDING_TOKEN
+    // PROJECT_TOKEN calculations are done by multipling these variables, using the PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE
     struct UserVesting {
         // FUNDING_TOKEN amount transferred to contract by user
         uint256 fundingTokenAmount;
-        // Upper bound of funding tokens that user is allowed to send
+        // Upper bound of FUNDING_TOKEN that user is allowed to send
         uint256 fundingTokenAllocation;
-        // Amount of FUNDING_TOKEN claimed by user (PROJECT_TOKEN is computed based on that)
+        // Amount of FUNDING_TOKEN claimed by user
         uint256 fundingTokenClaimed;
         // true - upon claiming, user will get FUNDING_TOKEN back, false - user will get PROJECT_TOKEN
         bool shouldRefund;
@@ -63,17 +65,17 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     mapping(address => UserVesting) public userVestings;
 
     // --- Events ---
-    event UserClaimed(address indexed target, uint256 fundingTokenAmount, uint256 projectTokenAmount);
-    event UserEmergencyClaimed(address indexed target, uint256 fundingTokenAmount);
-    event ProjectClaimed(address indexed target, uint256 fundingTokenAmount, uint256 projectTokenAmount); // TODO note that this does not mean "initiated by project" in context of msg.sender
-    event AllocationSet(address indexed target, uint256 amount);
-    event FundsAdded(address indexed target, uint256 amount);
+    event UserClaimed(address indexed user, uint256 fundingTokenAmount, uint256 projectTokenAmount);
+    event UserEmergencyClaimed(address indexed user, uint256 fundingTokenAmount);
+    event ProjectClaimed(address indexed user, uint256 fundingTokenAmount, uint256 projectTokenAmount); // TODO note that this does not mean "initiated by project" in context of msg.sender
+    event AllocationSet(address indexed user, uint256 amount);
+    event FundsAdded(address indexed user, uint256 amount);
     event EmergencyReleased();
-    event DecisionChanged(address indexed target, bool shouldRefund);
+    event DecisionChanged(address indexed user, bool shouldRefund);
     event TokenRecovered(address indexed token, uint256 tokenAmount);
     event EtherRecovered(uint256 etherAmount);
     event ProjectWalletAddressChanged(address indexed oldAddress, address indexed newAddress);
-    event Activated(uint256 startTime);
+    event Activated();
 
     // --- Errors ---
     error VestingDurationTooLong(uint256 vestingPeriodSeconds);
@@ -96,8 +98,8 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         _;
     }
 
-    modifier onlyProjectOrSender(address target) {
-        if (!(msg.sender == projectWallet || msg.sender == target)) revert OnlyProjectOrSender();
+    modifier onlyProjectOrSender(address user) {
+        if (!(msg.sender == projectWallet || msg.sender == user)) revert OnlyProjectOrSender();
         _;
     }
 
@@ -133,31 +135,31 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         emit FundsAdded(msg.sender, amount);
     }
 
-    function claim(address target) external onlyProjectOrSender(target) {
+    function claim(address user) external onlyProjectOrSender(user) {
         if (!isVestingStarted()) revert VestingNotStarted();
 
-        UserVesting storage userStatus = userVestings[target];
+        UserVesting storage userStatus = userVestings[user];
         if (userStatus.fundingTokenAmount == 0) revert NoFundsAdded();
 
-        uint256 claimableFundingToken = fundingTokenClaimableFor(target);
-        uint256 claimableProjectToken = projectTokenClaimableFor(target);
+        uint256 claimableFundingToken = fundingTokenClaimableFor(user);
+        uint256 claimableProjectToken = projectTokenClaimableFor(user);
 
         if (claimableFundingToken == 0) revert NothingToClaim();
         userStatus.fundingTokenClaimed += claimableFundingToken;
         totalFundingTokenClaimed += claimableFundingToken;
 
         if (!userStatus.shouldRefund) {
-            PROJECT_TOKEN.safeTransfer(target, claimableProjectToken);
+            PROJECT_TOKEN.safeTransfer(user, claimableProjectToken);
             FUNDING_TOKEN.safeTransfer(projectWallet, claimableFundingToken);
 
-            emit UserClaimed(target, 0, claimableProjectToken);
-            emit ProjectClaimed(target, claimableFundingToken, 0);
+            emit UserClaimed(user, 0, claimableProjectToken);
+            emit ProjectClaimed(user, claimableFundingToken, 0);
         } else {
             PROJECT_TOKEN.safeTransfer(projectWallet, claimableProjectToken);
-            FUNDING_TOKEN.safeTransfer(target, claimableFundingToken);
+            FUNDING_TOKEN.safeTransfer(user, claimableFundingToken);
 
-            emit UserClaimed(target, claimableFundingToken, 0);
-            emit ProjectClaimed(target, 0, claimableProjectToken);
+            emit UserClaimed(user, claimableFundingToken, 0);
+            emit ProjectClaimed(user, 0, claimableProjectToken);
         }
     }
 
@@ -170,19 +172,19 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     }
 
     // --- Project functions ---
-    function setAllocation(address target, uint256 _fundingTokenAllocation) external onlyProject onlyBeforeActivation onlyIfNotEmergencyReleased {
+    function setAllocation(address user, uint256 _fundingTokenAllocation) external onlyProject onlyBeforeActivation onlyIfNotEmergencyReleased {
         // Update user allocation
-        userVestings[target].fundingTokenAllocation = _fundingTokenAllocation;
+        userVestings[user].fundingTokenAllocation = _fundingTokenAllocation;
 
         // Refund user if they have funded more than the new allocation
-        if (userVestings[target].fundingTokenAmount > _fundingTokenAllocation) {
-            uint256 _fundingTokenToRefund = userVestings[target].fundingTokenAmount - _fundingTokenAllocation;
-            userVestings[target].fundingTokenAmount = _fundingTokenAllocation;
+        if (userVestings[user].fundingTokenAmount > _fundingTokenAllocation) {
+            uint256 _fundingTokenToRefund = userVestings[user].fundingTokenAmount - _fundingTokenAllocation;
+            userVestings[user].fundingTokenAmount = _fundingTokenAllocation;
             totalFundingTokenAmount -= _fundingTokenToRefund;
-            FUNDING_TOKEN.safeTransfer(target, _fundingTokenToRefund);
+            FUNDING_TOKEN.safeTransfer(user, _fundingTokenToRefund);
         }
 
-        emit AllocationSet(target, _fundingTokenAllocation);
+        emit AllocationSet(user, _fundingTokenAllocation);
     }
 
     function activate(uint256 _vestingStartTime) external onlyProject onlyBeforeActivation {
@@ -196,7 +198,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
 
         PROJECT_TOKEN.safeTransferFrom(projectWallet, address(this), totalRequiredProjectToken);
 
-        emit Activated(vestingStartTime);
+        emit Activated();
     }
 
     // --- Emergency functions ---
@@ -206,17 +208,17 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         emit EmergencyReleased();
     }
 
-    function emergencyClaim(address target) external onlyProjectOrSender(target) {
-        UserVesting storage userStatus = userVestings[target];
+    function emergencyClaim(address user) external onlyProjectOrSender(user) {
+        UserVesting storage userStatus = userVestings[user];
         if (!emergencyReleased) revert NotEmergencyReleased();
         if (userStatus.fundingTokenAmount == 0) revert NoFundsAdded();
 
         uint256 toClaim = userStatus.fundingTokenAmount - userStatus.fundingTokenClaimed;
         userStatus.fundingTokenClaimed += toClaim;
         totalFundingTokenClaimed += toClaim;
-        FUNDING_TOKEN.safeTransfer(target, toClaim);
+        FUNDING_TOKEN.safeTransfer(user, toClaim);
 
-        emit UserEmergencyClaimed(target, toClaim);
+        emit UserEmergencyClaimed(user, toClaim);
     }
 
     function recoverToken(address tokenAddress) external onlyOwner {
@@ -260,22 +262,22 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         return (fundingTokenAmount * TOKEN_RATE_PRECISION) / PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE;
     }
 
-    function fundingTokenVestedFor(address target) public view returns (uint256) {
+    function fundingTokenVestedFor(address user) public view returns (uint256) {
         if (!isVestingStarted()) return 0;
 
-        UserVesting storage targetStatus = userVestings[target];
-        return Math.min(targetStatus.fundingTokenAmount, ((block.timestamp - vestingStartTime) * targetStatus.fundingTokenAmount) / VESTING_DURATION_SECONDS);
+        UserVesting storage userVesting = userVestings[user];
+        return Math.min(userVesting.fundingTokenAmount, ((block.timestamp - vestingStartTime) * userVesting.fundingTokenAmount) / VESTING_DURATION_SECONDS);
     }
 
-    function fundingTokenClaimableFor(address target) public view returns (uint256) {
-        return fundingTokenVestedFor(target) - userVestings[target].fundingTokenClaimed;
+    function fundingTokenClaimableFor(address user) public view returns (uint256) {
+        return fundingTokenVestedFor(user) - userVestings[user].fundingTokenClaimed;
     }
 
-    function projectTokenVestedFor(address target) public view returns (uint256) {
-        return fundingTokenToProjectToken(fundingTokenVestedFor(target));
+    function projectTokenVestedFor(address user) public view returns (uint256) {
+        return fundingTokenToProjectToken(fundingTokenVestedFor(user));
     }
 
-    function projectTokenClaimableFor(address target) public view returns (uint256) {
-        return fundingTokenToProjectToken(fundingTokenClaimableFor(target));
+    function projectTokenClaimableFor(address user) public view returns (uint256) {
+        return fundingTokenToProjectToken(fundingTokenClaimableFor(user));
     }
 }

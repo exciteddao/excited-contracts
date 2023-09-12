@@ -378,12 +378,12 @@ describe("VestingV1", () => {
           await setAmountForUser1();
           await approveProjectTokenToVesting();
           await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
-          expect(await vesting.methods.emergencyReleased().call()).to.be.false;
+          expect(await vesting.methods.isEmergencyReleased().call()).to.be.false;
 
           await expectRevert(async () => vesting.methods.emergencyRelease().send({ from: anyUser }), OWNER_REVERT_MSG);
 
           await vesting.methods.emergencyRelease().send({ from: deployer });
-          expect(await vesting.methods.emergencyReleased().call()).to.be.true;
+          expect(await vesting.methods.isEmergencyReleased().call()).to.be.true;
         });
       });
     });
