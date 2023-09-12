@@ -46,11 +46,11 @@ contract VestingV1 is OwnerRole, ProjectRole {
     mapping(address => UserVesting) public userVestings;
 
     // --- Events ---
-    event AmountSet(address indexed target, uint256 newAmount, uint256 oldAmount);
+    event AmountSet(address indexed user, uint256 newAmount, uint256 oldAmount);
     event Activated();
-    event Claimed(address indexed target, uint256 amount, bool isClaimedByProject);
+    event Claimed(address indexed user, uint256 amount, bool indexed isClaimedByProject);
     event EmergencyReleased();
-    event EmergencyClaimed(address indexed target, uint256 amount, bool indexed isClaimedByProject);
+    event EmergencyClaimed(address indexed user, uint256 amount, bool indexed isClaimedByProject);
     event TokenRecovered(address indexed token, uint256 amount);
     event EtherRecovered(uint256 amount);
 
@@ -73,13 +73,14 @@ contract VestingV1 is OwnerRole, ProjectRole {
         _;
     }
 
-    modifier onlyProjectOrSender(address target) {
-        if (!(msg.sender == projectWallet || msg.sender == target)) revert OnlyProjectOrSender();
+    modifier onlyProjectOrSender(address user) {
+        if (!(msg.sender == projectWallet || msg.sender == user)) revert OnlyProjectOrSender();
         _;
     }
 
     constructor(address _projectToken, uint256 _vestingDurationSeconds, address _projectWallet) ProjectRole(_projectWallet) {
         if (_vestingDurationSeconds > MAX_VESTING_DURATION_SECONDS) revert VestingDurationTooLong(_vestingDurationSeconds);
+
         PROJECT_TOKEN = IERC20(_projectToken);
         VESTING_DURATION_SECONDS = _vestingDurationSeconds;
     }
@@ -141,11 +142,11 @@ contract VestingV1 is OwnerRole, ProjectRole {
     function emergencyClaim(address user) external onlyProjectOrSender(user) {
         if (!isEmergencyReleased) revert NotEmergencyReleased();
 
-        UserVesting storage userStatus = userVestings[user];
-        uint256 claimable = userStatus.amount - userStatus.claimed;
+        UserVesting storage userVesting = userVestings[user];
+        uint256 claimable = userVesting.amount - userVesting.claimed;
         if (claimable == 0) revert NothingToClaim();
 
-        userStatus.claimed += claimable;
+        userVesting.claimed += claimable;
         totalClaimed += claimable;
         PROJECT_TOKEN.safeTransfer(user, claimable);
 
@@ -167,6 +168,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
         emit TokenRecovered(tokenAddress, tokenBalanceToRecover);
     }
 
+    // Recovers the native token on the chain
     function recoverEther() external onlyOwner {
         uint256 etherToRecover = address(this).balance;
         Address.sendValue(payable(projectWallet), etherToRecover);
