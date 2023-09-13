@@ -16,21 +16,21 @@ export const deployInsuredVestingV1 = async (
     throw new Error("XCTD address cannot be zero");
   }
 
-  if (config[2].toString() !== "200000") {
+  if (config[2] !== 63_072_000) {
+    throw new Error("Wrong vesting duration");
+  }
+
+  if (config[3].toString() !== "200000") {
     throw new Error("Wrong USDC amount in");
   }
 
-  if (config[3].toString() !== "1000000000000000000") {
+  if (config[4].toString() !== "1000000000000000000") {
     throw new Error("Wrong XCTD amount out");
   }
 
-  // TODO: check real project address
-  if (config[4] === "0x0000000000000000000000000000000000000000") {
-    throw new Error("Project address cannot be zero");
-  }
-
-  if (config[5] !== 63_072_000) {
-    throw new Error("Wrong vesting duration");
+  // TODO: check real project wallet address
+  if (config[5] === "0x0000000000000000000000000000000000000000") {
+    throw new Error("Project wallet address cannot be zero");
   }
 
   await deploy({

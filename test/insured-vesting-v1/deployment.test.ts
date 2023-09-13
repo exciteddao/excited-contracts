@@ -28,7 +28,7 @@ describe("InsuredVestingV1 deployment", () => {
     // TODO TEMPORARY: until having production PROJECT_TOKEN & project wallet addresses
     const testConfig = [...config];
     testConfig[1] = xctd.options.address;
-    testConfig[4] = await account(4);
+    testConfig[5] = await account(4);
     // END TEMPORARY
 
     insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
@@ -42,7 +42,7 @@ describe("InsuredVestingV1 deployment", () => {
       // TODO TEMPORARY: until having production PROJECT_TOKEN & project wallet addresses
       const testConfig = [...config];
       testConfig[1] = xctd.options.address;
-      testConfig[4] = await account(4);
+      testConfig[5] = await account(4);
       // END TEMPORARY
 
       insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
@@ -108,28 +108,28 @@ describe("InsuredVestingV1 deployment", () => {
     describe("Error handling", () => {
       const testCases: { config: ConfigTuple; errorMessage: string }[] = [
         {
-          config: [randomEthAddress, randomEthAddress, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress, durationSeconds],
+          config: [randomEthAddress, randomEthAddress, durationSeconds, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress],
           errorMessage: "Wrong USDC address",
         },
         {
-          config: [usdcAddress, zeroAddress, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress, durationSeconds],
+          config: [usdcAddress, zeroAddress, durationSeconds, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress],
           errorMessage: "XCTD address cannot be zero",
         },
         {
-          config: [usdcAddress, randomEthAddress, fundingTokenAmountIn, projectTokenAmountOut, zeroAddress, durationSeconds],
-          errorMessage: "Project address cannot be zero",
+          config: [usdcAddress, randomEthAddress, 10000, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress],
+          errorMessage: "Wrong vesting duration",
         },
         {
-          config: [usdcAddress, randomEthAddress, bn6(0.3), projectTokenAmountOut, randomEthAddress, durationSeconds],
+          config: [usdcAddress, randomEthAddress, durationSeconds, bn6(0.3), projectTokenAmountOut, randomEthAddress],
           errorMessage: "Wrong USDC amount in",
         },
         {
-          config: [usdcAddress, randomEthAddress, fundingTokenAmountIn, bn18(1.1), randomEthAddress, durationSeconds],
+          config: [usdcAddress, randomEthAddress, durationSeconds, fundingTokenAmountIn, bn18(1.1), randomEthAddress],
           errorMessage: "Wrong XCTD amount out",
         },
         {
-          config: [usdcAddress, randomEthAddress, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress, 10000],
-          errorMessage: "Wrong vesting duration",
+          config: [usdcAddress, randomEthAddress, durationSeconds, fundingTokenAmountIn, projectTokenAmountOut, zeroAddress],
+          errorMessage: "Project wallet address cannot be zero",
         },
       ];
 
@@ -149,14 +149,14 @@ describe("InsuredVestingV1 deployment", () => {
       it("should deploy", async () => {
         await deployInsuredVestingV1(
           web3CandiesStub.deploy,
-          [usdcAddress, randomEthAddress, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress, durationSeconds],
+          [usdcAddress, randomEthAddress, durationSeconds, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress],
           new BN(10),
           new BN(10)
         );
         expect(web3CandiesStub.deploy.calledOnce).to.be.true;
         expect(web3CandiesStub.deploy.firstCall.args[0]).to.deep.equal({
           contractName: "InsuredVestingV1",
-          args: [usdcAddress, randomEthAddress, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress, durationSeconds],
+          args: [usdcAddress, randomEthAddress, durationSeconds, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress],
           maxFeePerGas: new BN(10),
           maxPriorityFeePerGas: new BN(10),
         });

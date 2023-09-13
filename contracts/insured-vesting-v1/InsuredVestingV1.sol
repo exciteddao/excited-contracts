@@ -106,10 +106,10 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     constructor(
         address _fundingToken,
         address _projectToken,
+        uint256 _vestingDurationSeconds,
         uint256 _fundingTokenAmountIn,
         uint256 _projectTokenAmountOut,
-        address _projectWallet,
-        uint256 _vestingDurationSeconds // TODO (audit)  - make this the 3rd param
+        address _projectWallet
     ) ProjectRole(_projectWallet) {
         if (_vestingDurationSeconds > MAX_VESTING_DURATION_SECONDS) revert VestingDurationTooLong(_vestingDurationSeconds);
 
@@ -173,24 +173,23 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     }
 
     // --- Project only functions ---
-    // TODO(audit) - rename setFundingTokenAllocation, and parameter to newAllocation
-    function setAllocation(address user, uint256 fundingTokenNewAllocation) external onlyProject onlyBeforeActivation onlyIfNotEmergencyReleased {
+    function setFundingTokenAllocation(address user, uint256 newAllocation) external onlyProject onlyBeforeActivation onlyIfNotEmergencyReleased {
         UserVesting storage userVesting = userVestings[user];
         uint256 fundingTokenPreviousAllocation = userVesting.fundingTokenAllocation;
-        userVesting.fundingTokenAllocation = fundingTokenNewAllocation;
+        userVesting.fundingTokenAllocation = newAllocation;
 
         uint256 amountToRefund = 0;
 
         // Refund user if they have funded more than the new allocation
-        if (userVesting.fundingTokenAmount > fundingTokenNewAllocation) {
+        if (userVesting.fundingTokenAmount > newAllocation) {
             // Note: it is required that userVesting.fundingTokenClaimed is 0. This is guaranteed by requiring both onlyBeforeActivation && onlyIfNotEmergencyReleased
-            amountToRefund = userVesting.fundingTokenAmount - fundingTokenNewAllocation;
+            amountToRefund = userVesting.fundingTokenAmount - newAllocation;
             userVesting.fundingTokenAmount -= amountToRefund;
             fundingTokenTotalAmount -= amountToRefund;
             FUNDING_TOKEN.safeTransfer(user, amountToRefund);
         }
 
-        emit AllocationSet(user, fundingTokenNewAllocation, fundingTokenPreviousAllocation, amountToRefund);
+        emit AllocationSet(user, newAllocation, fundingTokenPreviousAllocation, amountToRefund);
     }
 
     // TODO(audit) - block if emergency released

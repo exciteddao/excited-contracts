@@ -78,7 +78,7 @@ export async function withFixture() {
   // TODO TEMPORARY: until having production project token address & project wallet address
   const testConfig = [...config];
   testConfig[1] = projectToken.options.address;
-  testConfig[4] = projectWallet;
+  testConfig[5] = projectWallet;
   // END TEMPORARY
 
   insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
@@ -123,7 +123,7 @@ export async function addFundingFromUser1(amount = FUNDING_PER_USER) {
 }
 
 export async function setAllocationForUser1(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.setAllocation(user1, await fundingToken.amount(amount)).send({ from: projectWallet });
+  await insuredVesting.methods.setFundingTokenAllocation(user1, await fundingToken.amount(amount)).send({ from: projectWallet });
 }
 
 export async function addFundingFromUser2(amount = FUNDING_PER_USER) {
@@ -131,7 +131,7 @@ export async function addFundingFromUser2(amount = FUNDING_PER_USER) {
 }
 
 export async function setAllocationForUser2(amount = FUNDING_PER_USER) {
-  await insuredVesting.methods.setAllocation(user2, await fundingToken.amount(amount)).send({ from: projectWallet });
+  await insuredVesting.methods.setFundingTokenAllocation(user2, await fundingToken.amount(amount)).send({ from: projectWallet });
 }
 
 export const balances = {
