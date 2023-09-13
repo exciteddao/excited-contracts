@@ -400,6 +400,13 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.setDecision(false).send({ from: user1 });
         expect((await insuredVesting.methods.userVestings(user1).call()).shouldRefund).to.be.false;
       });
+
+      it("cannot set decision if emergency released", async () => {
+        await setAllocationForUser1();
+        await addFundingFromUser1();
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
+        await expectRevert(() => insuredVesting.methods.setDecision(true).send({ from: user1 }), Error.EmergencyReleaseActive);
+      });
     });
 
     describe("add funds", () => {
@@ -627,15 +634,14 @@ describe("InsuredVestingV1", () => {
         );
       });
 
-      it("can regularly claim even if emergency released", async () => {
+      it("canot regularly claim if emergency released", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
         await activateAndReachStartTime();
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
         await advanceDays(VESTING_DURATION_DAYS / 4);
         await setBalancesForDelta();
-        await insuredVesting.methods.claim(user1).send({ from: user1 });
-        await expectUserBalanceDelta("projectToken", await vestedAmount(VESTING_DURATION_DAYS / 4, "projectToken"));
+        await expectRevert(() => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.EmergencyReleaseActive);
       });
 
       it("cannot emergency claim twice", async () => {
@@ -1204,6 +1210,16 @@ describe("InsuredVestingV1", () => {
 
       await approveProjectTokenToVesting((FUNDING_PER_USER + FUNDING_PER_USER / 2) * FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO);
       await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
+    });
+
+    it("cannot activate if emergency released", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+      await approveProjectTokenToVesting();
+
+      await insuredVesting.methods.emergencyRelease().send({ from: deployer });
+
+      await expectRevert(async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet }), Error.EmergencyReleaseActive);
     });
   });
 
