@@ -46,7 +46,7 @@ import { CALLER_NOT_OWNER_REVERT_MSG, OWNER_REVERT_MSG, PROJECT_ROLE_REVERT_MSG 
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 import { config } from "../../deployment/insured-vesting-v1/config";
 
-describe("InsuredVestingV1", () => {
+describe.only("InsuredVestingV1", () => {
   let snap: SnapshotRestorer;
 
   beforeEach(async () => {
@@ -291,6 +291,31 @@ describe("InsuredVestingV1", () => {
         await setBalancesForDelta();
         await insuredVesting.methods.claim(user1).send({ from: user1 });
         await expectUserBalanceDelta("projectToken", (await vestedAmount(77, "projectToken")).dividedBy(4));
+      });
+
+      describe(`should emit a ${Event.TokensClaimed} or ${Event.RefundClaimed} event dependent on decision when claiming`, () => {
+        const senders = [
+          { shouldRefund: false, event: Event.TokensClaimed, sender: "user1" },
+          { shouldRefund: false, event: Event.TokensClaimed, sender: "projectWallet" },
+          { shouldRefund: true, event: Event.RefundClaimed, sender: "user1" },
+          { shouldRefund: true, event: Event.RefundClaimed, sender: "projectWallet" },
+        ];
+        for (const { shouldRefund, event, sender } of senders) {
+          it(`Event: ${event}, sender: ${sender}`, async function () {
+            await setAllocationForUser1();
+            await addFundingFromUser1();
+            await activateAndReachStartTime();
+            await advanceDays(10);
+            await insuredVesting.methods.setDecision(shouldRefund).send({ from: user1 });
+            await insuredVesting.methods.claim(user1).send({ from: sender === "projectWallet" ? projectWallet : user1 });
+
+            const eventArgs = (await insuredVesting.getPastEvents(event))[0].returnValues;
+            expect(eventArgs.user).to.be.eq(user1);
+            expect(eventArgs.fundingTokenAmount).to.be.bignumber.closeTo(await vestedAmount(10, "fundingToken"), await fundingToken.amount(0.01));
+            expect(eventArgs.projectTokenAmount).to.be.bignumber.closeTo(await vestedAmount(10, "projectToken"), await projectToken.amount(0.01));
+            expect(eventArgs.isInitiatedByProject).to.be.eq(sender === "projectWallet");
+          });
+        }
       });
     });
 
@@ -587,6 +612,25 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
         await expectRevert(() => insuredVesting.methods.setAllocation(user1, 1).send({ from: projectWallet }), Error.EmergencyReleaseActive);
       });
+
+      it(`should emit '${Event.AllocationSet}' event with previous allocation and refunded amount (if any)`, async () => {
+        await setAllocationForUser1();
+        const initialAllocationEventArgs = (await insuredVesting.getPastEvents(Event.AllocationSet))[0].returnValues;
+        expect(initialAllocationEventArgs.user).to.be.eq(user1);
+        expect(initialAllocationEventArgs.fundingTokenAmount).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
+        expect(initialAllocationEventArgs.fundingTokenPreviousAmount).to.be.bignumber.eq(0);
+        expect(initialAllocationEventArgs.fundingTokenRefundedAmount).to.be.bignumber.eq(0);
+
+        await addFundingFromUser1();
+
+        const newAmount = FUNDING_PER_USER / 2;
+        await setAllocationForUser1(newAmount);
+        const updatedAllocationEventArgs = (await insuredVesting.getPastEvents(Event.AllocationSet))[0].returnValues;
+        expect(updatedAllocationEventArgs.user).to.be.eq(user1);
+        expect(updatedAllocationEventArgs.fundingTokenAmount).to.be.bignumber.eq(await fundingToken.amount(newAmount));
+        expect(updatedAllocationEventArgs.fundingTokenPreviousAmount).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
+        expect(updatedAllocationEventArgs.fundingTokenRefundedAmount).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER - newAmount));
+      });
     });
 
     describe("emergency release", () => {
@@ -604,6 +648,24 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
         await insuredVesting.methods.emergencyClaim(user1).send({ from: projectWallet });
         expect(await fundingToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
+      });
+
+      describe(`should emit a '${Event.EmergencyRefunded}' event`, () => {
+        const senders = ["user1", "projectWallet"];
+
+        for (const sender of senders) {
+          it(`sender: ${sender}`, async function () {
+            await setAllocationForUser1();
+            await addFundingFromUser1();
+            await insuredVesting.methods.emergencyRelease().send({ from: deployer });
+            await insuredVesting.methods.emergencyClaim(user1).send({ from: sender === "projectWallet" ? projectWallet : user1 });
+
+            const eventArgs = (await insuredVesting.getPastEvents(Event.EmergencyRefunded))[0].returnValues;
+            expect(eventArgs.user).to.be.eq(user1);
+            expect(eventArgs.fundingTokenAmount).to.be.bignumber.closeTo(await fundingToken.amount(FUNDING_PER_USER), await fundingToken.amount(0.01));
+            expect(eventArgs.isInitiatedByProject).to.be.eq(sender === "projectWallet");
+          });
+        }
       });
 
       it("cannot emergency claim if hasn't funded", async () => {

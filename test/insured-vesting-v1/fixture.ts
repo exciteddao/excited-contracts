@@ -47,8 +47,12 @@ export async function setup() {
 }
 
 export enum Event {
+  AllocationSet = "AllocationSet",
   ProjectWalletAddressChanged = "ProjectWalletAddressChanged",
   ProjectRoleTransferred = "ProjectRoleTransferred",
+  TokensClaimed = "TokensClaimed",
+  RefundClaimed = "RefundClaimed",
+  EmergencyRefunded = "EmergencyRefunded",
 }
 
 export enum Error {

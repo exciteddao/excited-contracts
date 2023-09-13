@@ -39,7 +39,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     // When the contract is emergency released, users can claim all their unclaimed FUNDING_TOKEN immediately (get a refund),
     // (the project can also claim on behalf of users. Users still get their tokens in this case).
     // This ignores the user decision and treats all users as if they had decided to be refunded (cancels the rest of the deal).
-    bool public emergencyReleased = false; // TODO(audit) rename to isEmergencyReleased
+    bool public isEmergencyReleased = false;
 
     uint256 public vestingStartTime;
     uint256 public fundingTokenTotalAmount; // total amount of funding tokens funded by users
@@ -61,29 +61,16 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     mapping(address => UserVesting) public userVestings;
 
     // --- Events ---
-    event AllocationSet(address indexed user, uint256 fundingTokenAmount); // TODO(audit) - oldAmount, refundedAmount
+    event AllocationSet(address indexed user, uint256 fundingTokenAmount, uint256 fundingTokenPreviousAmount, uint256 fundingTokenRefundedAmount);
     event FundsAdded(address indexed user, uint256 fundingTokenAmount);
     event Activated();
 
-    /*
-        TODO(audit) - 
-        TokensClaimed(
-            address indexed user, 
-            uint256 fundingTokenAmount, 
-            uint256 projectTokenAmount, 
-            bool indexed isInitiatedByProject)
-        RefundClaimed(
-            address indexed user, 
-            uint256 fundingTokenAmount, 
-            uint256 projectTokenAmount, 
-            bool indexed isInitiatedByProject)
-     */
-    event UserClaimed(address indexed user, uint256 fundingTokenAmount, uint256 projectTokenAmount);
-    event ProjectClaimed(address indexed user, uint256 fundingTokenAmount, uint256 projectTokenAmount); // TODO note that this does not mean "initiated by project" in context of msg.sender
+    event TokensClaimed(address indexed user, uint256 fundingTokenAmount, uint256 projectTokenAmount, bool indexed isInitiatedByProject);
+    event RefundClaimed(address indexed user, uint256 fundingTokenAmount, uint256 projectTokenAmount, bool indexed isInitiatedByProject);
 
     event DecisionSet(address indexed user, bool indexed shouldRefund);
     event EmergencyReleased();
-    event UserEmergencyClaimed(address indexed user, uint256 fundingTokenAmount); // TODO(audit) EmergencyRefunded ; bool indexed isInitiatedByProject
+    event EmergencyRefunded(address indexed user, bool indexed isInitiatedByProject, uint256 fundingTokenAmount);
     event TokenRecovered(address indexed token, uint256 amount);
     event EtherRecovered(uint256 amount);
 
@@ -112,7 +99,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     }
 
     modifier onlyIfNotEmergencyReleased() {
-        if (emergencyReleased) revert EmergencyReleaseActive();
+        if (isEmergencyReleased) revert EmergencyReleaseActive();
         _;
     }
 
@@ -166,16 +153,12 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
             PROJECT_TOKEN.safeTransfer(user, projectTokenClaimable);
             FUNDING_TOKEN.safeTransfer(projectWallet, fundingTokenClaimable);
 
-            // TODO (audit) - change to TokensClaimed()
-            emit UserClaimed(user, 0, projectTokenClaimable);
-            emit ProjectClaimed(user, fundingTokenClaimable, 0);
+            emit TokensClaimed(user, fundingTokenClaimable, projectTokenClaimable, msg.sender == projectWallet);
         } else {
             PROJECT_TOKEN.safeTransfer(projectWallet, projectTokenClaimable);
             FUNDING_TOKEN.safeTransfer(user, fundingTokenClaimable);
 
-            // TODO (audit) - change to RefundClaimed()
-            emit UserClaimed(user, fundingTokenClaimable, 0);
-            emit ProjectClaimed(user, 0, projectTokenClaimable);
+            emit RefundClaimed(user, fundingTokenClaimable, projectTokenClaimable, msg.sender == projectWallet);
         }
     }
 
@@ -193,18 +176,21 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     // TODO(audit) - rename setFundingTokenAllocation, and parameter to newAllocation
     function setAllocation(address user, uint256 fundingTokenNewAllocation) external onlyProject onlyBeforeActivation onlyIfNotEmergencyReleased {
         UserVesting storage userVesting = userVestings[user];
+        uint256 fundingTokenPreviousAllocation = userVesting.fundingTokenAllocation;
         userVesting.fundingTokenAllocation = fundingTokenNewAllocation;
+
+        uint256 amountToRefund = 0;
 
         // Refund user if they have funded more than the new allocation
         if (userVesting.fundingTokenAmount > fundingTokenNewAllocation) {
             // Note: it is required that userVesting.fundingTokenClaimed is 0. This is guaranteed by requiring both onlyBeforeActivation && onlyIfNotEmergencyReleased
-            uint256 amountToRefund = userVesting.fundingTokenAmount - fundingTokenNewAllocation;
+            amountToRefund = userVesting.fundingTokenAmount - fundingTokenNewAllocation;
             userVesting.fundingTokenAmount -= amountToRefund;
             fundingTokenTotalAmount -= amountToRefund;
             FUNDING_TOKEN.safeTransfer(user, amountToRefund);
         }
 
-        emit AllocationSet(user, fundingTokenNewAllocation);
+        emit AllocationSet(user, fundingTokenNewAllocation, fundingTokenPreviousAllocation, amountToRefund);
     }
 
     // TODO(audit) - block if emergency released
@@ -227,13 +213,13 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     // It is possible to emergency release prior to activation, because users
     // may have already funded the contract
     function emergencyRelease() external onlyOwner onlyIfNotEmergencyReleased {
-        emergencyReleased = true;
+        isEmergencyReleased = true;
         emit EmergencyReleased();
     }
 
     // TODO(audit) rename to emergencyRefund
     function emergencyClaim(address user) external onlyProjectOrSender(user) {
-        if (!emergencyReleased) revert NotEmergencyReleased();
+        if (!isEmergencyReleased) revert NotEmergencyReleased();
 
         UserVesting storage userVesting = userVestings[user];
         if (userVesting.fundingTokenAmount == 0) revert NoFundsAdded();
@@ -250,14 +236,14 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         // The project can recover the tokens by calling recoverToken(), which takes
         // being emergency released into account.
 
-        emit UserEmergencyClaimed(user, claimable);
+        emit EmergencyRefunded(user, msg.sender == projectWallet, claimable);
     }
 
     function recoverToken(address tokenAddress) external onlyOwner {
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
 
         // in case of PROJECT_TOKEN, we also need to retain the total locked amount in the contract
-        if (tokenAddress == address(PROJECT_TOKEN) && !emergencyReleased) {
+        if (tokenAddress == address(PROJECT_TOKEN) && !isEmergencyReleased) {
             uint256 totalOwed = fundingTokenToProjectToken(fundingTokenTotalAmount - fundingTokenTotalClaimed);
             if (totalOwed >= tokenBalanceToRecover) revert NothingToClaim();
             tokenBalanceToRecover -= totalOwed;
