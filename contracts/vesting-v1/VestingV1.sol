@@ -48,9 +48,9 @@ contract VestingV1 is OwnerRole, ProjectRole {
     // --- Events ---
     event AmountSet(address indexed user, uint256 newAmount, uint256 oldAmount);
     event Activated();
-    event Claimed(address indexed user, uint256 amount, bool indexed isClaimedByProject);
+    event Claimed(address indexed user, uint256 amount, bool indexed isInitiatedByProject);
     event EmergencyReleased();
-    event EmergencyClaimed(address indexed user, uint256 amount, bool indexed isClaimedByProject);
+    event EmergencyClaimed(address indexed user, uint256 amount, bool indexed isInitiatedByProject);
     event TokenRecovered(address indexed token, uint256 amount);
     event EtherRecovered(uint256 amount);
 
@@ -123,7 +123,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
 
         vestingStartTime = _vestingStartTime;
 
-        PROJECT_TOKEN.safeTransferFrom(msg.sender, address(this), totalAmount);
+        PROJECT_TOKEN.safeTransferFrom(projectWallet, address(this), totalAmount);
 
         emit Activated();
     }
