@@ -29,26 +29,11 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
 
     uint256 public constant MAX_VESTING_DURATION_SECONDS = 10 * 365 days;
 
-    // An arbitrary precision number used for token rate calculations, including any decimal differences that may exist
-    // between funding and project tokens:
-    // 1e(FUNDING_TOKEN_DECIMALS) * PRECISION / 1e(PROJECT_TOKEN_DECIMALS) * strikePrice
-    //
-    // For example, if each PROJECT TOKEN (18 decimals) costs 0.2 FUNDING TOKEN (6 decimals):
-    // PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE = 1e6 * 1e20 / 1e18 * 0.2 = 20_000_000
-    uint256 public constant TOKEN_RATE_PRECISION = 1e20;
-    /*
-    TODO (audit) - change arbitrary precision to 1e18, which means: "if I want to buy 1e18 of project token (which in most cases is a normalized "1" token, how much funding token do I need?)"
-    - lose precision + rate
-    - instead:
-    - FUNDING_TOKEN_AMOUNT_IN (e.g. 1e6 * 0.2) 
-    - PROJECT_TOKEN_AMOUNT_OUT (e.g. 1e18)
-    - formula: PROJECT_TOKEN_AMOUNT_OUT * amount / FUNDING_TOKEN_AMOUNT_IN
-    */
-
     // Set in constructor
     IERC20 public immutable FUNDING_TOKEN;
     IERC20 public immutable PROJECT_TOKEN;
-    uint256 public immutable PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE; // TODO(audit) - modify as described above
+    uint256 public immutable FUNDING_TOKEN_AMOUNT_IN;
+    uint256 public immutable PROJECT_TOKEN_AMOUNT_OUT;
     uint256 public immutable VESTING_DURATION_SECONDS;
 
     // When the contract is emergency released, users can claim all their unclaimed FUNDING_TOKEN immediately (get a refund),
@@ -61,7 +46,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     uint256 public fundingTokenTotalClaimed;
 
     // All variables are based on FUNDING_TOKEN
-    // PROJECT_TOKEN calculations are done by converting from FUNDING_TOKEN, using the PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE // TODO(audit) modify this according to rate change
+    // PROJECT_TOKEN calculations are done by converting from FUNDING_TOKEN, using PROJECT_TOKEN_AMOUNT_OUT/FUNDING_TOKEN_AMOUNT_IN
     struct UserVesting {
         // Upper bound of FUNDING_TOKEN that user is allowed to send to the contract (set by project)
         uint256 fundingTokenAllocation;
@@ -134,16 +119,18 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     constructor(
         address _fundingToken,
         address _projectToken,
+        uint256 _fundingTokenAmountIn,
+        uint256 _projectTokenAmountOut,
         address _projectWallet,
-        uint256 _projectTokenToFundingTokenRate, // TODO(audit) - change according to description above
         uint256 _vestingDurationSeconds // TODO (audit)  - make this the 3rd param
     ) ProjectRole(_projectWallet) {
         if (_vestingDurationSeconds > MAX_VESTING_DURATION_SECONDS) revert VestingDurationTooLong(_vestingDurationSeconds);
 
         FUNDING_TOKEN = IERC20(_fundingToken);
         PROJECT_TOKEN = IERC20(_projectToken);
+        FUNDING_TOKEN_AMOUNT_IN = _fundingTokenAmountIn;
+        PROJECT_TOKEN_AMOUNT_OUT = _projectTokenAmountOut;
         VESTING_DURATION_SECONDS = _vestingDurationSeconds;
-        PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE = _projectTokenToFundingTokenRate;
     }
 
     // --- User only functions ---
@@ -302,8 +289,13 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         return isActivated() && vestingStartTime <= block.timestamp;
     }
 
+    // FUNDING_TOKEN_AMOUNT_IN and PROJECT_TOKEN_AMOUNT_OUT are to resemble DEX-style exchange rates and can hold any arbitrary amount
+    // Meaning that for the given FUNDING_TOKEN_AMOUNT_IN, you would get PROJECT_TOKEN_AMOUNT_OUT
+    // e.g. FUNDING_TOKEN_AMOUNT_IN (6 decimals) = 0.2*1e6 = 200_000
+    //      PROJECT_TOKEN_AMOUNT_OUT (18 decimals) = 1e18
+    //      which means, for every 0.2 of funding token, you get 1 of project token
     function fundingTokenToProjectToken(uint256 fundingTokenAmount) public view returns (uint256) {
-        return (fundingTokenAmount * TOKEN_RATE_PRECISION) / PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE;
+        return (fundingTokenAmount * PROJECT_TOKEN_AMOUNT_OUT) / FUNDING_TOKEN_AMOUNT_IN;
     }
 
     function fundingTokenVestedFor(address user) public view returns (uint256) {

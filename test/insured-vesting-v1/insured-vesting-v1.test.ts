@@ -1228,17 +1228,17 @@ describe("InsuredVestingV1", () => {
       // TODO TEMPORARY: until having production project token address & project wallet address
       const testConfig = [...config];
       testConfig[1] = projectToken.options.address;
-      testConfig[2] = projectWallet;
+      testConfig[4] = projectWallet;
       // END TEMPORARY
 
       const YEAR = 365 * DAY;
       for (const duration of [YEAR * 11, YEAR * 100]) {
-        testConfig[4] = duration;
+        testConfig[5] = duration;
         await expectRevert(() => deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig), Error.VestingDurationTooLong);
       }
 
       for (const duration of [0, YEAR * 3, YEAR * 10, YEAR * 9]) {
-        testConfig[4] = duration;
+        testConfig[5] = duration;
         await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
       }
     });
