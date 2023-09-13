@@ -143,11 +143,10 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         uint256 fundingTokenClaimable = fundingTokenClaimableFor(user);
         if (fundingTokenClaimable == 0) revert NothingToClaim();
 
-        // TODO(audit) - use conversion and move this below
-        uint256 projectTokenClaimable = projectTokenClaimableFor(user);
-
         userVesting.fundingTokenClaimed += fundingTokenClaimable;
         fundingTokenTotalClaimed += fundingTokenClaimable;
+
+        uint256 projectTokenClaimable = fundingTokenToProjectToken(fundingTokenClaimable);
 
         if (!userVesting.shouldRefund) {
             PROJECT_TOKEN.safeTransfer(user, projectTokenClaimable);
@@ -216,8 +215,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         emit EmergencyReleased();
     }
 
-    // TODO(audit) rename to emergencyRefund
-    function emergencyClaim(address user) external onlyProjectOrSender(user) {
+    function emergencyRefund(address user) external onlyProjectOrSender(user) {
         if (!isEmergencyReleased) revert NotEmergencyReleased();
 
         UserVesting storage userVesting = userVestings[user];
@@ -299,8 +297,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         return fundingTokenToProjectToken(fundingTokenVestedFor(user));
     }
 
-    // TODO(audit) - make this external and remove usages within the contract
-    function projectTokenClaimableFor(address user) public view returns (uint256) {
+    function projectTokenClaimableFor(address user) external view returns (uint256) {
         return fundingTokenToProjectToken(fundingTokenClaimableFor(user));
     }
 }
