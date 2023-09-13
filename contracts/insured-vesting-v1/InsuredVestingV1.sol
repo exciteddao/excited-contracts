@@ -271,14 +271,15 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
 
         // in case of PROJECT_TOKEN, we also need to retain the total locked amount in the contract
         if (tokenAddress == address(PROJECT_TOKEN) && !emergencyReleased) {
-            uint256 projectTokensAccountedFor = fundingTokenToProjectToken(fundingTokenTotalAmount - fundingTokenTotalClaimed);
-            if (projectTokensAccountedFor >= tokenBalanceToRecover) revert NothingToClaim();
-            tokenBalanceToRecover -= projectTokensAccountedFor;
+            uint256 totalOwed = fundingTokenToProjectToken(fundingTokenTotalAmount - fundingTokenTotalClaimed);
+            if (totalOwed >= tokenBalanceToRecover) revert NothingToClaim();
+            tokenBalanceToRecover -= totalOwed;
         }
 
         if (tokenAddress == address(FUNDING_TOKEN)) {
-            if (fundingTokenTotalAmount - fundingTokenTotalClaimed >= tokenBalanceToRecover) revert NothingToClaim();
-            tokenBalanceToRecover -= fundingTokenTotalAmount - fundingTokenTotalClaimed;
+            uint256 totalOwed = fundingTokenTotalAmount - fundingTokenTotalClaimed;
+            if (totalOwed >= tokenBalanceToRecover) revert NothingToClaim();
+            tokenBalanceToRecover -= totalOwed;
         }
 
         IERC20(tokenAddress).safeTransfer(projectWallet, tokenBalanceToRecover);
@@ -286,7 +287,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         emit TokenRecovered(tokenAddress, tokenBalanceToRecover);
     }
 
-    // Recovers the native token on the chain
+    // Recovers the native token of the chain
     function recoverEther() external onlyOwner {
         uint256 etherToRecover = address(this).balance;
         Address.sendValue(payable(projectWallet), etherToRecover);
@@ -309,20 +310,19 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
 
     function fundingTokenVestedFor(address user) public view returns (uint256) {
         if (!isVestingStarted()) return 0;
-
-        UserVesting storage userVesting = userVestings[user];
-        return Math.min(userVesting.fundingTokenAmount, ((block.timestamp - vestingStartTime) * userVesting.fundingTokenAmount) / VESTING_DURATION_SECONDS);
+        UserVesting memory userVesting = userVestings[user];
+        return Math.min(((block.timestamp - vestingStartTime) * userVesting.fundingTokenAmount) / VESTING_DURATION_SECONDS, userVesting.fundingTokenAmount);
     }
 
     function fundingTokenClaimableFor(address user) public view returns (uint256) {
         return fundingTokenVestedFor(user) - userVestings[user].fundingTokenClaimed;
     }
 
-    function projectTokenVestedFor(address user) public view returns (uint256) {
+    function projectTokenVestedFor(address user) external view returns (uint256) {
         return fundingTokenToProjectToken(fundingTokenVestedFor(user));
     }
 
-    // TODO(audit) - delete this function
+    // TODO(audit) - make this external and remove usages within the contract
     function projectTokenClaimableFor(address user) public view returns (uint256) {
         return fundingTokenToProjectToken(fundingTokenClaimableFor(user));
     }

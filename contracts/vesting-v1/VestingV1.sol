@@ -168,7 +168,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
         emit TokenRecovered(tokenAddress, tokenBalanceToRecover);
     }
 
-    // Recovers the native token on the chain
+    // Recovers the native token of the chain
     function recoverEther() external onlyOwner {
         uint256 etherToRecover = address(this).balance;
         Address.sendValue(payable(projectWallet), etherToRecover);
