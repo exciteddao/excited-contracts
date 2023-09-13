@@ -317,6 +317,14 @@ describe("InsuredVestingV1", () => {
           });
         }
       });
+
+      it("cannot claim if emergency released", async () => {
+        await setAllocationForUser1();
+        await addFundingFromUser1();
+        await activateAndReachStartTime();
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
+        await expectRevert(async () => insuredVesting.methods.claim(user1).send({ from: user1 }), Error.EmergencyReleaseActive);
+      });
     });
 
     describe("set decision for refund", () => {
@@ -424,6 +432,14 @@ describe("InsuredVestingV1", () => {
         expect((await insuredVesting.methods.userVestings(user1).call()).shouldRefund).to.be.false;
         await insuredVesting.methods.setDecision(false).send({ from: user1 });
         expect((await insuredVesting.methods.userVestings(user1).call()).shouldRefund).to.be.false;
+      });
+
+      it("cannot set decision if emergency released", async () => {
+        await setAllocationForUser1();
+        await addFundingFromUser1();
+        await activateAndReachStartTime();
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
+        await expectRevert(async () => insuredVesting.methods.setDecision(true).send({ from: user1 }), Error.EmergencyReleaseActive);
       });
     });
 
@@ -674,6 +690,16 @@ describe("InsuredVestingV1", () => {
         await expectRevert(() => insuredVesting.methods.emergencyRefund(user1).send({ from: user1 }), Error.NoFundsAdded);
       });
 
+      it("cannot emergency claim if already claimed full amount", async () => {
+        await setAllocationForUser1();
+        await addFundingFromUser1();
+        await activateAndReachStartTime();
+        await advanceDays(VESTING_DURATION_DAYS);
+        await insuredVesting.methods.claim(user1).send({ from: user1 });
+        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
+        await expectRevert(() => insuredVesting.methods.emergencyRefund(user1).send({ from: user1 }), Error.NothingToClaim);
+      });
+
       it("lets user emergency claim back remaining FUNDING_TOKEN balance, some PROJECT_TOKEN claimed", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
@@ -689,17 +715,6 @@ describe("InsuredVestingV1", () => {
         );
       });
 
-      it("can regularly claim even if emergency released", async () => {
-        await setAllocationForUser1();
-        await addFundingFromUser1();
-        await activateAndReachStartTime();
-        await insuredVesting.methods.emergencyRelease().send({ from: deployer });
-        await advanceDays(VESTING_DURATION_DAYS / 4);
-        await setBalancesForDelta();
-        await insuredVesting.methods.claim(user1).send({ from: user1 });
-        await expectUserBalanceDelta("projectToken", await vestedAmount(VESTING_DURATION_DAYS / 4, "projectToken"));
-      });
-
       it("cannot emergency claim twice", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
@@ -708,8 +723,7 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.emergencyRelease().send({ from: deployer });
         await insuredVesting.methods.emergencyRefund(user1).send({ from: user1 });
         expect(await fundingToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
-        await insuredVesting.methods.emergencyRefund(user1).send({ from: user1 });
-        expect(await fundingToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
+        await expectRevert(() => insuredVesting.methods.emergencyRefund(user1).send({ from: user1 }), Error.NothingToClaim);
       });
 
       it("cannot emergency claim if owner hasn't released", async () => {
@@ -1266,6 +1280,16 @@ describe("InsuredVestingV1", () => {
 
       await approveProjectTokenToVesting((FUNDING_PER_USER + FUNDING_PER_USER / 2) * FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO);
       await insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet });
+    });
+
+    it("cannot activate if emergency released", async () => {
+      await setAllocationForUser1(FUNDING_PER_USER);
+      await addFundingFromUser1(FUNDING_PER_USER);
+      await approveProjectTokenToVesting();
+
+      await insuredVesting.methods.emergencyRelease().send({ from: deployer });
+
+      await expectRevert(async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet }), Error.EmergencyReleaseActive);
     });
   });
 

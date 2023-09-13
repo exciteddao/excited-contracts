@@ -23,8 +23,6 @@ describe("InsuredVestingV1 deployment", () => {
     deployer = await account(9);
     xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "PROJECT_TOKEN"])).options.address);
 
-    // TODO(luke) - is this not duplicate with the one in "deployed config" / "before"?
-
     // TODO TEMPORARY: until having production PROJECT_TOKEN & project wallet addresses
     const testConfig = [...config];
     testConfig[1] = xctd.options.address;

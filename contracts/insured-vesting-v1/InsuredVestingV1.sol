@@ -133,8 +133,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         emit FundsAdded(msg.sender, amount);
     }
 
-    // TODO(audit) block if emergency (reason why - it may contradict the global refund decision that's been taken by emergency release)
-    function claim(address user) external onlyProjectOrSender(user) {
+    function claim(address user) external onlyProjectOrSender(user) onlyIfNotEmergencyReleased {
         if (!isVestingStarted()) revert VestingNotStarted();
 
         UserVesting storage userVesting = userVestings[user];
@@ -161,8 +160,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         }
     }
 
-    // TODO(audit) - block if emergency released
-    function setDecision(bool _shouldRefund) external {
+    function setDecision(bool _shouldRefund) external onlyIfNotEmergencyReleased {
         UserVesting storage userVesting = userVestings[msg.sender];
         if (userVesting.fundingTokenAmount == 0) revert NoFundsAdded();
         if (userVesting.shouldRefund == _shouldRefund) return;
@@ -191,8 +189,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         emit AllocationSet(user, newAllocation, fundingTokenPreviousAllocation, amountToRefund);
     }
 
-    // TODO(audit) - block if emergency released
-    function activate(uint256 _vestingStartTime) external onlyProject onlyBeforeActivation {
+    function activate(uint256 _vestingStartTime) external onlyProject onlyBeforeActivation onlyIfNotEmergencyReleased {
         if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW))
             revert StartTimeTooDistant(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
 
@@ -223,7 +220,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
 
         uint256 claimable = userVesting.fundingTokenAmount - userVesting.fundingTokenClaimed;
 
-        // TODO(audit) - add: if (claimable == 0) revert NothingToClaim();
+        if (claimable == 0) revert NothingToClaim();
 
         userVesting.fundingTokenClaimed += claimable;
         fundingTokenTotalClaimed += claimable;
