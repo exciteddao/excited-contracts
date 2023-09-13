@@ -74,7 +74,7 @@ export async function withFixture() {
   // TODO TEMPORARY: until having production project token address & project wallet address
   const testConfig = [...config];
   testConfig[1] = projectToken.options.address;
-  testConfig[2] = projectWallet;
+  testConfig[4] = projectWallet;
   // END TEMPORARY
 
   insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
@@ -148,6 +148,7 @@ export async function setBalancesForDelta() {
   balances.project.projectToken = BN(await projectToken.methods.balanceOf(projectWallet).call());
 }
 
+// TODO change
 export async function vestedAmount(days: number, token: "fundingToken" | "projectToken") {
   let amount = BN(FUNDING_PER_USER)
     .dividedBy(VESTING_DURATION_SECONDS)
