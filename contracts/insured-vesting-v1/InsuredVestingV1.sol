@@ -11,10 +11,13 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 // Funding tokens are fully insured, such that at any point in time, a user can set their decision to be refunded with any (unclaimed) funding tokens.
 
 // Roles:
-// - Owner: Can accelerate (emergency release) vesting in case of a critical bug; can help the project recover tokens (including overfunded project or funding tokens) and ether sent to the contract by mistake.
+// - Owner: Can accelerate (emergency release) vesting in case of a critical bug;
+//          can help the project recover tokens (including overfunded project or funding tokens) and ether sent to the contract by mistake.
 //          This role is revocable.
-// - Project: Can set the allocation of funding token that users can send to the contract; can activate (initiate vesting); can claim on behalf of users (users still get their tokens in this case).
-// - User: Can fund the contract according to their allocation; can claim their tokens once the vesting period has started; can set their decision to be refunded with funding tokens instead of project tokens.
+// - Project: Can set the allocation of funding token that users can send to the contract; can activate (initiate vesting);
+//            can claim on behalf of users (users still get their tokens in this case).
+// - User: Can fund the contract according to their allocation;
+//         can claim their tokens once the vesting period has started; can set their decision to be refunded with funding tokens instead of project tokens.
 
 // When project calls activate(), the contract will:
 // - Transfer the necessary amount of tokens required to cover all funded tokens.
@@ -61,7 +64,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     mapping(address => UserVesting) public userVestings;
 
     // --- Events ---
-    event AllocationSet(address indexed user, uint256 fundingTokenAmount, uint256 fundingTokenPreviousAmount, uint256 fundingTokenRefundedAmount);
+    event AllocationSet(address indexed user, uint256 fundingTokenNewAmount, uint256 fundingTokenOldAmount, uint256 fundingTokenRefundedAmount);
     event FundsAdded(address indexed user, uint256 fundingTokenAmount);
     event Activated();
 
@@ -133,6 +136,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         emit FundsAdded(msg.sender, amount);
     }
 
+    // Disabled if emergency released, as it may contradict the global refund decision that's been taken by emergency release
     function claim(address user) external onlyProjectOrSender(user) onlyIfNotEmergencyReleased {
         if (!isVestingStarted()) revert VestingNotStarted();
 
@@ -172,21 +176,22 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     // --- Project only functions ---
     function setFundingTokenAllocation(address user, uint256 newAllocation) external onlyProject onlyBeforeActivation onlyIfNotEmergencyReleased {
         UserVesting storage userVesting = userVestings[user];
-        uint256 fundingTokenPreviousAllocation = userVesting.fundingTokenAllocation;
+        uint256 oldAllocation = userVesting.fundingTokenAllocation;
         userVesting.fundingTokenAllocation = newAllocation;
 
         uint256 amountToRefund = 0;
 
         // Refund user if they have funded more than the new allocation
         if (userVesting.fundingTokenAmount > newAllocation) {
-            // Note: it is required that userVesting.fundingTokenClaimed is 0. This is guaranteed by requiring both onlyBeforeActivation && onlyIfNotEmergencyReleased
+            // Note: it is required that userVesting.fundingTokenClaimed is 0.
+            // This is guaranteed by requiring both onlyBeforeActivation && onlyIfNotEmergencyReleased
             amountToRefund = userVesting.fundingTokenAmount - newAllocation;
             userVesting.fundingTokenAmount -= amountToRefund;
             fundingTokenTotalAmount -= amountToRefund;
             FUNDING_TOKEN.safeTransfer(user, amountToRefund);
         }
 
-        emit AllocationSet(user, newAllocation, fundingTokenPreviousAllocation, amountToRefund);
+        emit AllocationSet(user, newAllocation, oldAllocation, amountToRefund);
     }
 
     function activate(uint256 _vestingStartTime) external onlyProject onlyBeforeActivation onlyIfNotEmergencyReleased {

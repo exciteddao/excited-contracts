@@ -629,12 +629,12 @@ describe("InsuredVestingV1", () => {
         await expectRevert(() => insuredVesting.methods.setFundingTokenAllocation(user1, 1).send({ from: projectWallet }), Error.EmergencyReleaseActive);
       });
 
-      it(`should emit '${Event.AllocationSet}' event with previous allocation and refunded amount (if any)`, async () => {
+      it(`should emit '${Event.AllocationSet}' event with new and old allocation and refunded amount (if any)`, async () => {
         await setAllocationForUser1();
         const initialAllocationEventArgs = (await insuredVesting.getPastEvents(Event.AllocationSet))[0].returnValues;
         expect(initialAllocationEventArgs.user).to.be.eq(user1);
-        expect(initialAllocationEventArgs.fundingTokenAmount).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
-        expect(initialAllocationEventArgs.fundingTokenPreviousAmount).to.be.bignumber.eq(0);
+        expect(initialAllocationEventArgs.fundingTokenNewAmount).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
+        expect(initialAllocationEventArgs.fundingTokenOldAmount).to.be.bignumber.eq(0);
         expect(initialAllocationEventArgs.fundingTokenRefundedAmount).to.be.bignumber.eq(0);
 
         await addFundingFromUser1();
@@ -643,8 +643,8 @@ describe("InsuredVestingV1", () => {
         await setAllocationForUser1(newAmount);
         const updatedAllocationEventArgs = (await insuredVesting.getPastEvents(Event.AllocationSet))[0].returnValues;
         expect(updatedAllocationEventArgs.user).to.be.eq(user1);
-        expect(updatedAllocationEventArgs.fundingTokenAmount).to.be.bignumber.eq(await fundingToken.amount(newAmount));
-        expect(updatedAllocationEventArgs.fundingTokenPreviousAmount).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
+        expect(updatedAllocationEventArgs.fundingTokenNewAmount).to.be.bignumber.eq(await fundingToken.amount(newAmount));
+        expect(updatedAllocationEventArgs.fundingTokenOldAmount).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER));
         expect(updatedAllocationEventArgs.fundingTokenRefundedAmount).to.be.bignumber.eq(await fundingToken.amount(FUNDING_PER_USER - newAmount));
       });
     });
