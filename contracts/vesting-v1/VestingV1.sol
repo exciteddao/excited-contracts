@@ -9,15 +9,15 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 // This contract distributes a project's tokens to users proportionally over a specified period of time, such that tokens are vested.
 
 // Roles:
-// - owner: can accelerate (emergency release) vesting in case of a critical bug; can recover tokens and ether sent to the contract by mistake.
-//          this role is revocable
-// - project: can activate (initiate vesting); can set the amount of tokens to be distributed to each user; can claim on behalf of users
-// - user: can claim their tokens once the vesting period has started
+// - Owner: Can accelerate (emergency release) vesting in case of a critical bug; can help the project recover tokens (including overfunded project tokens) and ether sent to the contract by mistake.
+//          this role is revocable.
+// - Project: Can set the amount of tokens to be distributed to each user; can activate (initiate vesting); can claim on behalf of users (users still get their tokens in this case).
+// - User: can claim their vested tokens, once the vesting period has started.
 
-// when project calls activate(), the contract will:
-// - transfer the necessary amount of project tokens required to cover user vestings, to fund itself
-// - set the vesting clock to start at the specified time (but no more than 90 days in the future)
-// - lock amounts (project cannot add or update token vesting amounts for users anymore)
+// When project calls activate(), the contract will:
+// - Transfer the necessary amount of project tokens required to cover user vestings, to fund itself.
+// - Set the vesting clock to start at the specified time (but no more than 90 days in the future).
+// - Lock amounts (project cannot add or update token vesting amounts for users anymore).
 contract VestingV1 is OwnerRole, ProjectRole {
     using SafeERC20 for IERC20;
 
@@ -31,8 +31,8 @@ contract VestingV1 is OwnerRole, ProjectRole {
     uint256 public immutable VESTING_DURATION_SECONDS;
 
     // When the contract is emergency released, users can claim all their unclaimed tokens immediately,
-    // (the project can also claim on behalf of users)
-    bool public emergencyReleased = false;
+    // (the project can also claim on behalf of users. users still get their tokens in this case)
+    bool public isEmergencyReleased = false;
 
     uint256 public vestingStartTime;
     uint256 public totalAmount;
@@ -46,11 +46,11 @@ contract VestingV1 is OwnerRole, ProjectRole {
     mapping(address => UserVesting) public userVestings;
 
     // --- Events ---
-    event AmountSet(address indexed target, uint256 newAmount, uint256 oldAmount);
+    event AmountSet(address indexed user, uint256 newAmount, uint256 oldAmount);
     event Activated();
-    event Claimed(address indexed target, uint256 amount, bool isClaimedByProject);
+    event Claimed(address indexed user, uint256 amount, bool indexed isInitiatedByProject);
     event EmergencyReleased();
-    event EmergencyClaimed(address indexed target, uint256 amount, bool indexed isClaimedByProject);
+    event EmergencyClaimed(address indexed user, uint256 amount, bool indexed isInitiatedByProject);
     event TokenRecovered(address indexed token, uint256 amount);
     event EtherRecovered(uint256 amount);
 
@@ -73,15 +73,16 @@ contract VestingV1 is OwnerRole, ProjectRole {
         _;
     }
 
-    modifier onlyProjectOrSender(address target) {
-        if (!(msg.sender == projectWallet || msg.sender == target)) revert OnlyProjectOrSender();
+    modifier onlyProjectOrSender(address user) {
+        if (!(msg.sender == projectWallet || msg.sender == user)) revert OnlyProjectOrSender();
         _;
     }
 
     constructor(address _projectToken, uint256 _vestingDurationSeconds, address _projectWallet) ProjectRole(_projectWallet) {
         if (_vestingDurationSeconds > MAX_VESTING_DURATION_SECONDS) revert VestingDurationTooLong(_vestingDurationSeconds);
+
         PROJECT_TOKEN = IERC20(_projectToken);
-        VESTING_DURATION_SECONDS = _vestingDurationSeconds; // TODO(audit) reconsider check no more than 10yrs
+        VESTING_DURATION_SECONDS = _vestingDurationSeconds;
     }
 
     // --- User only functions ---
@@ -99,17 +100,17 @@ contract VestingV1 is OwnerRole, ProjectRole {
 
     // --- Project only functions ---
     function setAmount(address user, uint256 newAmount) external onlyProject onlyBeforeActivation {
-        uint256 amount = userVestings[user].amount;
+        uint256 oldAmount = userVestings[user].amount;
 
-        if (newAmount > amount) {
-            totalAmount += (newAmount - amount);
+        if (newAmount > oldAmount) {
+            totalAmount += (newAmount - oldAmount);
         } else {
-            totalAmount -= (amount - newAmount);
+            totalAmount -= (oldAmount - newAmount);
         }
 
         userVestings[user].amount = newAmount;
 
-        emit AmountSet(user, newAmount, amount);
+        emit AmountSet(user, newAmount, oldAmount);
     }
 
     function activate(uint256 _vestingStartTime) external onlyProject onlyBeforeActivation {
@@ -122,7 +123,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
 
         vestingStartTime = _vestingStartTime;
 
-        PROJECT_TOKEN.safeTransferFrom(msg.sender, address(this), totalAmount);
+        PROJECT_TOKEN.safeTransferFrom(projectWallet, address(this), totalAmount);
 
         emit Activated();
     }
@@ -130,22 +131,22 @@ contract VestingV1 is OwnerRole, ProjectRole {
     // --- Emergency functions ---
     // TODO(Audit) - ensure with legal/compliance we're ok without an emergency lever to release all tokens here
     function emergencyRelease() external onlyOwner {
-        if (emergencyReleased) revert EmergencyReleaseActive();
+        if (isEmergencyReleased) revert EmergencyReleaseActive();
         // If not activated, the contract does not hold any tokens, so there's nothing to release
         if (!isActivated()) revert NotActivated();
 
-        emergencyReleased = true;
+        isEmergencyReleased = true;
         emit EmergencyReleased();
     }
 
     function emergencyClaim(address user) external onlyProjectOrSender(user) {
-        if (!emergencyReleased) revert NotEmergencyReleased();
+        if (!isEmergencyReleased) revert NotEmergencyReleased();
 
-        UserVesting storage userStatus = userVestings[user];
-        uint256 claimable = userStatus.amount - userStatus.claimed;
+        UserVesting storage userVesting = userVestings[user];
+        uint256 claimable = userVesting.amount - userVesting.claimed;
         if (claimable == 0) revert NothingToClaim();
 
-        userStatus.claimed += claimable;
+        userVesting.claimed += claimable;
         totalClaimed += claimable;
         PROJECT_TOKEN.safeTransfer(user, claimable);
 
@@ -157,8 +158,9 @@ contract VestingV1 is OwnerRole, ProjectRole {
 
         // Recover only project tokens that were sent by accident (tokens allocated to users will NOT be recovered)
         if (tokenAddress == address(PROJECT_TOKEN)) {
-            if (totalAmount - totalClaimed >= tokenBalanceToRecover) revert NothingToClaim();
-            tokenBalanceToRecover -= totalAmount - totalClaimed;
+            uint256 totalOwed = totalAmount - totalClaimed;
+            if (totalOwed >= tokenBalanceToRecover) revert NothingToClaim();
+            tokenBalanceToRecover -= totalOwed;
         }
 
         IERC20(tokenAddress).safeTransfer(projectWallet, tokenBalanceToRecover);
@@ -166,6 +168,7 @@ contract VestingV1 is OwnerRole, ProjectRole {
         emit TokenRecovered(tokenAddress, tokenBalanceToRecover);
     }
 
+    // Recovers the native token of the chain
     function recoverEther() external onlyOwner {
         uint256 etherToRecover = address(this).balance;
         Address.sendValue(payable(projectWallet), etherToRecover);
