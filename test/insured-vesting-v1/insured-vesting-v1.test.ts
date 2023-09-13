@@ -446,20 +446,23 @@ describe("InsuredVestingV1", () => {
 
       it("user cannot fund if does not have allocation", async () => {
         const amount = await fundingToken.amount(FUNDING_PER_USER);
-        await expectRevert(async () => insuredVesting.methods.addFunds(amount).send({ from: user1 }), `${Error.AllocationExceeded}(${amount})`);
+        await expectRevert(async () => insuredVesting.methods.addFunds(amount).send({ from: user1 }), `${Error.AllocationExceeded}(0)`);
       });
 
       it("user cannot add more funds than allocation, two attempts", async () => {
         await setAllocationForUser1();
         await addFundingFromUser1();
         const amount = await fundingToken.amount(1);
-        await expectRevert(async () => insuredVesting.methods.addFunds(amount).send({ from: user1 }), `${Error.AllocationExceeded}(${amount})`);
+        await expectRevert(async () => insuredVesting.methods.addFunds(amount).send({ from: user1 }), `${Error.AllocationExceeded}(0)`);
       });
 
       it("user cannot add more funds than allocation, single attempts", async () => {
         await setAllocationForUser1();
         const amount = await fundingToken.amount(FUNDING_PER_USER + 1);
-        await expectRevert(async () => insuredVesting.methods.addFunds(amount).send({ from: user1 }), `${Error.AllocationExceeded}(${amount})`);
+        await expectRevert(
+          async () => insuredVesting.methods.addFunds(amount).send({ from: user1 }),
+          `${Error.AllocationExceeded}(${await fundingToken.amount(FUNDING_PER_USER)})`
+        );
       });
 
       it("cannot add funds after activation", async () => {
