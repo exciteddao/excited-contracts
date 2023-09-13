@@ -289,7 +289,7 @@ describe("VestingV1", () => {
 
         // Transfer excess tokens and try to recover them
         await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(TOKENS_PER_USER * 3)).send({ from: projectWallet });
-        let startingBalance = await projectToken.methods.balanceOf(projectWallet).call();
+        const startingBalance = await projectToken.methods.balanceOf(projectWallet).call();
         await vesting.methods.recoverToken(projectToken.options.address).send({ from: deployer });
         expect(BN(await projectToken.methods.balanceOf(projectWallet).call()).minus(startingBalance)).to.be.bignumber.eq(
           await projectToken.amount(TOKENS_PER_USER * 3)

@@ -150,7 +150,7 @@ export async function setBalancesForDelta() {
 
 // TODO change
 export async function vestedAmount(days: number, token: "fundingToken" | "projectToken") {
-  let amount = BN(FUNDING_PER_USER)
+  const amount = BN(FUNDING_PER_USER)
     .dividedBy(VESTING_DURATION_SECONDS)
     .multipliedBy(DAY * days);
   if (token === "projectToken") {
