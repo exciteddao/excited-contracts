@@ -9,8 +9,8 @@ import { deployArtifact } from "@defi.org/web3-candies/dist/hardhat";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 
-import { setup } from "./fixture";
-import { erc20, bn18, Token, account, zeroAddress } from "@defi.org/web3-candies";
+import { setup, fundingToken } from "./fixture";
+import { erc20, bn18, Token, account, zeroAddress, bn6 } from "@defi.org/web3-candies";
 
 describe("InsuredVestingV1 deployment", () => {
   before(async () => await setup());
@@ -23,10 +23,12 @@ describe("InsuredVestingV1 deployment", () => {
     deployer = await account(9);
     xctd = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "PROJECT_TOKEN"])).options.address);
 
+    // TODO(luke) - is this not duplicate with the one in "deployed config" / "before"?
+
     // TODO TEMPORARY: until having production PROJECT_TOKEN & project wallet addresses
     const testConfig = [...config];
     testConfig[1] = xctd.options.address;
-    testConfig[2] = await account(4);
+    testConfig[4] = await account(4);
     // END TEMPORARY
 
     insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
@@ -40,7 +42,7 @@ describe("InsuredVestingV1 deployment", () => {
       // TODO TEMPORARY: until having production PROJECT_TOKEN & project wallet addresses
       const testConfig = [...config];
       testConfig[1] = xctd.options.address;
-      testConfig[2] = await account(4);
+      testConfig[4] = await account(4);
       // END TEMPORARY
 
       insuredVesting = await deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig);
@@ -79,8 +81,8 @@ describe("InsuredVestingV1 deployment", () => {
     });
 
     it("for each usdc, we should get at least 1 xctd", async () => {
-      const usdcToXctdRate = BN(await insuredVesting.methods.PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE().call());
-      expect(usdcToXctdRate).to.be.bignumber.lte(100_000_000);
+      const xctdOut = BN(await insuredVesting.methods.fundingTokenToProjectToken(bn6(1)).call());
+      expect(xctdOut).to.be.bignumber.gte(bn18(1));
     });
 
     it("duration is 2 years", async () => {
@@ -99,25 +101,36 @@ describe("InsuredVestingV1 deployment", () => {
 
     const usdcAddress = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
     const randomEthAddress = "0xc0ffee254729296a45a3885639AC7E10F9d54979";
-    const xctdToUsdcRate = BN(20000000); // Reflects 0.2USD = 1 XCTD, based on Ethereum's USDC having 6 decimals and XCTD having 18 decimals
+    const fundingTokenAmountIn = BN(200000);
+    const projectTokenAmountOut = BN("1000000000000000000");
     const durationSeconds = 60 * 60 * 24 * 365 * 2;
 
     describe("Error handling", () => {
       const testCases: { config: ConfigTuple; errorMessage: string }[] = [
         {
-          config: [randomEthAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, durationSeconds],
+          config: [randomEthAddress, randomEthAddress, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress, durationSeconds],
           errorMessage: "Wrong USDC address",
         },
         {
-          config: [usdcAddress, zeroAddress, randomEthAddress, xctdToUsdcRate, durationSeconds],
+          config: [usdcAddress, zeroAddress, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress, durationSeconds],
           errorMessage: "XCTD address cannot be zero",
         },
         {
-          config: [usdcAddress, randomEthAddress, zeroAddress, xctdToUsdcRate, durationSeconds],
+          config: [usdcAddress, randomEthAddress, fundingTokenAmountIn, projectTokenAmountOut, zeroAddress, durationSeconds],
           errorMessage: "Project address cannot be zero",
         },
-        { config: [usdcAddress, randomEthAddress, randomEthAddress, bn18(), durationSeconds], errorMessage: "Wrong XCTD to USDC rate" },
-        { config: [usdcAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, 10000], errorMessage: "Wrong vesting duration" },
+        {
+          config: [usdcAddress, randomEthAddress, bn6(0.3), projectTokenAmountOut, randomEthAddress, durationSeconds],
+          errorMessage: "Wrong USDC amount in",
+        },
+        {
+          config: [usdcAddress, randomEthAddress, fundingTokenAmountIn, bn18(1.1), randomEthAddress, durationSeconds],
+          errorMessage: "Wrong XCTD amount out",
+        },
+        {
+          config: [usdcAddress, randomEthAddress, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress, 10000],
+          errorMessage: "Wrong vesting duration",
+        },
       ];
 
       for (const { config, errorMessage } of testCases) {
@@ -136,14 +149,14 @@ describe("InsuredVestingV1 deployment", () => {
       it("should deploy", async () => {
         await deployInsuredVestingV1(
           web3CandiesStub.deploy,
-          [usdcAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, durationSeconds],
+          [usdcAddress, randomEthAddress, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress, durationSeconds],
           new BN(10),
           new BN(10)
         );
         expect(web3CandiesStub.deploy.calledOnce).to.be.true;
         expect(web3CandiesStub.deploy.firstCall.args[0]).to.deep.equal({
           contractName: "InsuredVestingV1",
-          args: [usdcAddress, randomEthAddress, randomEthAddress, xctdToUsdcRate, durationSeconds],
+          args: [usdcAddress, randomEthAddress, fundingTokenAmountIn, projectTokenAmountOut, randomEthAddress, durationSeconds],
           maxFeePerGas: new BN(10),
           maxPriorityFeePerGas: new BN(10),
         });

@@ -5,11 +5,11 @@ export interface Config {
   usdcAddress: string;
   xctdAddress: string;
   projectWalletAddress: string;
-  xctdToUsdcRate: BN;
+  fundingTokenAmountIn: BN;
+  projectTokenAmountOut: BN;
   durationSeconds: number;
 }
 
-const PRECISION = 1e20;
 const USDC_DECIMALS = 1e6;
 const XCTD_DECIMALS = 1e18;
 const STRIKE_PRICE = 0.2; // 0.2$ per XCTD
@@ -20,11 +20,18 @@ export const _config: Config = {
   xctdAddress: zeroAddress,
   // TODO: replace with real address
   projectWalletAddress: zeroAddress,
-  // (1e6 * 1e20) / 1e18 * 0.2 = 20_000_000
-  xctdToUsdcRate: BN(USDC_DECIMALS).multipliedBy(PRECISION).dividedBy(XCTD_DECIMALS).multipliedBy(STRIKE_PRICE).integerValue(),
+  fundingTokenAmountIn: BN(STRIKE_PRICE).multipliedBy(USDC_DECIMALS),
+  projectTokenAmountOut: BN(XCTD_DECIMALS),
   durationSeconds: 60 * 60 * 24 * 365 * 2,
 };
 
-export type ConfigTuple = [string, string, string, BN, number];
+export type ConfigTuple = [string, string, BN, BN, string, number];
 
-export const config: ConfigTuple = [_config.usdcAddress, _config.xctdAddress, _config.projectWalletAddress, _config.xctdToUsdcRate, _config.durationSeconds];
+export const config: ConfigTuple = [
+  _config.usdcAddress,
+  _config.xctdAddress,
+  _config.fundingTokenAmountIn,
+  _config.projectTokenAmountOut,
+  _config.projectWalletAddress,
+  _config.durationSeconds,
+];
