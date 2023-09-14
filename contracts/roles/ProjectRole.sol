@@ -18,6 +18,7 @@ abstract contract ProjectRole is Context {
     }
 
     modifier onlyProject() {
+        // solhint-disable-next-line reason-string, custom-errors
         require(projectWallet == _msgSender(), "ProjectRole: caller is not the project wallet");
         _;
     }
@@ -28,6 +29,7 @@ abstract contract ProjectRole is Context {
 
     // TODO(audit) switch internal to private
     function _transferProjectRole(address newProjectWallet) internal {
+        // solhint-disable-next-line reason-string, custom-errors
         require(newProjectWallet != address(0), "ProjectRole: new project wallet is the zero address");
         address oldProjectWallet = projectWallet;
         projectWallet = newProjectWallet;

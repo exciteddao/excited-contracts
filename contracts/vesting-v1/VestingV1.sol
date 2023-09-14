@@ -9,9 +9,11 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 // This contract distributes a project's tokens to users proportionally over a specified period of time, such that tokens are vested.
 
 // Roles:
-// - Owner: Can accelerate (emergency release) vesting in case of a critical bug; can help the project recover tokens (including overfunded project tokens) and ether sent to the contract by mistake.
-//          this role is revocable.
-// - Project: Can set the amount of tokens to be distributed to each user; can activate (initiate vesting); can claim on behalf of users (users still get their tokens in this case).
+// - Owner: Can accelerate (emergency release) vesting in case of a critical bug;
+//          can help the project recover tokens (including overfunded project tokens) and ether sent to the contract by mistake.
+//          This role is revocable.
+// - Project: Can set the amount of tokens to be distributed to each user;
+//            can activate (initiate vesting); can claim on behalf of users (users still get their tokens in this case).
 // - User: can claim their vested tokens, once the vesting period has started.
 
 // When project calls activate(), the contract will:
