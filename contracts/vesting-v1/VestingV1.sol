@@ -1,58 +1,73 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.19;
+pragma solidity 0.8.19; // TODO(audit) choose the "correct" (i.e. stable/secure) version.
 
+import {Ownable as OwnerRole} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ProjectRole} from "../roles/ProjectRole.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
-// when project calls activate, the contract will:
-// - transfer the necessary amount of tokens required to cover all allocations
-// - set the vesting clock to start at the specified time (no more than 90 days in the future)
-// - lock the contract for any further allocations
-contract VestingV1 is AccessControl {
+// This contract distributes a project's tokens to users proportionally over a specified period of time, such that tokens are vested.
+
+// Roles:
+// - Owner: Can accelerate (emergency release) vesting in case of a critical bug;
+//          can help the project recover tokens (including overfunded project tokens) and ether sent to the contract by mistake.
+//          This role is revocable.
+// - Project: Can set the amount of tokens to be distributed to each user;
+//            can activate (initiate vesting); can claim on behalf of users (users still get their tokens in this case).
+// - User: can claim their vested tokens, once the vesting period has started.
+
+// When project calls activate(), the contract will:
+// - Transfer the necessary amount of project tokens required to cover user vestings, to fund itself.
+// - Set the vesting clock to start at the specified time (but no more than 90 days in the future).
+// - Lock amounts (project cannot add or update token vesting amounts for users anymore).
+contract VestingV1 is OwnerRole, ProjectRole {
     using SafeERC20 for IERC20;
 
+    // Prevent project from locking up tokens for a long time in the future, mostly in case of human error
     uint256 public constant MAX_START_TIME_FROM_NOW = 3 * 30 days;
-    bytes32 public constant DAO_ROLE = keccak256("DAO_ROLE");
-    bytes32 public constant PROJECT_ROLE = keccak256("PROJECT_ROLE");
 
+    uint256 public constant MAX_VESTING_DURATION_SECONDS = 10 * 365 days;
+
+    // Set in constructor
     IERC20 public immutable PROJECT_TOKEN;
     uint256 public immutable VESTING_DURATION_SECONDS;
-    address public immutable DAO_WALLET;
-    address public immutable PROJECT_WALLET;
 
-    bool public emergencyReleased = false;
+    // When the contract is emergency released, users can claim all their unclaimed tokens immediately,
+    // (the project can also claim on behalf of users. users still get their tokens in this case)
+    bool public isEmergencyReleased = false;
 
     uint256 public vestingStartTime;
-    uint256 public totalAllocated;
+    uint256 public totalAmount;
+    uint256 public totalClaimed;
 
     struct UserVesting {
-        uint256 amount;
-        uint256 totalClaimed;
+        uint256 amount; // total amount of tokens to be vested for the user
+        uint256 claimed;
     }
 
     mapping(address => UserVesting) public userVestings;
 
     // --- Events ---
-    event Claimed(address indexed target, uint256 amount);
-    event AmountSet(address indexed target, uint256 amount);
-    event Activated(uint256 timestamp, uint256 tokensTransferred);
-    event EmergencyRelease();
-    event UserEmergencyClaimed(address indexed target, uint256 projectTokenAmount);
-    event TokenRecovered(address indexed token, uint256 tokenAmount);
-    event EtherRecovered(uint256 etherAmount);
+    event AmountSet(address indexed user, uint256 newAmount, uint256 oldAmount);
+    event Activated();
+    event Claimed(address indexed user, uint256 amount, bool indexed isInitiatedByProject);
+    event EmergencyReleased();
+    event EmergencyClaimed(address indexed user, uint256 amount, bool indexed isInitiatedByProject);
+    event TokenRecovered(address indexed token, uint256 amount);
+    event EtherRecovered(uint256 amount);
 
     // --- Errors ---
-    error StartTimeTooLate(uint256 vestingStartTime, uint256 maxStartTime);
-    error StartTimeIsInPast(uint256 vestingStartTime);
-    error VestingNotStarted();
-    error NothingToClaim();
-    error NoAllocationsAdded();
+    error VestingDurationTooLong(uint256 vestingPeriodSeconds);
+    error StartTimeTooDistant(uint256 vestingStartTime, uint256 maxStartTime);
+    error StartTimeInPast(uint256 vestingStartTime);
     error OnlyProjectOrSender();
-    error AlreadyActivated();
     error NotActivated();
-    error EmergencyReleased();
-    error EmergencyNotReleased();
+    error VestingNotStarted();
+    error AlreadyActivated();
+    error NothingToClaim();
+    error TotalAmountZero();
+    error EmergencyReleaseActive();
+    error NotEmergencyReleased();
 
     // --- Modifiers ---
     modifier onlyBeforeActivation() {
@@ -60,104 +75,105 @@ contract VestingV1 is AccessControl {
         _;
     }
 
-    modifier onlyIfNotEmergencyReleased() {
-        if (emergencyReleased) revert EmergencyReleased();
+    modifier onlyProjectOrSender(address user) {
+        if (!(msg.sender == projectWallet || msg.sender == user)) revert OnlyProjectOrSender();
         _;
     }
 
-    modifier onlyProjectOrSender(address target) {
-        if (!(hasRole(PROJECT_ROLE, msg.sender) || msg.sender == target)) revert OnlyProjectOrSender();
-        _;
+    constructor(address _projectToken, uint256 _vestingDurationSeconds, address _projectWallet) ProjectRole(_projectWallet) {
+        if (_vestingDurationSeconds > MAX_VESTING_DURATION_SECONDS) revert VestingDurationTooLong(_vestingDurationSeconds);
+
+        PROJECT_TOKEN = IERC20(_projectToken);
+        VESTING_DURATION_SECONDS = _vestingDurationSeconds;
     }
 
-    constructor(address projectToken, uint256 vestingDurationSeconds, address daoWallet, address projectWallet) {
-        PROJECT_TOKEN = IERC20(projectToken);
-        VESTING_DURATION_SECONDS = vestingDurationSeconds;
-        DAO_WALLET = daoWallet;
-        PROJECT_WALLET = projectWallet;
-
-        _grantRole(DAO_ROLE, daoWallet);
-        _grantRole(PROJECT_ROLE, projectWallet);
-    }
-
-    // --- Investor functions ---
-    function claim(address target) external onlyProjectOrSender(target) onlyIfNotEmergencyReleased {
-        // TODO ensure that we indeed want to apply this restriction (to enable vaults / auto-compounding)
+    // --- User only functions ---
+    function claim(address user) external onlyProjectOrSender(user) {
         if (!isVestingStarted()) revert VestingNotStarted();
-        uint256 claimable = claimableFor(target);
+        uint256 claimable = claimableFor(user);
         if (claimable == 0) revert NothingToClaim();
 
-        userVestings[target].totalClaimed += claimable;
-        PROJECT_TOKEN.safeTransfer(target, claimable);
+        userVestings[user].claimed += claimable;
+        totalClaimed += claimable;
+        PROJECT_TOKEN.safeTransfer(user, claimable);
 
-        emit Claimed(target, claimable);
+        emit Claimed(user, claimable, msg.sender == projectWallet);
     }
 
     // --- Project only functions ---
-    function setAmount(address target, uint256 amount) external onlyRole(PROJECT_ROLE) onlyBeforeActivation {
-        uint256 currentAmountForUser = userVestings[target].amount;
+    function setAmount(address user, uint256 newAmount) external onlyProject onlyBeforeActivation {
+        uint256 oldAmount = userVestings[user].amount;
 
-        if (amount > currentAmountForUser) {
-            totalAllocated += (amount - currentAmountForUser);
+        if (newAmount > oldAmount) {
+            totalAmount += (newAmount - oldAmount);
         } else {
-            totalAllocated -= (currentAmountForUser - amount);
+            totalAmount -= (oldAmount - newAmount);
         }
 
-        userVestings[target].amount = amount;
+        userVestings[user].amount = newAmount;
 
-        emit AmountSet(target, amount);
+        emit AmountSet(user, newAmount, oldAmount);
     }
 
-    function activate(uint256 _vestingStartTime) external onlyRole(PROJECT_ROLE) onlyBeforeActivation {
+    function activate(uint256 _vestingStartTime) external onlyProject onlyBeforeActivation {
         if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW))
-            revert StartTimeTooLate(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
-        if (_vestingStartTime < block.timestamp) revert StartTimeIsInPast(_vestingStartTime);
-        if (totalAllocated == 0) revert NoAllocationsAdded();
+            revert StartTimeTooDistant(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
+
+        if (_vestingStartTime < block.timestamp) revert StartTimeInPast(_vestingStartTime);
+
+        if (totalAmount == 0) revert TotalAmountZero();
 
         vestingStartTime = _vestingStartTime;
-        uint256 delta = totalAllocated - Math.min(PROJECT_TOKEN.balanceOf(address(this)), totalAllocated);
-        PROJECT_TOKEN.safeTransferFrom(msg.sender, address(this), delta);
 
-        emit Activated(vestingStartTime, delta);
+        PROJECT_TOKEN.safeTransferFrom(projectWallet, address(this), totalAmount);
+
+        emit Activated();
     }
 
     // --- Emergency functions ---
     // TODO(Audit) - ensure with legal/compliance we're ok without an emergency lever to release all tokens here
-    function emergencyRelease() external onlyRole(DAO_ROLE) onlyIfNotEmergencyReleased {
-        if (vestingStartTime == 0) revert NotActivated();
-        emergencyReleased = true;
-        emit EmergencyRelease();
+    function emergencyRelease() external onlyOwner {
+        if (isEmergencyReleased) revert EmergencyReleaseActive();
+        // If not activated, the contract does not hold any tokens, so there's nothing to release
+        if (!isActivated()) revert NotActivated();
+
+        isEmergencyReleased = true;
+        emit EmergencyReleased();
     }
 
-    function emergencyClaim(address target) external onlyProjectOrSender(target) {
-        UserVesting storage userStatus = userVestings[target];
-        if (!emergencyReleased) revert EmergencyNotReleased();
-        if (userStatus.amount == 0) revert NothingToClaim(); // TODO different error?
+    function emergencyClaim(address user) external onlyProjectOrSender(user) {
+        if (!isEmergencyReleased) revert NotEmergencyReleased();
 
-        uint256 toClaim = userStatus.amount - userStatus.totalClaimed;
-        userStatus.totalClaimed += toClaim;
-        PROJECT_TOKEN.safeTransfer(target, toClaim);
+        UserVesting storage userVesting = userVestings[user];
+        uint256 claimable = userVesting.amount - userVesting.claimed;
+        if (claimable == 0) revert NothingToClaim();
 
-        emit UserEmergencyClaimed(target, toClaim);
+        userVesting.claimed += claimable;
+        totalClaimed += claimable;
+        PROJECT_TOKEN.safeTransfer(user, claimable);
+
+        emit EmergencyClaimed(user, claimable, msg.sender == projectWallet);
     }
 
-    function recoverToken(address tokenAddress) external onlyRole(DAO_ROLE) {
-        // Return any balance of the token that's not PROJECT_TOKEN
+    function recoverToken(address tokenAddress) external onlyOwner {
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
 
-        // Recover only project tokens that were sent by accident (tokens assigned to investors will NOT be recovered)
+        // Recover only project tokens that were sent by accident (tokens allocated to users will NOT be recovered)
         if (tokenAddress == address(PROJECT_TOKEN)) {
-            tokenBalanceToRecover -= Math.min(totalAllocated, tokenBalanceToRecover);
+            uint256 totalOwed = totalAmount - totalClaimed;
+            if (totalOwed >= tokenBalanceToRecover) revert NothingToClaim();
+            tokenBalanceToRecover -= totalOwed;
         }
 
-        IERC20(tokenAddress).safeTransfer(DAO_WALLET, tokenBalanceToRecover);
+        IERC20(tokenAddress).safeTransfer(projectWallet, tokenBalanceToRecover);
 
         emit TokenRecovered(tokenAddress, tokenBalanceToRecover);
     }
 
-    function recoverEther() external onlyRole(DAO_ROLE) {
+    // Recovers the native token of the chain
+    function recoverEther() external onlyOwner {
         uint256 etherToRecover = address(this).balance;
-        Address.sendValue(payable(DAO_WALLET), etherToRecover);
+        Address.sendValue(payable(projectWallet), etherToRecover);
 
         emit EtherRecovered(etherToRecover);
     }
@@ -171,16 +187,13 @@ contract VestingV1 is AccessControl {
         return isActivated() && vestingStartTime <= block.timestamp;
     }
 
-    function totalVestedFor(address target) public view returns (uint256) {
+    function totalVestedFor(address user) public view returns (uint256) {
         if (!isVestingStarted()) return 0;
-        UserVesting storage targetStatus = userVestings[target];
-        return Math.min(targetStatus.amount, ((block.timestamp - vestingStartTime) * targetStatus.amount) / VESTING_DURATION_SECONDS);
+        UserVesting memory userVesting = userVestings[user];
+        return Math.min(((block.timestamp - vestingStartTime) * userVesting.amount) / VESTING_DURATION_SECONDS, userVesting.amount);
     }
 
-    function claimableFor(address target) public view returns (uint256) {
-        uint256 totalClaimed = userVestings[target].totalClaimed;
-        uint256 totalVested = totalVestedFor(target);
-
-        return totalVested - totalClaimed;
+    function claimableFor(address user) public view returns (uint256) {
+        return totalVestedFor(user) - userVestings[user].claimed;
     }
 }
