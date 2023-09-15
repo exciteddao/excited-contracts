@@ -2,7 +2,7 @@ import VestingAbi from "./generated/contracts/vesting-v1/VestingV1.json";
 import { VestingV1 } from "./generated/contracts/vesting-v1/VestingV1";
 import { useState } from "react";
 import { NonPayableTransactionObject } from "./generated/types";
-import { Accordion, AccordionButton, AccordionIcon, AccordionItem, AccordionPanel, Box, Button, Code, VStack } from "@chakra-ui/react";
+import { Accordion, AccordionButton, AccordionIcon, AccordionItem, AccordionPanel, Box, Button, Code, Input, VStack, Text } from "@chakra-ui/react";
 
 type AbiItemProps = {
   contract: VestingV1;
@@ -12,18 +12,20 @@ type AbiItemProps = {
 function AbiItem({ contract, abi }: AbiItemProps) {
   const [result, setResult] = useState<string>("");
 
-  const inputsString = abi.inputs
-    .filter(Boolean)
-    .map((input: { name?: string; type: string }, inputIndex) => `${input.name || `arg${inputIndex}`}: ${input.type}`)
-    .join(", ");
+  const inputsString = abi.inputs.map((input: { name?: string; type: string }, inputIndex) => `${input.name || `arg${inputIndex}`}: ${input.type}`).join(", ");
 
-  const outputsString =
-    abi.outputs && abi.outputs.length > 0
-      ? abi.outputs
-          .filter(Boolean)
-          .map((output: { name?: string; type: string }) => output.type)
-          .join(", ")
-      : "";
+  const outputsString = abi.outputs && abi.outputs.length > 0 ? abi.outputs.map((output: { name?: string; type: string }) => output.type).join(", ") : "";
+
+  const InputsForm = abi.inputs.map((input: { name?: string; type: string }, inputIndex) => (
+    <Box key={inputIndex}>
+      <label htmlFor={`input-${inputIndex}`}>
+        <Text as="small">
+          {input.name || `arg${inputIndex}`}: {input.type}
+        </Text>
+      </label>
+      <Input id={`input-${inputIndex}`} />
+    </Box>
+  ));
 
   return (
     <AccordionItem>
@@ -34,17 +36,16 @@ function AbiItem({ contract, abi }: AbiItemProps) {
         <AccordionIcon />
       </AccordionButton>
       <AccordionPanel>
-        {abi.name && abi.type === "function" && abi.outputs && abi.outputs.length > 0 && (
+        {abi.name && abi.type === "function" && (
           <VStack spacing={4} alignItems="flex-start">
+            {InputsForm}
             <Button
               onClick={() => {
                 const methodName: keyof typeof contract.methods = abi.name as keyof typeof contract.methods;
                 const args = abi.inputs.map((input) => input.name || "");
-                console.log("args", args);
 
                 // eslint-disable-next-line prefer-spread
                 const functionToCall = (contract.methods[methodName] as (...args: unknown[]) => NonPayableTransactionObject<unknown>).apply(null, args);
-                console.log(functionToCall);
                 functionToCall.call().then((res: unknown) => {
                   setResult(`${res}`);
                 });
@@ -52,8 +53,11 @@ function AbiItem({ contract, abi }: AbiItemProps) {
             >
               Run
             </Button>
-            <Box backgroundColor="gray.100" width="100%" minHeight="100px" border="1px solid #ccc" overflowY="scroll">
-              {result !== "" && <Code p={4}>{result}</Code>}
+            <Box width="100%">
+              <Text as="small">Result:</Text>
+              <Box backgroundColor="gray.100" width="100%" minHeight="100px" border="1px solid #ccc" overflowY="scroll">
+                {result !== "" && <Code p={4}>{result}</Code>}
+              </Box>
             </Box>
           </VStack>
         )}
