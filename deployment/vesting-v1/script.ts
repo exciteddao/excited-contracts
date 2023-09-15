@@ -21,5 +21,6 @@ export const deployVestingV1 = async (deploy: (params: DeployParams) => Promise<
     args: config,
     maxFeePerGas: maxFeePerGas,
     maxPriorityFeePerGas: maxPriorityFeePerGas,
+    uploadSources: true,
   });
 };

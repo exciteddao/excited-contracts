@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { task, HardhatUserConfig } from "hardhat/config";
+import { task, HardhatUserConfig, subtask } from "hardhat/config";
 import "@typechain/hardhat";
 import "@nomiclabs/hardhat-web3";
 import "hardhat-gas-reporter";
@@ -9,6 +9,9 @@ import _ from "lodash";
 import "hardhat-watcher";
 import "solidity-coverage";
 import "@nomicfoundation/hardhat-verify";
+
+// Sets up tasks - todo maybe change to func
+import "./deployment/insured-vesting-v1/e2e";
 
 import { deployInsuredVestingV1, ConfigTuple as InsuredVestingConfig } from "./deployment/insured-vesting-v1";
 import { deployVestingV1, ConfigTuple as VestingConfig } from "./deployment/vesting-v1";
@@ -26,7 +29,7 @@ task("deploy-contract", "Deploy Excited contract")
       case "InsuredVesting":
         // TODO: confirm name
         contractName = "InsuredVesting";
-        config = require("./deployment/insured-vesting-v1/config").config;
+        config = require("./deployment/insured-vesting-v1/config-poly-test").config;
         testGrep = "/^insuredvestingv1 deployment config/i";
         break;
       case "Vesting":
@@ -100,12 +103,6 @@ task("deploy-mock-erc20-contract", "Deploy Mock ERC20").setAction(async (args, h
       maxPriorityFeePerGas: tip,
     });
   }
-});
-
-task("tryActivate", "Deploy Mock ERC20").setAction(async (args, hre) => {
-  const deployer = process.env.DEPLOYER || (await askDeployer());
-
-  const address = "0x644fe2b58214f765372ef7bed344833fb22d6f81";
 });
 
 export default _.merge(hardhatDefaultConfig(), {

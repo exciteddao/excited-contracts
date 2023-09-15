@@ -9,7 +9,7 @@ export const deployInsuredVestingV1 = async (
   maxPriorityFeePerGas: BN
 ) => {
   if (config[0] !== "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48") {
-    throw new Error("Wrong USDC address");
+    // TODO TEMP throw new Error("Wrong USDC address");
   }
   // TODO: check real XCTD address
   if (config[1] === "0x0000000000000000000000000000000000000000") {
@@ -17,7 +17,7 @@ export const deployInsuredVestingV1 = async (
   }
 
   if (config[2] !== 63_072_000) {
-    throw new Error("Wrong vesting duration");
+    // TODO TEMP throw new Error("Wrong vesting duration");
   }
 
   if (config[3].toString() !== "200000") {

@@ -10,7 +10,12 @@
   "dependencies": {
     "@defi.org/web3-candies": "4.x",
     "@nomicfoundation/hardhat-verify": "^1.1.1",
+    "@nomiclabs/hardhat-web3": "^2.0.0",
+    "commander": "^11.0.0",
+    "hardhat": "^2.17.3",
     "hardhat-watcher": "^2.5.0",
+    "i": "^0.3.7",
+    "npm": "^10.1.0",
     "solidity-coverage": "^0.8.4"
   },
   "scripts": {
@@ -34,12 +39,14 @@
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-network-helpers": "^1.0.8",
+    "@types/debug": "^4.1.8",
     "@types/mocha": "^10.0.1",
     "@types/sinon": "^10.0.16",
     "husky": "^8.0.3",
     "prettier": "2.8.8",
     "pretty-quick": "^3.1.3",
     "sinon": "^15.2.0",
-    "solhint": "^3.6.2"
+    "solhint": "^3.6.2",
+    "web3": "^1.10.2"
   }
 }
