@@ -11,10 +11,10 @@ const vestingContract = new web3.eth.Contract(VestingAbi.abi, AppConfig.Polygon.
 function App() {
   return (
     <main>
-      <Heading as="h1" size="2xl" noOfLines={1}>
-        Excited Contracts
-      </Heading>
-      <Container maxW="4xl">
+      <Container maxW="6xl">
+        <Heading as="h1" size="xl" noOfLines={1} mb={4} p={2}>
+          Excited Contracts
+        </Heading>
         <VestingContract contract={vestingContract} />
       </Container>
     </main>

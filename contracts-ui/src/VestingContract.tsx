@@ -2,7 +2,25 @@ import VestingAbi from "./generated/contracts/vesting-v1/VestingV1.json";
 import { VestingV1 } from "./generated/contracts/vesting-v1/VestingV1";
 import { useState } from "react";
 import { NonPayableTransactionObject } from "./generated/types";
-import { Accordion, AccordionButton, AccordionIcon, AccordionItem, AccordionPanel, Box, Button, Code, Input, VStack, Text } from "@chakra-ui/react";
+import {
+  Accordion,
+  AccordionButton,
+  AccordionIcon,
+  AccordionItem,
+  AccordionPanel,
+  Box,
+  Button,
+  Code,
+  Input,
+  VStack,
+  Text,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Tabs,
+} from "@chakra-ui/react";
+import { CodeDisplay } from "./components";
 
 type AbiItemProps = {
   contract: VestingV1;
@@ -11,10 +29,6 @@ type AbiItemProps = {
 
 function AbiItem({ contract, abi }: AbiItemProps) {
   const [result, setResult] = useState<string>("");
-
-  const inputsString = abi.inputs.map((input: { name?: string; type: string }, inputIndex) => `${input.name || `arg${inputIndex}`}: ${input.type}`).join(", ");
-
-  const outputsString = abi.outputs && abi.outputs.length > 0 ? abi.outputs.map((output: { name?: string; type: string }) => output.type).join(", ") : "";
 
   const InputsForm = abi.inputs.map((input: { name?: string; type: string }, inputIndex) => (
     <Box key={inputIndex}>
@@ -30,9 +44,7 @@ function AbiItem({ contract, abi }: AbiItemProps) {
   return (
     <AccordionItem>
       <AccordionButton justifyContent="space-between">
-        <Code backgroundColor="transparent">
-          <span style={{ color: "#a00" }}>{abi.type}</span> {abi.name || ""}({inputsString}) <span style={{ color: "#04c" }}>{outputsString}</span>
-        </Code>
+        <CodeDisplay type={abi.type} name={abi.name} inputs={abi.inputs} outputs={abi.outputs} />
         <AccordionIcon />
       </AccordionButton>
       <AccordionPanel>
@@ -71,19 +83,69 @@ type VestingContractProps = {
 };
 
 export function VestingContract({ contract }: VestingContractProps) {
-  const Abi = VestingAbi.abi
-    .sort((a, b) => {
-      if (a.type === "function" && b.type !== "function") {
-        return -1;
-      }
+  const functions = VestingAbi.abi.filter((abi) => abi.type === "function");
+  const readFunctions = [];
+  const writeFunctions = [];
 
-      if (a.type !== "function" && b.type === "function") {
-        return 1;
-      }
+  for (const func of functions) {
+    if (func.stateMutability === "view" || func.stateMutability === "pure") {
+      readFunctions.push(func);
+    } else {
+      writeFunctions.push(func);
+    }
+  }
 
-      return 0;
-    })
-    .map((abi, index) => <AbiItem key={index} contract={contract} abi={abi} />);
+  const events = VestingAbi.abi.filter((abi) => abi.type === "event");
+  const errors = VestingAbi.abi.filter((abi) => abi.type === "error");
+  const constructor = VestingAbi.abi.filter((abi) => abi.type === "constructor");
 
-  return <Accordion allowToggle>{Abi}</Accordion>;
+  return (
+    <Tabs>
+      <TabList>
+        <Tab>Constructor</Tab>
+        <Tab>Read</Tab>
+        <Tab>Write</Tab>
+        <Tab>Events</Tab>
+        <Tab>Errors</Tab>
+      </TabList>
+
+      <TabPanels>
+        <TabPanel>
+          <VStack alignItems="flex-start">
+            {constructor.map((abi, index) => (
+              <CodeDisplay key={`contructor-${index}`} type={abi.type} name={abi.name} inputs={abi.inputs} outputs={abi.outputs} />
+            ))}
+          </VStack>
+        </TabPanel>
+        <TabPanel>
+          <Accordion allowToggle>
+            {readFunctions.map((abi, index) => (
+              <AbiItem key={`read-${index}`} contract={contract} abi={abi} />
+            ))}
+          </Accordion>
+        </TabPanel>
+        <TabPanel>
+          <Accordion allowToggle>
+            {writeFunctions.map((abi, index) => (
+              <AbiItem key={`write-${index}`} contract={contract} abi={abi} />
+            ))}
+          </Accordion>
+        </TabPanel>
+        <TabPanel>
+          <VStack alignItems="flex-start">
+            {events.map((abi, index) => (
+              <CodeDisplay key={`events-${index}`} type={abi.type} name={abi.name} inputs={abi.inputs} outputs={abi.outputs} />
+            ))}
+          </VStack>
+        </TabPanel>
+        <TabPanel>
+          <VStack alignItems="flex-start">
+            {errors.map((abi, index) => (
+              <CodeDisplay key={`errors-${index}`} type={abi.type} name={abi.name} inputs={abi.inputs} outputs={abi.outputs} />
+            ))}
+          </VStack>
+        </TabPanel>
+      </TabPanels>
+    </Tabs>
+  );
 }
