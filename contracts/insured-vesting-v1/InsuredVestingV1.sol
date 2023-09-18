@@ -7,7 +7,7 @@ import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/ut
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 // This contract distributes a project's tokens to users, proportionally over a specified period of time, such that tokens are vested
-// based on the amount of funding token (e.g. USDC) sent by the user, and the exchange rate as specified by PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE.
+// based on the amount of funding token (e.g. USDC) sent by the user, and the exchange rate as specified by PROJECT_TOKEN_TO_FUNDING_TOKEN_RATE // TODO(audit) - modify.
 // Funding tokens are fully insured, such that at any point in time, a user can set their decision to be refunded with any (unclaimed) funding tokens.
 
 // Roles:
@@ -37,7 +37,7 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     IERC20 public immutable PROJECT_TOKEN;
     uint256 public immutable FUNDING_TOKEN_AMOUNT_IN;
     uint256 public immutable PROJECT_TOKEN_AMOUNT_OUT;
-    uint256 public immutable VESTING_DURATION_SECONDS;
+    uint256 public immutable VESTING_DURATION_SECONDS; // TODO(audit) - reconsider if we want a minimum vesting duration (1 month?)
 
     // When the contract is emergency released, users can claim all their unclaimed FUNDING_TOKEN immediately (get a refund),
     // (the project can also claim on behalf of users. Users still get their tokens in this case).
@@ -217,6 +217,9 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         emit EmergencyReleased();
     }
 
+    /*
+        TODO(audit) it may not be ideal that users are dependent on the owner to emergency release
+     */
     function emergencyRefund(address user) external onlyProjectOrSender(user) {
         if (!isEmergencyReleased) revert NotEmergencyReleased();
 
@@ -238,6 +241,10 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         emit EmergencyRefunded(user, msg.sender == projectWallet, claimable);
     }
 
+    /*
+        TODO(audit) - being less dependant on owner, can we introduce time-based checks,
+        e.g. allow recovery 1 year after vesting has ended etc.
+     */
     function recoverToken(address tokenAddress) external onlyOwner {
         uint256 tokenBalanceToRecover = IERC20(tokenAddress).balanceOf(address(this));
 
