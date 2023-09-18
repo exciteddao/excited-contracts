@@ -18,3 +18,26 @@ jobs:
       - run: CI=false npm run build
       - run: npm run test:eth
       - run: npm run lint-contracts
+      - run: npm run coverage:eth
+        env:
+          NODE_OPTIONS: --max_old_space_size=4096
+      - uses: codecov/codecov-action@v3
+      # - name: Run Hardhat Test Coverage
+      #   run: |
+      #     npx hardhat coverage --network ETH --block 17576915
+
+      # - name: Archive coverage reports
+      #   uses: actions/upload-artifact@v2
+      #   with:
+      #     name: coverage-reports
+      #     path: |
+      #       ./coverage/
+      #       ./coverage.json
+
+      # - name: Check test coverage is 100%
+      #   run: |
+      #     COVERAGE_PERCENTAGE=$(cat ./coverage/coverage-summary.json | jq '.total.lines.pct')
+      #     if [[ "$COVERAGE_PERCENTAGE" != "100" ]]; then
+      #       echo "Test coverage is not 100%. It is $COVERAGE_PERCENTAGE%."
+      #       exit 1
+      #     fi
