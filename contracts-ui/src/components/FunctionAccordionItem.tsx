@@ -1,6 +1,6 @@
 import { Input, AccordionItem, AccordionButton, AccordionIcon, AccordionPanel, VStack, Button, Code, Box, Text, Alert } from "@chakra-ui/react";
 import { useState } from "react";
-import { CodeDisplay } from ".";
+import { CodeDisplay } from "./CodeDisplay";
 import VestingAbi from "../generated/contracts/vesting-v1/VestingV1.json";
 import { SmartContract } from "@thirdweb-dev/react";
 import { useForm } from "react-hook-form";
@@ -36,8 +36,6 @@ export function FunctionAccordionItem({ contract, abi }: FunctionAccordionItemPr
         {abi.name && abi.type === "function" && (
           <form
             onSubmit={handleSubmit(async (args) => {
-              console.log("args", args);
-
               try {
                 setError(undefined);
 

@@ -1,23 +1,33 @@
 import { Accordion, VStack, Tab, TabList, TabPanel, TabPanels, Tabs, Alert, AlertIcon, Spinner } from "@chakra-ui/react";
 import { CodeDisplay, FunctionAccordionItem } from "./components";
-import { ConnectWallet, useContract } from "@thirdweb-dev/react";
-import { AppConfig } from "./config";
+import { useContract } from "@thirdweb-dev/react";
 import VestingAbi from "./generated/contracts/vesting-v1/VestingV1.json";
 
-export function VestingContract() {
-  const { contract, isLoading } = useContract(AppConfig.Polygon.Mainnet.VestingV1ContractAddress);
+type ContractProps = {
+  address: string;
+};
+
+export function Contract({ address }: ContractProps) {
+  const { contract, isLoading, error } = useContract(address);
+
+  let errorMessage = "Contract failed to load";
+
+  if (error instanceof Error) {
+    errorMessage = error.message;
+  }
 
   if (isLoading) {
     return <Spinner />;
   }
 
-  if (!contract)
+  if (!contract) {
     return (
       <Alert status="error">
         <AlertIcon />
-        Contract failed to load
+        {errorMessage}
       </Alert>
     );
+  }
 
   const functions = contract.abi.filter((abi) => abi.type === "function");
   const readFunctions = [];
@@ -38,21 +48,14 @@ export function VestingContract() {
   return (
     <Tabs>
       <TabList>
-        <Tab>Constructor</Tab>
         <Tab>Read</Tab>
         <Tab>Write</Tab>
         <Tab>Events</Tab>
         <Tab>Errors</Tab>
+        <Tab>Constructor</Tab>
       </TabList>
 
       <TabPanels>
-        <TabPanel>
-          <VStack alignItems="flex-start">
-            {constructor.map((abi, index) => (
-              <CodeDisplay key={`contructor-${index}`} type={abi.type} name={abi.name} inputs={abi.inputs} outputs={abi.outputs} />
-            ))}
-          </VStack>
-        </TabPanel>
         <TabPanel>
           <Accordion allowToggle>
             {readFunctions.map((abi, index) => (
@@ -62,7 +65,6 @@ export function VestingContract() {
         </TabPanel>
         <TabPanel>
           <VStack alignItems="flex-start" spacing={4}>
-            <ConnectWallet />
             <Accordion allowToggle width="100%">
               {writeFunctions.map((abi, index) => (
                 <FunctionAccordionItem key={`write-${index}`} contract={contract} abi={abi as (typeof VestingAbi.abi)[number]} />
@@ -81,6 +83,13 @@ export function VestingContract() {
           <VStack alignItems="flex-start">
             {errors.map((abi, index) => (
               <CodeDisplay key={`errors-${index}`} type={abi.type} name={abi.name} inputs={abi.inputs} outputs={abi.outputs} />
+            ))}
+          </VStack>
+        </TabPanel>
+        <TabPanel>
+          <VStack alignItems="flex-start">
+            {constructor.map((abi, index) => (
+              <CodeDisplay key={`contructor-${index}`} type={abi.type} name={abi.name} inputs={abi.inputs} outputs={abi.outputs} />
             ))}
           </VStack>
         </TabPanel>
