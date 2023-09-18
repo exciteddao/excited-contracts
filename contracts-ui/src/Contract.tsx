@@ -1,14 +1,53 @@
-import { Accordion, VStack, Tab, TabList, TabPanel, TabPanels, Tabs, Alert, AlertIcon, Spinner } from "@chakra-ui/react";
+import {
+  Accordion,
+  VStack,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Tabs,
+  Alert,
+  AlertIcon,
+  Spinner,
+  Table,
+  TableContainer,
+  Tbody,
+  Td,
+  Tr,
+  Code,
+} from "@chakra-ui/react";
 import { CodeDisplay, FunctionAccordionItem } from "./components";
-import { useContract } from "@thirdweb-dev/react";
+import { ContractEvent, useContract } from "@thirdweb-dev/react";
 import VestingAbi from "./generated/contracts/vesting-v1/VestingV1.json";
+import { useEffect, useState } from "react";
 
 type ContractProps = {
   address: string;
 };
 
 export function Contract({ address }: ContractProps) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [events, setEvents] = useState<ContractEvent<Record<string, any>>[]>([]);
   const { contract, isLoading, error } = useContract(address);
+
+  useEffect(() => {
+    if (!contract) {
+      return;
+    }
+
+    if (events.length === 0) {
+      contract.events.getAllEvents().then((events) => {
+        console.log("all events", events);
+        setEvents((prev) => [...prev, ...events]);
+      });
+    }
+
+    contract.events.listenToAllEvents((event) => {
+      console.log("new event", event);
+      setEvents((prev) => [...prev, event]);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contract]);
 
   let errorMessage = "Contract failed to load";
 
@@ -41,7 +80,6 @@ export function Contract({ address }: ContractProps) {
     }
   }
 
-  const events = contract.abi.filter((abi) => abi.type === "event") || [];
   const errors = contract.abi.filter((abi) => abi.type === "error") || [];
   const constructor = contract.abi.filter((abi) => abi.type === "constructor") || [];
 
@@ -73,11 +111,33 @@ export function Contract({ address }: ContractProps) {
           </VStack>
         </TabPanel>
         <TabPanel>
-          <VStack alignItems="flex-start">
-            {events.map((abi, index) => (
-              <CodeDisplay key={`events-${index}`} type={abi.type} name={abi.name} inputs={abi.inputs} outputs={abi.outputs} />
-            ))}
-          </VStack>
+          <TableContainer>
+            <Table variant="simple">
+              <Tbody>
+                {events.map((event, index) => (
+                  <Tr key={`event=${index}`}>
+                    <Td>
+                      {event.transaction.transactionHash}
+                      <br />
+                      {event.transaction.blockNumber}
+                    </Td>
+                    <Td>
+                      <strong>{event.eventName}</strong>
+                      <br />
+                      <Code p={4}>
+                        {Object.entries(event.data).map(([key, value]) => (
+                          <span key={key}>
+                            {`${key}`}: {`${value}`}
+                            <br />
+                          </span>
+                        ))}
+                      </Code>
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </TableContainer>
         </TabPanel>
         <TabPanel>
           <VStack alignItems="flex-start">
