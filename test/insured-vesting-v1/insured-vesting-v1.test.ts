@@ -61,7 +61,7 @@ describe("InsuredVestingV1", () => {
 
   describe("with PROJECT_TOKEN approved to contract", () => {
     beforeEach(async () => {
-      approveProjectTokenToVesting();
+      await approveProjectTokenToVesting();
     });
 
     describe("claim", () => {
