@@ -1,89 +1,25 @@
+import { Accordion, VStack, Tab, TabList, TabPanel, TabPanels, Tabs, Alert, AlertIcon, Spinner } from "@chakra-ui/react";
+import { CodeDisplay, FunctionAccordionItem } from "./components";
+import { ConnectWallet, useContract } from "@thirdweb-dev/react";
+import { AppConfig } from "./config";
 import VestingAbi from "./generated/contracts/vesting-v1/VestingV1.json";
-import { VestingV1 } from "./generated/contracts/vesting-v1/VestingV1";
-import { useState } from "react";
-import { NonPayableTransactionObject } from "./generated/types";
-import {
-  Accordion,
-  AccordionButton,
-  AccordionIcon,
-  AccordionItem,
-  AccordionPanel,
-  Box,
-  Button,
-  Code,
-  Input,
-  VStack,
-  Text,
-  Tab,
-  TabList,
-  TabPanel,
-  TabPanels,
-  Tabs,
-} from "@chakra-ui/react";
-import { CodeDisplay } from "./components";
 
-type AbiItemProps = {
-  contract: VestingV1;
-  abi: (typeof VestingAbi.abi)[number];
-};
+export function VestingContract() {
+  const { contract, isLoading } = useContract(AppConfig.Polygon.Mainnet.VestingV1ContractAddress);
 
-function AbiItem({ contract, abi }: AbiItemProps) {
-  const [result, setResult] = useState<string>("");
+  if (isLoading) {
+    return <Spinner />;
+  }
 
-  const InputsForm = abi.inputs.map((input: { name?: string; type: string }, inputIndex) => (
-    <Box key={inputIndex}>
-      <label htmlFor={`input-${inputIndex}`}>
-        <Text as="small">
-          {input.name || `arg${inputIndex}`}: {input.type}
-        </Text>
-      </label>
-      <Input id={`input-${inputIndex}`} />
-    </Box>
-  ));
+  if (!contract)
+    return (
+      <Alert status="error">
+        <AlertIcon />
+        Contract failed to load
+      </Alert>
+    );
 
-  return (
-    <AccordionItem>
-      <AccordionButton justifyContent="space-between">
-        <CodeDisplay type={abi.type} name={abi.name} inputs={abi.inputs} outputs={abi.outputs} />
-        <AccordionIcon />
-      </AccordionButton>
-      <AccordionPanel>
-        {abi.name && abi.type === "function" && (
-          <VStack spacing={4} alignItems="flex-start">
-            {InputsForm}
-            <Button
-              onClick={() => {
-                const methodName: keyof typeof contract.methods = abi.name as keyof typeof contract.methods;
-                const args = abi.inputs.map((input) => input.name || "");
-
-                // eslint-disable-next-line prefer-spread
-                const functionToCall = (contract.methods[methodName] as (...args: unknown[]) => NonPayableTransactionObject<unknown>).apply(null, args);
-                functionToCall.call().then((res: unknown) => {
-                  setResult(`${res}`);
-                });
-              }}
-            >
-              Run
-            </Button>
-            <Box width="100%">
-              <Text as="small">Result:</Text>
-              <Box backgroundColor="gray.100" width="100%" minHeight="100px" border="1px solid #ccc" overflowY="scroll">
-                {result !== "" && <Code p={4}>{result}</Code>}
-              </Box>
-            </Box>
-          </VStack>
-        )}
-      </AccordionPanel>
-    </AccordionItem>
-  );
-}
-
-type VestingContractProps = {
-  contract: VestingV1;
-};
-
-export function VestingContract({ contract }: VestingContractProps) {
-  const functions = VestingAbi.abi.filter((abi) => abi.type === "function");
+  const functions = contract.abi.filter((abi) => abi.type === "function");
   const readFunctions = [];
   const writeFunctions = [];
 
@@ -95,9 +31,9 @@ export function VestingContract({ contract }: VestingContractProps) {
     }
   }
 
-  const events = VestingAbi.abi.filter((abi) => abi.type === "event");
-  const errors = VestingAbi.abi.filter((abi) => abi.type === "error");
-  const constructor = VestingAbi.abi.filter((abi) => abi.type === "constructor");
+  const events = contract.abi.filter((abi) => abi.type === "event") || [];
+  const errors = contract.abi.filter((abi) => abi.type === "error") || [];
+  const constructor = contract.abi.filter((abi) => abi.type === "constructor") || [];
 
   return (
     <Tabs>
@@ -120,16 +56,19 @@ export function VestingContract({ contract }: VestingContractProps) {
         <TabPanel>
           <Accordion allowToggle>
             {readFunctions.map((abi, index) => (
-              <AbiItem key={`read-${index}`} contract={contract} abi={abi} />
+              <FunctionAccordionItem key={`read-${index}`} contract={contract} abi={abi as (typeof VestingAbi.abi)[number]} />
             ))}
           </Accordion>
         </TabPanel>
         <TabPanel>
-          <Accordion allowToggle>
-            {writeFunctions.map((abi, index) => (
-              <AbiItem key={`write-${index}`} contract={contract} abi={abi} />
-            ))}
-          </Accordion>
+          <VStack alignItems="flex-start" spacing={4}>
+            <ConnectWallet />
+            <Accordion allowToggle width="100%">
+              {writeFunctions.map((abi, index) => (
+                <FunctionAccordionItem key={`write-${index}`} contract={contract} abi={abi as (typeof VestingAbi.abi)[number]} />
+              ))}
+            </Accordion>
+          </VStack>
         </TabPanel>
         <TabPanel>
           <VStack alignItems="flex-start">
