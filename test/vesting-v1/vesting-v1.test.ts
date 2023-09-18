@@ -26,7 +26,7 @@ import {
 import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { advanceDays, DAY_SECONDS, getCurrentTimestamp, MONTH_SECONDS } from "../utils";
 import { VESTING_DURATION_DAYS } from "../insured-vesting-v1/fixture";
-import { CALLER_NOT_OWNER_REVERT_MSG, CALLER_NOT_PROJECT_ROLE_MSG } from "../constants";
+import { CALLER_NOT_OWNER_REVERT_MSG, CALLER_NOT_PROJECT_ROLE_MSG, ERC_20_EXCEEDS_ALLOWANCE, ERC_20_EXCEEDS_BALANCE } from "../constants";
 import { config } from "../../deployment/vesting-v1";
 import { VestingV1 } from "../../typechain-hardhat/contracts/vesting-v1";
 
@@ -616,9 +616,9 @@ describe("VestingV1", () => {
 
     it("fails if there isn't enough PROJECT_TOKEN allowance to cover total allocated", async () => {
       await setAmountForUser1();
-      await expectRevert(async () => vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet }), "ERC20: insufficient allowance");
+      await expectRevert(async () => vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet }), ERC_20_EXCEEDS_ALLOWANCE);
       await approveProjectTokenToVesting(TOKENS_PER_USER - 1);
-      await expectRevert(async () => vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet }), "ERC20: insufficient allowance");
+      await expectRevert(async () => vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet }), ERC_20_EXCEEDS_ALLOWANCE);
     });
 
     it("fails if there isn't enough PROJECT_TOKEN balance to cover total allocated", async () => {
@@ -626,10 +626,7 @@ describe("VestingV1", () => {
       await approveProjectTokenToVesting(TOTAL_SUPPLY);
       // Get rid of all balance
       await projectToken.methods.transfer(anyUser, await projectToken.amount(TOTAL_SUPPLY - 50)).send({ from: projectWallet });
-      await expectRevert(
-        async () => vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet }),
-        "ERC20: transfer amount exceeds balance"
-      );
+      await expectRevert(async () => vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet }), ERC_20_EXCEEDS_BALANCE);
     });
 
     it("transfers PROJECT_TOKEN in an amount matching total allocated", async () => {

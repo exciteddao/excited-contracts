@@ -42,7 +42,13 @@ import {
 } from "./fixture";
 import { web3, zeroAddress } from "@defi.org/web3-candies";
 import { advanceDays, DAY_SECONDS, getCurrentTimestamp, advanceMonths, MONTH_SECONDS } from "../utils";
-import { CALLER_NOT_OWNER_REVERT_MSG, CALLER_NOT_PROJECT_ROLE_MSG } from "../constants";
+import {
+  CALLER_NOT_OWNER_REVERT_MSG,
+  CALLER_NOT_PROJECT_ROLE_MSG,
+  ERC_20_EXCEEDS_ALLOWANCE,
+  ERC_20_EXCEEDS_ALLOWANCE_USDC,
+  ERC_20_EXCEEDS_BALANCE,
+} from "../constants";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 import { config } from "../../deployment/insured-vesting-v1/config";
 
@@ -523,10 +529,7 @@ describe("InsuredVestingV1", () => {
       it("fails if user does not have enough balance", async () => {
         const amount = FUNDING_PER_USER + 1;
         await insuredVesting.methods.setFundingTokenAllocation(user1, await fundingToken.amount(amount)).send({ from: projectWallet });
-        await expectRevert(
-          async () => insuredVesting.methods.addFunds(await fundingToken.amount(amount)).send({ from: user1 }),
-          "ERC20: transfer amount exceeds allowance"
-        );
+        await expectRevert(async () => insuredVesting.methods.addFunds(await fundingToken.amount(amount)).send({ from: user1 }), ERC_20_EXCEEDS_ALLOWANCE_USDC);
       });
     });
 
@@ -1190,10 +1193,7 @@ describe("InsuredVestingV1", () => {
     it("fails if there isn't enough PROJECT_TOKEN allowance to cover funded FUNDING_TOKEN", async () => {
       await setAllocationForUser1(FUNDING_PER_USER);
       await addFundingFromUser1(FUNDING_PER_USER);
-      await expectRevert(
-        async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet }),
-        "ERC20: insufficient allowance"
-      );
+      await expectRevert(async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet }), ERC_20_EXCEEDS_ALLOWANCE);
     });
 
     it("fails if there isn't enough PROJECT_TOKEN balance to cover funded FUNDING_TOKEN", async () => {
@@ -1202,10 +1202,7 @@ describe("InsuredVestingV1", () => {
       await approveProjectTokenToVesting();
       // Get rid of all balance
       await projectToken.methods.transfer(anyUser, await projectToken.amount(1e9)).send({ from: projectWallet });
-      await expectRevert(
-        async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet }),
-        "ERC20: transfer amount exceeds balance"
-      );
+      await expectRevert(async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet }), ERC_20_EXCEEDS_BALANCE);
     });
 
     it("transfers PROJECT_TOKEN required to back FUNDING_TOKEN funding", async () => {
