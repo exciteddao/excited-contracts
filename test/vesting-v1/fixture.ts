@@ -94,7 +94,7 @@ export async function setAmountForUser2(amount = TOKENS_PER_USER) {
 }
 
 export async function vestedAmount(days: number) {
-  let amount = BN(TOKENS_PER_USER)
+  const amount = BN(TOKENS_PER_USER)
     .dividedBy(VESTING_DURATION_SECONDS)
     .multipliedBy(DAY_SECONDS * days);
   return projectToken.amount(amount);

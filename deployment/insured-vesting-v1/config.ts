@@ -1,5 +1,5 @@
 import BN from "bignumber.js";
-import { bn18, bn6, zeroAddress } from "@defi.org/web3-candies";
+import { zeroAddress } from "@defi.org/web3-candies";
 
 export interface Config {
   usdcAddress: string;

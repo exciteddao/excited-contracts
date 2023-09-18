@@ -9,12 +9,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Use Node.js ${{ matrix.node_version }}
+      - name: Use Node.js 18
         uses: actions/setup-node@v3
         with:
-          node-version: ${{ matrix.node_version }}
+          node-version: 18
           cache: "npm"
       - run: npm ci
+      - run: npm run lint-ts
+      - run: npm run lint-contracts
       - run: CI=false npm run build
       - run: npm run test:eth
-      - run: npm run lint-contracts

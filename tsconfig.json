@@ -9,6 +9,6 @@
     "allowSyntheticDefaultImports": true,
     "allowJs": true
   },
-  "include": ["./src", "./test"],
+  "include": ["./test"],
   "files": ["./hardhat.config.ts"]
 }
