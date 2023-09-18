@@ -4,7 +4,7 @@ import BN from "bignumber.js";
 import { VestingV1 } from "../../typechain-hardhat/contracts/vesting-v1";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { config } from "../../deployment/vesting-v1/config";
-import { DAY, getCurrentTimestamp, advanceDays } from "../utils";
+import { DAY_SECONDS, getCurrentTimestamp, advanceDays } from "../utils";
 
 useChaiBigNumber();
 
@@ -19,11 +19,13 @@ export let projectToken: MockERC20 & Token;
 export let someOtherToken: MockERC20 & Token;
 export let vesting: VestingV1;
 
-export const VESTING_DURATION_SECONDS = DAY * 730;
+export const VESTING_DURATION_SECONDS = DAY_SECONDS * 730;
 
 export const PROJECT_TOKENS_ON_SALE = 1_000_000;
 export const LOCKUP_MONTHS = 6;
 export const TOKENS_PER_USER = 10_000;
+
+export const TOTAL_SUPPLY = 1e9;
 
 export async function setup() {
   deployer = await account(9);
@@ -42,8 +44,14 @@ export async function setup() {
 }
 
 export async function withFixture() {
-  projectToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: projectWallet }, [bn18(1e9), "ProjectToken"])).options.address);
-  someOtherToken = erc20("MockERC20", (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(1e9), "SomeOtherToken"])).options.address);
+  projectToken = erc20(
+    "MockERC20",
+    (await deployArtifact<MockERC20>("MockERC20", { from: projectWallet }, [bn18(TOTAL_SUPPLY), "ProjectToken"])).options.address
+  );
+  someOtherToken = erc20(
+    "MockERC20",
+    (await deployArtifact<MockERC20>("MockERC20", { from: deployer }, [bn18(TOTAL_SUPPLY), "SomeOtherToken"])).options.address
+  );
 
   // TODO TEMPORARY: until having production PROJECT_TOKEN address
   const testConfig = [...config];
@@ -74,7 +82,7 @@ export async function approveProjectTokenToVesting(amount = PROJECT_TOKENS_ON_SA
 }
 
 export async function getDefaultStartTime(): Promise<BN> {
-  return BN(await getCurrentTimestamp()).plus(DAY * 3);
+  return BN(await getCurrentTimestamp()).plus(DAY_SECONDS * 3);
 }
 
 export async function setAmountForUser1(amount = TOKENS_PER_USER) {
@@ -88,7 +96,7 @@ export async function setAmountForUser2(amount = TOKENS_PER_USER) {
 export async function vestedAmount(days: number) {
   const amount = BN(TOKENS_PER_USER)
     .dividedBy(VESTING_DURATION_SECONDS)
-    .multipliedBy(DAY * days);
+    .multipliedBy(DAY_SECONDS * days);
   return projectToken.amount(amount);
 }
 
