@@ -26,7 +26,8 @@
     "test:bsc": "NETWORK=BSC hardhat test",
     "prepare": "husky install",
     "format": "pretty-quick --staged",
-    "lint-contracts": "solhint 'contracts/**/*.sol'"
+    "lint-contracts": "solhint 'contracts/**/*.sol'",
+    "lint-ts": "eslint --ext .ts deployment test"
   },
   "prettier": {
     "printWidth": 160

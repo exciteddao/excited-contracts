@@ -15,6 +15,7 @@ jobs:
           node-version: ${{ matrix.node_version }}
           cache: "npm"
       - run: npm ci
+      - run: npm run lint-ts
+      - run: npm run lint-contracts
       - run: CI=false npm run build
       - run: npm run test:eth
-      - run: npm run lint-contracts
