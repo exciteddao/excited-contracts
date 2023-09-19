@@ -16,7 +16,7 @@ function App() {
   const address = methods.watch("address");
 
   return (
-    <ThirdwebProvider activeChain={network}>
+    <ThirdwebProvider activeChain={network} clientId="d6f3b57bca18be5fa614e237378ea1ff">
       <main>
         <Container maxW="6xl">
           <HStack spacing={4} mb={4} justifyContent="space-between">
