@@ -114,7 +114,9 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
         uint256 _projectTokenAmountOut,
         address _projectWallet
     ) ProjectRole(_projectWallet) {
-        if (_vestingDurationSeconds > MAX_VESTING_DURATION_SECONDS) revert VestingDurationTooLong(_vestingDurationSeconds);
+        if (_vestingDurationSeconds > MAX_VESTING_DURATION_SECONDS) {
+            revert VestingDurationTooLong(_vestingDurationSeconds);
+        }
 
         FUNDING_TOKEN = IERC20(_fundingToken);
         PROJECT_TOKEN = IERC20(_projectToken);
@@ -195,8 +197,9 @@ contract InsuredVestingV1 is OwnerRole, ProjectRole {
     }
 
     function activate(uint256 _vestingStartTime) external onlyProject onlyBeforeActivation onlyIfNotEmergencyReleased {
-        if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW))
+        if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW)) {
             revert StartTimeTooDistant(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
+        }
 
         if (_vestingStartTime < block.timestamp) revert StartTimeInPast(_vestingStartTime);
 
