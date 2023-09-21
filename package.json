@@ -27,12 +27,14 @@
     "prepare": "husky install",
     "format": "pretty-quick --staged",
     "lint-contracts": "solhint 'contracts/**/*.sol'",
-    "lint-ts": "eslint --ext .ts deployment test"
+    "lint-ts": "eslint --ext .ts deployment test",
+    "postinstall": "forge install foundry-rs/forge-std --no-git && forge remappings > remappings.txt"
   },
   "prettier": {
     "printWidth": 160
   },
   "devDependencies": {
+    "@nomicfoundation/hardhat-foundry": "^1.1.1",
     "@nomicfoundation/hardhat-network-helpers": "^1.0.8",
     "@types/mocha": "^10.0.1",
     "@types/sinon": "^10.0.16",

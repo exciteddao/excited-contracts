@@ -9,6 +9,8 @@ import _ from "lodash";
 import "hardhat-watcher";
 import "solidity-coverage";
 
+import "@nomicfoundation/hardhat-foundry";
+
 import { deployInsuredVestingV1, ConfigTuple as InsuredVestingConfig } from "./deployment/insured-vesting-v1";
 import { deployVestingV1, ConfigTuple as VestingConfig } from "./deployment/vesting-v1";
 
@@ -29,6 +31,7 @@ task("deploy-contract", "Deploy Excited contract")
       case "Vesting":
         contractName = "Vesting";
         config = require("./deployment/vesting-v1/config").config;
+        break;
       default:
         console.error("Invalid contract name");
         return;
