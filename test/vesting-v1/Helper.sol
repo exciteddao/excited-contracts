@@ -5,10 +5,10 @@ import {Test} from "forge-std/Test.sol";
 import "forge-std/console.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-import {VestingV1} from "../../contracts/vesting-v1/VestingV1.sol";
+import {VestingV1, VestingV1Events, VestingV1Errors} from "../../contracts/vesting-v1/VestingV1.sol";
 import {MockERC20} from "../../contracts/test/MockERC20.sol";
 
-abstract contract Helper is Test {
+abstract contract Helper is Test, VestingV1Events, VestingV1Errors {
     address public deployer;
     address public projectWallet;
     address public user1;

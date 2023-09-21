@@ -5,6 +5,31 @@ import {Ownable as OwnerRole} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ProjectRole} from "../roles/ProjectRole.sol";
 import {Address, IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import "hardhat/console.sol";
+
+contract VestingV1Events {
+    event AmountSet(address indexed user, uint256 newAmount, uint256 oldAmount);
+    event Activated();
+    event Claimed(address indexed user, uint256 amount, bool indexed isInitiatedByProject);
+    event EmergencyReleased();
+    event EmergencyClaimed(address indexed user, uint256 amount, bool indexed isInitiatedByProject);
+    event TokenRecovered(address indexed token, uint256 amount);
+    event EtherRecovered(uint256 amount);
+}
+
+contract VestingV1Errors {
+    error VestingDurationTooLong(uint256 vestingPeriodSeconds);
+    error StartTimeTooDistant(uint256 vestingStartTime, uint256 maxStartTime);
+    error StartTimeInPast(uint256 vestingStartTime);
+    error OnlyProjectOrSender();
+    error NotActivated();
+    error VestingNotStarted();
+    error AlreadyActivated();
+    error NothingToClaim();
+    error TotalAmountZero();
+    error EmergencyReleaseActive();
+    error NotEmergencyReleased();
+}
 
 // This contract distributes a project's tokens to users proportionally over a specified period of time, such that tokens are vested.
 
@@ -20,7 +45,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 // - Transfer the necessary amount of project tokens required to cover user vestings, to fund itself.
 // - Set the vesting clock to start at the specified time (but no more than 90 days in the future).
 // - Lock amounts (project cannot add or update token vesting amounts for users anymore).
-contract VestingV1 is OwnerRole, ProjectRole {
+contract VestingV1 is OwnerRole, ProjectRole, VestingV1Events, VestingV1Errors {
     using SafeERC20 for IERC20;
 
     // Prevent project from locking up tokens for a long time in the future, mostly in case of human error
@@ -46,28 +71,6 @@ contract VestingV1 is OwnerRole, ProjectRole {
     }
 
     mapping(address => UserVesting) public userVestings;
-
-    // --- Events ---
-    event AmountSet(address indexed user, uint256 newAmount, uint256 oldAmount);
-    event Activated();
-    event Claimed(address indexed user, uint256 amount, bool indexed isInitiatedByProject);
-    event EmergencyReleased();
-    event EmergencyClaimed(address indexed user, uint256 amount, bool indexed isInitiatedByProject);
-    event TokenRecovered(address indexed token, uint256 amount);
-    event EtherRecovered(uint256 amount);
-
-    // --- Errors ---
-    error VestingDurationTooLong(uint256 vestingPeriodSeconds);
-    error StartTimeTooDistant(uint256 vestingStartTime, uint256 maxStartTime);
-    error StartTimeInPast(uint256 vestingStartTime);
-    error OnlyProjectOrSender();
-    error NotActivated();
-    error VestingNotStarted();
-    error AlreadyActivated();
-    error NothingToClaim();
-    error TotalAmountZero();
-    error EmergencyReleaseActive();
-    error NotEmergencyReleased();
 
     // --- Modifiers ---
     modifier onlyBeforeActivation() {

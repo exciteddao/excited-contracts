@@ -12,7 +12,6 @@ import {
   someOtherToken,
   user2,
   Error,
-  VESTING_DURATION_SECONDS,
   approveProjectTokenToVesting,
   setAmountForUser1,
   setAmountForUser2,
@@ -34,121 +33,6 @@ describe("VestingV1", () => {
   before(async () => await setup());
 
   beforeEach(async () => withFixture());
-
-  describe("claim", () => {
-    it(`can claim tokens for the entire period, longer than vesting period has passed`, async () => {
-      await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-      await approveProjectTokenToVesting(TOKENS_PER_USER);
-      await activateAndReachStartTime();
-      await advanceDays(VESTING_DURATION_SECONDS * 2);
-      await vesting.methods.claim(user1).send({ from: user1 });
-
-      expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
-        await projectToken.amount(TOKENS_PER_USER),
-        await projectToken.amount(0.01)
-      );
-    });
-
-    it("cannot double-claim tokens for same period of time", async () => {
-      await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-      await approveProjectTokenToVesting(TOKENS_PER_USER);
-      await activateAndReachStartTime();
-      const daysToAdvance = 66;
-      await advanceDays(daysToAdvance);
-
-      await vesting.methods.claim(user1).send({ from: user1 });
-      const balanceAfterFirstClaim = await projectToken.methods.balanceOf(user1).call();
-      expect(balanceAfterFirstClaim).to.be.bignumber.closeTo(
-        (await projectToken.amount(TOKENS_PER_USER)).multipliedBy(daysToAdvance * DAY_SECONDS).dividedBy(VESTING_DURATION_SECONDS),
-        await projectToken.amount(0.01)
-      );
-
-      await vesting.methods.claim(user1).send({ from: user1 });
-      expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(balanceAfterFirstClaim, await projectToken.amount(0.01));
-
-      await advanceDays(VESTING_DURATION_DAYS - daysToAdvance);
-      await vesting.methods.claim(user1).send({ from: user1 });
-      expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(TOKENS_PER_USER));
-      await expectRevert(() => vesting.methods.claim(user1).send({ from: user1 }), Error.NothingToClaim);
-      await advanceDays(100);
-      await expectRevert(() => vesting.methods.claim(user1).send({ from: user1 }), Error.NothingToClaim);
-    });
-
-    it("cannot claim tokens before starting period - not activated", async () => {
-      await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-      await expectRevert(() => vesting.methods.claim(user1).send({ from: user1 }), Error.VestingNotStarted);
-    });
-
-    it("cannot claim tokens before starting period - activated", async () => {
-      await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-      await approveProjectTokenToVesting(TOKENS_PER_USER);
-      const startTime = BN(await getCurrentTimestamp()).plus(MONTH_SECONDS);
-      await vesting.methods.activate(startTime).send({ from: projectWallet });
-      await expectRevert(() => vesting.methods.claim(user1).send({ from: user1 }), Error.VestingNotStarted);
-      await advanceDays(1);
-      await expectRevert(() => vesting.methods.claim(user1).send({ from: user1 }), Error.VestingNotStarted);
-      await advanceDays(28);
-      await expectRevert(() => vesting.methods.claim(user1).send({ from: user1 }), Error.VestingNotStarted);
-    });
-
-    it("cannot claim if there's no eligibility", async () => {
-      await vesting.methods.setAmount(user2, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-      await approveProjectTokenToVesting(TOKENS_PER_USER);
-      await activateAndReachStartTime();
-      await advanceDays(1);
-      await expectRevert(() => vesting.methods.claim(user1).send({ from: user1 }), Error.NothingToClaim);
-    });
-
-    it("project can claim on behalf of user", async () => {
-      await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-      await approveProjectTokenToVesting(TOKENS_PER_USER);
-      await activateAndReachStartTime();
-      await advanceDays(70);
-      await vesting.methods.claim(user1).send({ from: projectWallet });
-
-      expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
-        (await projectToken.amount(TOKENS_PER_USER)).multipliedBy(70 * DAY_SECONDS).dividedBy(VESTING_DURATION_SECONDS),
-        await projectToken.amount(0.01)
-      );
-    });
-
-    it("cannot claim if not user or project", async () => {
-      await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-      await approveProjectTokenToVesting(TOKENS_PER_USER);
-      await activateAndReachStartTime();
-      await advanceDays(70);
-      for (const user of [anyUser, user2, deployer]) {
-        await expectRevert(() => vesting.methods.claim(user1).send({ from: user }), Error.OnlyProjectOrSender);
-      }
-    });
-
-    it("lets multiple users claim", async () => {
-      await setAmountForUser1(100);
-      await setAmountForUser2(50);
-      await approveProjectTokenToVesting(150);
-      expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.zero;
-      expect(await projectToken.methods.balanceOf(user2).call()).to.be.bignumber.zero;
-      await activateAndReachStartTime();
-      await advanceDays(VESTING_DURATION_DAYS);
-      await vesting.methods.claim(user1).send({ from: user1 });
-      await vesting.methods.claim(user2).send({ from: user2 });
-      expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(100));
-      expect(await projectToken.methods.balanceOf(user2).call()).to.be.bignumber.eq(await projectToken.amount(50));
-    });
-
-    it("extra project token balance doesn't affect claim", async () => {
-      await setAmountForUser1(100);
-      await approveProjectTokenToVesting(100);
-      expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.zero;
-      await activateAndReachStartTime();
-      // Add 100 extra tokens
-      await projectToken.methods.transfer(vesting.options.address, await projectToken.amount(100)).send({ from: projectWallet });
-
-      await advanceDays(VESTING_DURATION_DAYS);
-      await vesting.methods.claim(user1).send({ from: user1 });
-      expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.eq(await projectToken.amount(100));
-    });
-  });
 
   describe("transfer project role", () => {
     it("should only be transferable by project wallet", async () => {
