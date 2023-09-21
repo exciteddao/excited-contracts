@@ -41,8 +41,14 @@ import {
   fundingTokenToProjectToken,
 } from "./fixture";
 import { web3, zeroAddress } from "@defi.org/web3-candies";
-import { advanceDays, DAY, getCurrentTimestamp, advanceMonths, MONTH } from "../utils";
-import { CALLER_NOT_OWNER_REVERT_MSG, OWNER_REVERT_MSG, PROJECT_ROLE_REVERT_MSG } from "../constants";
+import { advanceDays, DAY_SECONDS, getCurrentTimestamp, advanceMonths, MONTH_SECONDS } from "../utils";
+import {
+  CALLER_NOT_OWNER_REVERT_MSG,
+  CALLER_NOT_PROJECT_ROLE_MSG,
+  ERC_20_EXCEEDS_ALLOWANCE,
+  ERC_20_EXCEEDS_ALLOWANCE_USDC,
+  ERC_20_EXCEEDS_BALANCE,
+} from "../constants";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 import { config } from "../../deployment/insured-vesting-v1/config";
 
@@ -61,7 +67,7 @@ describe("InsuredVestingV1", () => {
 
   describe("with PROJECT_TOKEN approved to contract", () => {
     beforeEach(async () => {
-      approveProjectTokenToVesting();
+      await approveProjectTokenToVesting();
     });
 
     describe("claim", () => {
@@ -88,7 +94,7 @@ describe("InsuredVestingV1", () => {
         expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.zero;
         await advanceDays(3);
         expect(await insuredVesting.methods.fundingTokenVestedFor(user1).call()).to.be.bignumber.to.be.bignumber.closeTo(
-          (await fundingToken.amount(FUNDING_PER_USER)).multipliedBy(1 * DAY).dividedBy(VESTING_DURATION_SECONDS),
+          (await fundingToken.amount(FUNDING_PER_USER)).multipliedBy(1 * DAY_SECONDS).dividedBy(VESTING_DURATION_SECONDS),
           await fundingToken.amount(0.01)
         );
       });
@@ -103,7 +109,7 @@ describe("InsuredVestingV1", () => {
         expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
           (await projectToken.amount(FUNDING_PER_USER))
             .multipliedBy(FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO)
-            .multipliedBy(1 * DAY)
+            .multipliedBy(1 * DAY_SECONDS)
             .dividedBy(VESTING_DURATION_SECONDS),
           await projectToken.amount(0.01)
         );
@@ -154,7 +160,7 @@ describe("InsuredVestingV1", () => {
           expect(await projectToken.methods.balanceOf(user).call()).to.be.bignumber.closeTo(
             (await projectToken.amount(funding))
               .multipliedBy(FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO)
-              .multipliedBy(30 * DAY)
+              .multipliedBy(30 * DAY_SECONDS)
               .dividedBy(VESTING_DURATION_SECONDS),
             await projectToken.amount(0.1)
           );
@@ -523,10 +529,7 @@ describe("InsuredVestingV1", () => {
       it("fails if user does not have enough balance", async () => {
         const amount = FUNDING_PER_USER + 1;
         await insuredVesting.methods.setFundingTokenAllocation(user1, await fundingToken.amount(amount)).send({ from: projectWallet });
-        await expectRevert(
-          async () => insuredVesting.methods.addFunds(await fundingToken.amount(amount)).send({ from: user1 }),
-          "ERC20: transfer amount exceeds allowance"
-        );
+        await expectRevert(async () => insuredVesting.methods.addFunds(await fundingToken.amount(amount)).send({ from: user1 }), ERC_20_EXCEEDS_ALLOWANCE_USDC);
       });
     });
 
@@ -791,7 +794,7 @@ describe("InsuredVestingV1", () => {
 
         await expectRevert(
           async () => await insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet }),
-          PROJECT_ROLE_REVERT_MSG
+          CALLER_NOT_PROJECT_ROLE_MSG
         );
 
         await expectRevert(async () => await insuredVesting.methods.claim(user1).send({ from: projectWallet }), Error.OnlyProjectOrSender);
@@ -803,7 +806,10 @@ describe("InsuredVestingV1", () => {
         await insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
         await insuredVesting.methods.addFunds(await fundingToken.amount(FUNDING_PER_USER)).send({ from: user1 });
 
-        await expectRevert(async () => await insuredVesting.methods.transferProjectRole(projectWallet).send({ from: projectWallet }), PROJECT_ROLE_REVERT_MSG);
+        await expectRevert(
+          async () => await insuredVesting.methods.transferProjectRole(projectWallet).send({ from: projectWallet }),
+          CALLER_NOT_PROJECT_ROLE_MSG
+        );
       });
     });
 
@@ -968,7 +974,10 @@ describe("InsuredVestingV1", () => {
         it("can call activate", async () => {
           const expectedInvalidUsers = [deployer];
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(async () => insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: invalidUser }), PROJECT_ROLE_REVERT_MSG);
+            await expectRevert(
+              async () => insuredVesting.methods.activate(await getDefaultStartTime()).send({ from: invalidUser }),
+              CALLER_NOT_PROJECT_ROLE_MSG
+            );
           }
 
           await setAllocationForUser1(FUNDING_PER_USER);
@@ -1007,7 +1016,7 @@ describe("InsuredVestingV1", () => {
         it("can set allocation", async () => {
           const expectedInvalidUsers = [deployer, user1];
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(async () => insuredVesting.methods.setFundingTokenAllocation(user1, 1).send({ from: invalidUser }), PROJECT_ROLE_REVERT_MSG);
+            await expectRevert(async () => insuredVesting.methods.setFundingTokenAllocation(user1, 1).send({ from: invalidUser }), CALLER_NOT_PROJECT_ROLE_MSG);
           }
 
           await insuredVesting.methods.setFundingTokenAllocation(user1, 1).send({ from: projectWallet });
@@ -1018,7 +1027,7 @@ describe("InsuredVestingV1", () => {
           for (const invalidUser of expectedInvalidUsers) {
             await expectRevert(
               async () => insuredVesting.methods.transferProjectRole(differentProjectWallet).send({ from: invalidUser }),
-              PROJECT_ROLE_REVERT_MSG
+              CALLER_NOT_PROJECT_ROLE_MSG
             );
           }
 
@@ -1033,7 +1042,7 @@ describe("InsuredVestingV1", () => {
 
           const expectedInvalidUsers = [projectWallet, user1, user2];
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(async () => insuredVesting.methods.emergencyRelease().send({ from: invalidUser }), OWNER_REVERT_MSG);
+            await expectRevert(async () => insuredVesting.methods.emergencyRelease().send({ from: invalidUser }), CALLER_NOT_OWNER_REVERT_MSG);
           }
 
           await insuredVesting.methods.emergencyRelease().send({ from: deployer });
@@ -1045,7 +1054,7 @@ describe("InsuredVestingV1", () => {
 
           const expectedInvalidUsers = [projectWallet, user1, anyUser];
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(async () => insuredVesting.methods.recoverEther().send({ from: invalidUser }), OWNER_REVERT_MSG);
+            await expectRevert(async () => insuredVesting.methods.recoverEther().send({ from: invalidUser }), CALLER_NOT_OWNER_REVERT_MSG);
           }
 
           await insuredVesting.methods.recoverEther().send({ from: deployer });
@@ -1057,7 +1066,10 @@ describe("InsuredVestingV1", () => {
 
           const expectedInvalidUsers = [projectWallet, anyUser];
           for (const invalidUser of expectedInvalidUsers) {
-            await expectRevert(async () => insuredVesting.methods.recoverToken(someOtherToken.options.address).send({ from: invalidUser }), OWNER_REVERT_MSG);
+            await expectRevert(
+              async () => insuredVesting.methods.recoverToken(someOtherToken.options.address).send({ from: invalidUser }),
+              CALLER_NOT_OWNER_REVERT_MSG
+            );
           }
 
           await insuredVesting.methods.recoverToken(someOtherToken.options.address).send({ from: deployer });
@@ -1173,18 +1185,15 @@ describe("InsuredVestingV1", () => {
 
     it("fails if start time is too far in to the future", async () => {
       const timeInDistantFuture = BN(await getCurrentTimestamp())
-        .plus(MONTH * 3)
-        .plus(DAY);
+        .plus(MONTH_SECONDS * 3)
+        .plus(DAY_SECONDS);
       await expectRevert(async () => insuredVesting.methods.activate(timeInDistantFuture).send({ from: projectWallet }), Error.StartTimeTooDistant);
     });
 
     it("fails if there isn't enough PROJECT_TOKEN allowance to cover funded FUNDING_TOKEN", async () => {
       await setAllocationForUser1(FUNDING_PER_USER);
       await addFundingFromUser1(FUNDING_PER_USER);
-      await expectRevert(
-        async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet }),
-        "ERC20: insufficient allowance"
-      );
+      await expectRevert(async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet }), ERC_20_EXCEEDS_ALLOWANCE);
     });
 
     it("fails if there isn't enough PROJECT_TOKEN balance to cover funded FUNDING_TOKEN", async () => {
@@ -1193,10 +1202,7 @@ describe("InsuredVestingV1", () => {
       await approveProjectTokenToVesting();
       // Get rid of all balance
       await projectToken.methods.transfer(anyUser, await projectToken.amount(1e9)).send({ from: projectWallet });
-      await expectRevert(
-        async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet }),
-        "ERC20: transfer amount exceeds balance"
-      );
+      await expectRevert(async () => insuredVesting.methods.activate(await getCurrentTimestamp()).send({ from: projectWallet }), ERC_20_EXCEEDS_BALANCE);
     });
 
     it("transfers PROJECT_TOKEN required to back FUNDING_TOKEN funding", async () => {
@@ -1301,7 +1307,7 @@ describe("InsuredVestingV1", () => {
       testConfig[5] = projectWallet;
       // END TEMPORARY
 
-      const YEAR = 365 * DAY;
+      const YEAR = 365 * DAY_SECONDS;
       for (const duration of [YEAR * 11, YEAR * 100]) {
         testConfig[2] = duration;
         await expectRevert(() => deployArtifact<InsuredVestingV1>("InsuredVestingV1", { from: deployer }, testConfig), Error.VestingDurationTooLong);

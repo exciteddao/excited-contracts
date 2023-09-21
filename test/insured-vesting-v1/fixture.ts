@@ -6,7 +6,7 @@ import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { expect } from "chai";
 
 import { config } from "../../deployment/insured-vesting-v1";
-import { DAY, advanceDays, getCurrentTimestamp } from "../utils";
+import { DAY_SECONDS, advanceDays, getCurrentTimestamp } from "../utils";
 
 useChaiBigNumber();
 
@@ -26,7 +26,7 @@ export let insuredVesting: InsuredVestingV1;
 export const PROJECT_TOKENS_ON_SALE = 1_000_000;
 export const FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO = 5; // TODO do we want to modify this to be the other way around as well
 export const VESTING_DURATION_DAYS = 730;
-export const VESTING_DURATION_SECONDS = DAY * VESTING_DURATION_DAYS;
+export const VESTING_DURATION_SECONDS = DAY_SECONDS * VESTING_DURATION_DAYS;
 export const LOCKUP_MONTHS = 6;
 export const FUNDING_PER_USER = 10_000;
 
@@ -109,7 +109,7 @@ export async function approveProjectTokenToVesting(amount = PROJECT_TOKENS_ON_SA
 }
 
 export async function getDefaultStartTime(): Promise<BN> {
-  return BN(await getCurrentTimestamp()).plus(DAY * 3);
+  return BN(await getCurrentTimestamp()).plus(DAY_SECONDS * 3);
 }
 
 export function fundingTokenToProjectToken(amountInFundingToken: BN): BN {
@@ -154,9 +154,9 @@ export async function setBalancesForDelta() {
 
 // TODO change
 export async function vestedAmount(days: number, token: "fundingToken" | "projectToken") {
-  let amount = BN(FUNDING_PER_USER)
+  const amount = BN(FUNDING_PER_USER)
     .dividedBy(VESTING_DURATION_SECONDS)
-    .multipliedBy(DAY * days);
+    .multipliedBy(DAY_SECONDS * days);
   if (token === "projectToken") {
     return projectToken.amount(amount.multipliedBy(FUNDING_TOKEN_TO_PROJECT_TOKEN_RATIO));
   } else {

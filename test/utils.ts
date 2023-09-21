@@ -3,8 +3,8 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 import { BlockInfo } from "@defi.org/web3-candies";
 import { mineBlock } from "@defi.org/web3-candies/dist/hardhat";
 
-export const DAY = 60 * 60 * 24;
-export const MONTH = DAY * 30;
+export const DAY_SECONDS = 60 * 60 * 24;
+export const MONTH_SECONDS = DAY_SECONDS * 30;
 
 // TODO export to utils and use across multiple contracts
 export async function getCurrentTimestamp(): Promise<string | number | BN> {
@@ -15,9 +15,9 @@ export async function getCurrentTimestamp(): Promise<string | number | BN> {
 }
 
 export function advanceDays(days: number): Promise<BlockInfo> {
-  return mineBlock(days * DAY);
+  return mineBlock(days * DAY_SECONDS);
 }
 
 export function advanceMonths(months: number): Promise<BlockInfo> {
-  return mineBlock(months * MONTH);
+  return mineBlock(months * MONTH_SECONDS);
 }

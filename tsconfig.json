@@ -9,6 +9,6 @@
     "allowSyntheticDefaultImports": true,
     "allowJs": true
   },
-  "include": ["./src", "./test", "deployment/**/*"],
-  "files": ["./hardhat.config.ts"]
+  "include": ["./test", "deployment/**/*"],
+  "files": ["./hardhat.config.ts", "./deployment/insured-vesting-v1/InsuredVestingV1Lib.ts", "./deployment/insured-vesting-v1/InsuredVestingV1UiLib.ts"]
 }

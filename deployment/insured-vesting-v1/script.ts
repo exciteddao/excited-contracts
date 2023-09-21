@@ -1,4 +1,4 @@
-import { ConfigTuple, _config } from "./config";
+import { ConfigTuple } from "./config";
 import BN from "bignumber.js";
 import { DeployParams } from "@defi.org/web3-candies/dist/hardhat";
 

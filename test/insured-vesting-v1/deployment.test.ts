@@ -9,7 +9,7 @@ import { deployArtifact } from "@defi.org/web3-candies/dist/hardhat";
 import { MockERC20 } from "../../typechain-hardhat/contracts/test/MockERC20";
 import { InsuredVestingV1 } from "../../typechain-hardhat/contracts/insured-vesting-v1/InsuredVestingV1";
 
-import { setup, fundingToken } from "./fixture";
+import { setup } from "./fixture";
 import { erc20, bn18, Token, account, zeroAddress, bn6 } from "@defi.org/web3-candies";
 
 describe("InsuredVestingV1 deployment", () => {
