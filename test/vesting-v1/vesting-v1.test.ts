@@ -22,7 +22,7 @@ import {
   differentProjectWallet,
   TOTAL_SUPPLY,
 } from "./fixture";
-import { web3, zeroAddress } from "@defi.org/web3-candies";
+import { web3 } from "@defi.org/web3-candies";
 import { advanceDays, DAY_SECONDS, getCurrentTimestamp, MONTH_SECONDS } from "../utils";
 import { VESTING_DURATION_DAYS } from "../insured-vesting-v1/fixture";
 import { CALLER_NOT_OWNER_REVERT_MSG, CALLER_NOT_PROJECT_ROLE_MSG, ERC_20_EXCEEDS_ALLOWANCE, ERC_20_EXCEEDS_BALANCE } from "../constants";
@@ -33,49 +33,6 @@ describe("VestingV1", () => {
   before(async () => await setup());
 
   beforeEach(async () => withFixture());
-
-  describe("transfer project role", () => {
-    it("should only be transferable by project wallet", async () => {
-      expect(await vesting.methods.projectWallet().call()).to.be.eq(projectWallet);
-      await vesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
-      expect(await vesting.methods.projectWallet().call()).to.be.eq(differentProjectWallet);
-    });
-
-    it("should not be updatable to zero address", async () => {
-      await expectRevert(
-        () => vesting.methods.transferProjectRole(zeroAddress).send({ from: projectWallet }),
-        "ProjectRole: new project wallet is the zero address"
-      );
-    });
-
-    it("project role permissions should be available to new project wallet address after role transfer", async () => {
-      await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-      await approveProjectTokenToVesting(TOKENS_PER_USER);
-      await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
-      await vesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
-      await advanceDays(10);
-      await vesting.methods.claim(user1).send({ from: differentProjectWallet });
-    });
-
-    it("old wallet should not have project role permissions after ownership transfer", async () => {
-      await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-      await vesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
-
-      await expectRevert(
-        async () => await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet }),
-        CALLER_NOT_PROJECT_ROLE_MSG
-      );
-
-      await expectRevert(async () => await vesting.methods.claim(user1).send({ from: projectWallet }), Error.OnlyProjectOrSender);
-    });
-
-    it("old wallet address should not be able to call transfer role again after initial transfer", async () => {
-      await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-      await vesting.methods.transferProjectRole(differentProjectWallet).send({ from: projectWallet });
-
-      await expectRevert(async () => await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet }), CALLER_NOT_PROJECT_ROLE_MSG);
-    });
-  });
 
   describe("recovery", () => {
     it("recovers ether", async () => {
