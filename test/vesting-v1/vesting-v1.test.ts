@@ -36,61 +36,6 @@ describe("VestingV1", () => {
   beforeEach(async () => withFixture());
 
   describe("claim", () => {
-    it("does not vest before start time", async () => {
-      await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-      await approveProjectTokenToVesting(TOKENS_PER_USER);
-      await vesting.methods.activate(await getDefaultStartTime()).send({ from: projectWallet });
-      await advanceDays(1);
-      expect(await vesting.methods.totalVestedFor(user1).call()).to.be.bignumber.zero;
-      await advanceDays(3);
-      expect(await vesting.methods.totalVestedFor(user1).call()).to.be.bignumber.to.be.bignumber.closeTo(
-        (await projectToken.amount(TOKENS_PER_USER)).multipliedBy(1 * DAY_SECONDS).dividedBy(VESTING_DURATION_SECONDS),
-        await projectToken.amount(0.01)
-      );
-    });
-
-    it("starts vesting if activated with current time stamp", async () => {
-      await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-      await approveProjectTokenToVesting(TOKENS_PER_USER);
-      await vesting.methods.activate(BN(await getCurrentTimestamp()).plus(1)).send({ from: projectWallet });
-      await advanceDays(1);
-      await vesting.methods.claim(user1).send({ from: user1 });
-
-      expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
-        (await projectToken.amount(TOKENS_PER_USER)).multipliedBy(1 * DAY_SECONDS).dividedBy(VESTING_DURATION_SECONDS),
-        await projectToken.amount(0.01)
-      );
-    });
-
-    it(`can claim tokens for the entire period`, async () => {
-      await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-      await approveProjectTokenToVesting(TOKENS_PER_USER);
-      await activateAndReachStartTime();
-      await advanceDays(VESTING_DURATION_SECONDS);
-      await vesting.methods.claim(user1).send({ from: user1 });
-
-      expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
-        await projectToken.amount(TOKENS_PER_USER),
-        await projectToken.amount(0.01)
-      );
-    });
-
-    [
-      ["reduced", TOKENS_PER_USER / 4],
-      ["increased", TOKENS_PER_USER * 3],
-    ].forEach(([description, amount]) => {
-      it(`can claim tokens for the entire period, amount ${description}`, async () => {
-        await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-        await approveProjectTokenToVesting(TOKENS_PER_USER * 10);
-        await vesting.methods.setAmount(user1, await projectToken.amount(amount)).send({ from: projectWallet });
-        await activateAndReachStartTime();
-        await advanceDays(VESTING_DURATION_SECONDS);
-        await vesting.methods.claim(user1).send({ from: user1 });
-
-        expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(await projectToken.amount(amount), await projectToken.amount(0.01));
-      });
-    });
-
     it(`can claim tokens for the entire period, longer than vesting period has passed`, async () => {
       await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
       await approveProjectTokenToVesting(TOKENS_PER_USER);

@@ -83,7 +83,6 @@ abstract contract Helper is Test {
     }
 
     function advanceDays(uint256 _days) public {
-        console.log("block.timestamp in advance days: %s", block.timestamp);
         vm.warp(block.timestamp + _days * 1 days);
     }
 
