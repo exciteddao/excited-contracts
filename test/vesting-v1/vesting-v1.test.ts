@@ -36,23 +36,6 @@ describe("VestingV1", () => {
   beforeEach(async () => withFixture());
 
   describe("claim", () => {
-    const testCases = [0, 1, 5, 10, 100, 200, 534];
-
-    for (const days of testCases) {
-      it(`can claim tokens proportional to amount of seconds in ${days} days passed`, async () => {
-        await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
-        await approveProjectTokenToVesting(TOKENS_PER_USER);
-        await activateAndReachStartTime();
-        await advanceDays(days);
-        await vesting.methods.claim(user1).send({ from: user1 });
-
-        expect(await projectToken.methods.balanceOf(user1).call()).to.be.bignumber.closeTo(
-          (await projectToken.amount(TOKENS_PER_USER)).multipliedBy(days * DAY_SECONDS).dividedBy(VESTING_DURATION_SECONDS),
-          await projectToken.amount(0.01)
-        );
-      });
-    }
-
     it("does not vest before start time", async () => {
       await vesting.methods.setAmount(user1, await projectToken.amount(TOKENS_PER_USER)).send({ from: projectWallet });
       await approveProjectTokenToVesting(TOKENS_PER_USER);

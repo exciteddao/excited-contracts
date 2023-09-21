@@ -81,7 +81,9 @@ contract VestingV1 is OwnerRole, ProjectRole {
     }
 
     constructor(address _projectToken, uint256 _vestingDurationSeconds, address _projectWallet) ProjectRole(_projectWallet) {
-        if (_vestingDurationSeconds > MAX_VESTING_DURATION_SECONDS) revert VestingDurationTooLong(_vestingDurationSeconds);
+        if (_vestingDurationSeconds > MAX_VESTING_DURATION_SECONDS) {
+            revert VestingDurationTooLong(_vestingDurationSeconds);
+        }
 
         PROJECT_TOKEN = IERC20(_projectToken);
         VESTING_DURATION_SECONDS = _vestingDurationSeconds;
@@ -116,8 +118,9 @@ contract VestingV1 is OwnerRole, ProjectRole {
     }
 
     function activate(uint256 _vestingStartTime) external onlyProject onlyBeforeActivation {
-        if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW))
+        if (_vestingStartTime > (block.timestamp + MAX_START_TIME_FROM_NOW)) {
             revert StartTimeTooDistant(_vestingStartTime, block.timestamp + MAX_START_TIME_FROM_NOW);
+        }
 
         if (_vestingStartTime < block.timestamp) revert StartTimeInPast(_vestingStartTime);
 
