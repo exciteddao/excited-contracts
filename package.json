@@ -28,7 +28,7 @@
     "format": "pretty-quick --staged",
     "lint-contracts": "solhint 'contracts/**/*.sol'",
     "lint-ts": "eslint --ext .ts deployment test",
-    "postinstall": "forge install foundry-rs/forge-std --no-git && forge remappings > remappings.txt"
+    "postinstall": "forge install && forge remappings > remappings.txt"
   },
   "prettier": {
     "printWidth": 160
